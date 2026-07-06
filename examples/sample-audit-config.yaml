@@ -1,0 +1,44 @@
+audit:
+  mode: full
+  url: "https://example.com"
+  max_pages: 15
+  language: auto
+  brand_context_mode: inferred
+  competitor_urls: []
+  include_competitors: false
+viewports:
+  desktop:
+    width: 1440
+    height: 1000
+    device_scale_factor: 1
+  mobile:
+    width: 390
+    height: 844
+    device_scale_factor: 2
+crawl:
+  same_domain_only: true
+  include_subdomains: false
+  max_depth: 3
+  exclude_patterns:
+    - "/login"
+    - "/account"
+    - "/admin"
+    - "/privacy"
+    - "/terms"
+interactions:
+  level: 2
+  allow_checkout_start: true
+  allow_form_error_checks: false
+  allow_purchase: false
+  allow_login: false
+outputs:
+  markdown: true
+  html: true
+  pdf: true
+  json: true
+  screenshot_annotations: basic
+model_router:
+  quality_profile: balanced
+scoring:
+  strictness: enterprise
+  tone: client_ready

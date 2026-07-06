@@ -1,0 +1,27 @@
+{
+  "name": "design-review-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @design-review-workflow/core && npm run build -w @design-review-workflow/cli && npm run build -w @design-review-workflow/web",
+    "typecheck": "tsc --noEmit -p tsconfig.base.json",
+    "test": "vitest run",
+    "audit": "node apps/cli/dist/index.js audit",
+    "quick": "node apps/cli/dist/index.js quick",
+    "full": "node apps/cli/dist/index.js full",
+    "validate": "node apps/cli/dist/index.js validate",
+    "web": "NODE_ENV=production node apps/web/dist/server/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

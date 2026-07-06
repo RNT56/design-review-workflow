@@ -1,0 +1,16 @@
+{
+  "name": "@design-review-workflow/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "wdr": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig ../../tsconfig.base.json --external playwright --external playwright-core --external chromium-bidi --external chromium-bidi/* --external axe-core",
+    "typecheck": "tsc --noEmit -p ../../tsconfig.base.json"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "js-yaml": "^4.1.0"
+  }
+}
