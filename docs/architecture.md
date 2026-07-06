@@ -11,6 +11,8 @@ CLI / Local Web UI
   -> Synthesis
   -> QA Gate
   -> Report Export
+  -> Report Lint
+  -> Agent Handoff Bundle
 ```
 
 ## Layers
@@ -45,6 +47,19 @@ The report layer writes:
 - `report/report.pdf`
 - `report/executive-summary.md`
 
+### Validation And Handoff
+
+Every completed audit runs report lint and writes a stable agent bundle:
+
+- `report/workflow-manifest.json`
+- `report/handoff.json`
+- `report/validation.json`
+- `report/quality-gate.json`
+- `report/evidence-index.json`
+- `report/implementation-plan.json`
+- `report/agent-execution-plan.md`
+- `report/agent-instructions/*.md`
+
 ## Storage Contract
 
 Each audit is a reproducible local snapshot:
@@ -66,9 +81,17 @@ projects/<site>/audits/<timestamp>-<mode>/
   report/
 ```
 
+The latest completed audit is also exposed through generated pointers:
+
+```text
+projects/latest-audit.json
+projects/<site>/latest-audit.json
+```
+
 ## Extension Points
 
 - `ModelRouter` and `LlmProvider` interfaces for future provider-backed agents
 - Criteria library for review rules and scoring calibration
 - Report generator boundaries for external document exports
 - Project storage boundary for future SQLite/cloud indexing
+- Agent bundle JSON files for downstream coding-agent execution

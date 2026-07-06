@@ -22,6 +22,9 @@ Optional input:
 
 Required outputs for the MVP:
 
+- Workflow manifest
+- Agent handoff JSON
+- Validation and quality-gate JSON
 - Markdown report
 - HTML report
 - PDF report
@@ -57,7 +60,9 @@ The implemented MVP is deterministic and local-first:
 - Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
 - Local monitor runs from YAML/JSON configuration
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
-- Strict report lint, quality gate files, and generated agent handoff instructions
+- Primary `run` command for audit, validation, and agent handoff
+- Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
+- Latest-audit pointers under `projects/latest-audit.json` and `projects/<site>/latest-audit.json`
 - axe-core accessibility basics where injection succeeds
 - Browser navigation-timing performance basics plus Lighthouse summaries where local Chrome/Lighthouse succeeds
 
@@ -115,6 +120,42 @@ Every final finding must include:
 
 Agents must not invent pages, competitors, metrics, screenshots, user behavior, or brand guidelines. If brand fit, audience, or business goal is inferred, label it as inferred.
 
+## Agentic Workflow Contract
+
+Primary fresh-clone command:
+
+```bash
+bash scripts/agent-run.sh <public-url>
+```
+
+Primary built CLI command:
+
+```bash
+node apps/cli/dist/index.js run <public-url>
+```
+
+Every completed audit must produce a self-contained agent bundle under `report/`:
+
+- `workflow-manifest.json`
+- `handoff.json`
+- `validation.json`
+- `quality-gate.json`
+- `agent-execution-plan.md`
+- `implementation-plan.json`
+- `evidence-index.json`
+- `actionability.json`
+- `findings.json`
+- `score.json`
+- `report-dashboard.json`
+- `agent-instructions/README.md`
+- `agent-instructions/codex.md`
+- `agent-instructions/claude-code.md`
+- `agent-instructions/opencode.md`
+- `agent-instructions/openclaw.md`
+- `agent-instructions/hermes.md`
+
+The report bundle is the stable interface for downstream agents. Agents should read `workflow-manifest.json` first, then `handoff.json`, then `agent-execution-plan.md`.
+
 ## Repository Layout
 
 ```text
@@ -135,6 +176,8 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - Save intermediate artifacts in the audit project folder so failures are inspectable.
 - Reports must reference existing screenshot/evidence files only.
 - Agent handoff files must be generated under `report/agent-instructions/`.
+- `workflow-manifest.json` and `handoff.json` must be machine-readable and must not require scraping Markdown.
+- Every normal audit must write `validation.json` and `quality-gate.json`.
 - `report lint --strict` must fail unsupported report bundles.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
 - Any future LLM reviewer must produce the same `Finding` schema and pass the same deterministic QA gate.
@@ -149,6 +192,7 @@ Before closing implementation work, run the strongest feasible local checks:
 - `npm run typecheck`
 - `npm test`
 - `npm run build`
+- `npm run doctor`
 - At least one smoke audit against a small local or public page when browser dependencies are installed
 - A compare smoke when two compatible audit snapshots exist
 

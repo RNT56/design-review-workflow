@@ -1,25 +1,39 @@
-# Agentic Website Design Review
+# Agentic Website Design Review Workflow
 
-Local-first website design review workflow for evidence-backed UX, visual design, conversion, mobile, accessibility-basic, and performance-perception audits.
+Local-first, agent-native website design review workflow for evidence-backed UX, visual design, conversion, mobile, accessibility-basic, and performance-perception audits.
 
-The repository starts with a deterministic MVP: it crawls public pages, captures desktop and mobile evidence, extracts page signals, creates structured findings, validates them, scores the site, and exports Markdown, HTML, PDF, and JSON reports.
+The intended handoff is simple: give any repo-capable agent this repository plus a public URL. The workflow captures evidence, validates the report bundle, and emits both human-readable reports and machine-readable handoff files.
 
 ## Quick Start
 
-```bash
-npm install
-npx playwright install chromium
-npm run build
-npm run audit -- https://example.com --mode quick
-```
-
-For agent handoff from a fresh clone:
+For agents or fresh clones:
 
 ```bash
 bash scripts/agent-run.sh https://example.com
 ```
 
+Equivalent manual path:
+
+```bash
+npm ci
+npx playwright install chromium
+npm run build
+node apps/cli/dist/index.js run https://example.com
+```
+
 Audit outputs are written to `projects/<site>/audits/<timestamp>-<mode>/`.
+
+Each completed audit writes:
+
+- `report/workflow-manifest.json`
+- `report/handoff.json`
+- `report/validation.json`
+- `report/quality-gate.json`
+- `report/agent-execution-plan.md`
+- `report/implementation-plan.json`
+- `report/evidence-index.json`
+- `report/agent-instructions/*.md`
+- `report/index.md` and `report/index.html`
 
 Run the local UI:
 
@@ -32,22 +46,23 @@ Then open the printed local URL.
 ## CLI
 
 ```bash
-npm run audit -- https://example.com --mode full --max-pages 15 --pdf --html --json
+node apps/cli/dist/index.js run https://example.com --mode full --max-pages 15
+npm run agent -- https://example.com
 npm run quick -- https://example.com
 npm run full -- https://example.com --competitor https://competitor.example
-npm run validate -- ./projects/example-com/audits/latest/report/report.json
-npm run build
+node apps/cli/dist/index.js latest example.com
+node apps/cli/dist/index.js validate ./projects/example-com/audits/<audit-id>/report/report.json
 node apps/cli/dist/index.js compare ./projects/example-com/audits/before ./projects/example-com/audits/after
-npm run build
 node apps/cli/dist/index.js monitor init monitor.yaml
 node apps/cli/dist/index.js monitor run monitor.yaml
 node apps/cli/dist/index.js providers status
-node apps/cli/dist/index.js doctor
+node apps/cli/dist/index.js workflow --format json
 node apps/cli/dist/index.js report lint ./projects/example-com/audits/<audit-id> --strict
 node apps/cli/dist/index.js plan build --report ./projects/example-com/audits/<audit-id>
+npm run doctor
 ```
 
-## What The MVP Does
+## What The Workflow Does
 
 - Same-domain crawl with relevance ranking
 - Desktop and mobile screenshots
@@ -69,10 +84,12 @@ node apps/cli/dist/index.js plan build --report ./projects/example-com/audits/<a
 - Read-only Figma evidence fetch command when `FIGMA_TOKEN` is configured
 - Environment-configured model provider adapters
 - One-command agent runner for repo-capable agents
+- Repository-level workflow contract via `workflow`
 - Strict report lint and quality-gate files
-- Agent execution plan and agent-specific instructions
+- Latest-audit pointers for timestamp-free handoff
+- Agent execution plan, machine-readable handoff, implementation plan, evidence index, and agent-specific instructions
 
-## What It Does Not Claim Yet
+## Safety Boundary
 
 - No login-area audits
 - No purchases or personal-data submission
@@ -105,6 +122,7 @@ projects/       Generated local audit output.
 npm run typecheck
 npm test
 npm run build
+npm run doctor
 ```
 
 The generated `projects/*/audits/*` folders are ignored by Git. Keep only intentional samples under `examples/`.

@@ -71,3 +71,16 @@ Generated tickets are exportable objects, not external tickets:
 - `acceptanceCriteria`
 - `definitionOfDone`
 - `evidenceRefs`
+
+## Agent Bundle Files
+
+Every completed audit writes machine-readable agent contracts under `report/`:
+
+- `workflow-manifest.json`: repository contract, safety rules, commands, target metadata, artifact map, and quality gate snapshot
+- `handoff.json`: closeout-ready summary, report paths, read order, top findings, and quality gate snapshot
+- `evidence-index.json`: reviewed pages, screenshot paths, annotations, accessibility basics, and performance basics
+- `implementation-plan.json`: ticket-shaped implementation tasks with owners, acceptance criteria, evidence refs, and approval flags
+- `actionability.json`: finding-level automation readiness and blockers
+- `report-dashboard.json`: compact dashboard model for agents or UIs
+- `validation.json`: report-lint result
+- `quality-gate.json`: compact pass/warn/fail gate

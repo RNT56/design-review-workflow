@@ -14,7 +14,10 @@
     "audit": "node apps/cli/dist/index.js audit",
     "quick": "node apps/cli/dist/index.js quick",
     "full": "node apps/cli/dist/index.js full",
-    "agent": "npm run build && node apps/cli/dist/index.js agent-run",
+    "agent": "npm run build && node apps/cli/dist/index.js run",
+    "doctor": "node apps/cli/dist/index.js doctor",
+    "workflow": "node apps/cli/dist/index.js workflow",
+    "ci": "npm run typecheck && npm test && npm run build && npm run doctor",
     "validate": "node apps/cli/dist/index.js validate",
     "web": "NODE_ENV=production node apps/web/dist/server/server.js"
   },

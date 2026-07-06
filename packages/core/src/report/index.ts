@@ -20,10 +20,8 @@ export async function writeReports(config: AuditConfig, report: AuditReport, pat
   const outputs: ReportOutputs = {};
   report.ticketExports = await writeTicketExports(report, paths);
 
-  if (config.outputs.json) {
-    outputs.json = path.join(paths.report, "report.json");
-    await writeJson(outputs.json, report);
-  }
+  outputs.json = path.join(paths.report, "report.json");
+  await writeJson(outputs.json, report);
 
   if (config.outputs.markdown) {
     outputs.markdown = path.join(paths.report, "report.md");

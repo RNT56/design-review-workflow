@@ -119,6 +119,10 @@ async function listAudits() {
       reportPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.json`,
       htmlPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.html`,
       pdfPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.pdf`,
+      workflowManifestPath: `/projects/${audit.site}/audits/${audit.auditId}/report/workflow-manifest.json`,
+      handoffPath: `/projects/${audit.site}/audits/${audit.auditId}/report/handoff.json`,
+      validationPath: `/projects/${audit.site}/audits/${audit.auditId}/report/validation.json`,
+      agentPlanPath: `/projects/${audit.site}/audits/${audit.auditId}/report/agent-execution-plan.md`,
       generatedAt: audit.generatedAt,
       score: audit.overallScore,
       findings: audit.findings
@@ -133,6 +137,10 @@ async function listAudits() {
     reportPath: string;
     htmlPath: string;
     pdfPath: string;
+    workflowManifestPath: string;
+    handoffPath: string;
+    validationPath: string;
+    agentPlanPath: string;
     generatedAt?: string;
     score?: number;
     findings?: number;
@@ -166,6 +174,10 @@ async function listAudits() {
         reportPath: `/projects/${site}/audits/${audit}/report/report.json`,
         htmlPath: `/projects/${site}/audits/${audit}/report/report.html`,
         pdfPath: `/projects/${site}/audits/${audit}/report/report.pdf`,
+        workflowManifestPath: `/projects/${site}/audits/${audit}/report/workflow-manifest.json`,
+        handoffPath: `/projects/${site}/audits/${audit}/report/handoff.json`,
+        validationPath: `/projects/${site}/audits/${audit}/report/validation.json`,
+        agentPlanPath: `/projects/${site}/audits/${audit}/report/agent-execution-plan.md`,
         generatedAt,
         score,
         findings

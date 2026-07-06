@@ -6,7 +6,11 @@ if [ "$#" -lt 1 ]; then
   exit 2
 fi
 
-npm install
+if [ -f package-lock.json ]; then
+  npm ci
+else
+  npm install
+fi
 npx playwright install chromium
 npm run build
-node apps/cli/dist/index.js agent-run "$@"
+node apps/cli/dist/index.js run "$@"

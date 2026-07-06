@@ -15,6 +15,10 @@ export type ProjectIndexEntry = {
   reportJson: string;
   reportHtml?: string;
   reportPdf?: string;
+  workflowManifest?: string;
+  handoffJson?: string;
+  validationJson?: string;
+  qualityGateJson?: string;
   overallScore: number;
   findings: number;
   pages: number;
@@ -40,6 +44,10 @@ export async function updateProjectIndex(workspaceRoot: string, report: AuditRep
     reportJson: outputs.json ?? path.join(auditRoot, "report", "report.json"),
     reportHtml: outputs.html,
     reportPdf: outputs.pdf,
+    workflowManifest: path.join(auditRoot, "report", "workflow-manifest.json"),
+    handoffJson: path.join(auditRoot, "report", "handoff.json"),
+    validationJson: path.join(auditRoot, "report", "validation.json"),
+    qualityGateJson: path.join(auditRoot, "report", "quality-gate.json"),
     overallScore: report.scorecard.overallScore,
     findings: report.findings.length,
     pages: report.pages.length
@@ -51,6 +59,7 @@ export async function updateProjectIndex(workspaceRoot: string, report: AuditRep
     audits: [entry, ...withoutCurrent].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
   };
   await writeJson(indexPath, next);
+  await writeLatestPointers(workspaceRoot, entry);
   await upsertAuditIndexSqlite(workspaceRoot, entry).catch(() => undefined);
   return next;
 }
@@ -79,4 +88,14 @@ export async function readProjectIndex(workspaceRoot: string): Promise<ProjectIn
 export async function readReportFromAuditDir(auditDir: string): Promise<AuditReport> {
   const reportPath = path.join(auditDir, "report", "report.json");
   return AuditReportSchema.parse(JSON.parse(await readFile(reportPath, "utf8")));
+}
+
+async function writeLatestPointers(workspaceRoot: string, entry: ProjectIndexEntry): Promise<void> {
+  const latest = {
+    schemaVersion: "design-review-workflow.latest-audit.v1",
+    updatedAt: new Date().toISOString(),
+    audit: entry
+  };
+  await writeJson(path.join(workspaceRoot, "projects", "latest-audit.json"), latest);
+  await writeJson(path.join(workspaceRoot, "projects", entry.site, "latest-audit.json"), latest);
 }

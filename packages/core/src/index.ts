@@ -17,6 +17,7 @@ import { createAuditPaths } from "./storage/project.js";
 import { updateProjectIndex } from "./storage/index.js";
 import { writeJson } from "./utils/fs.js";
 import { reviewEvidence } from "./review/findings.js";
+import { lintAuditReport, type ReportLintResult } from "./validation/report-lint.js";
 
 export * from "./config/defaults.js";
 export * from "./criteria/library.js";
@@ -41,6 +42,7 @@ export type RunAuditResult = {
   auditRoot: string;
   report: AuditReport;
   outputs: ReportOutputs;
+  validation: ReportLintResult;
 };
 
 export async function runAudit(input: AuditInput | AuditConfig, options: RunAuditOptions = {}): Promise<RunAuditResult> {
@@ -73,13 +75,16 @@ export async function runAudit(input: AuditInput | AuditConfig, options: RunAudi
 
   options.onProgress?.({ stage: "report", message: "Writing reports" });
   const outputs = await writeReports(config, report, paths);
+  options.onProgress?.({ stage: "validate", message: "Validating report bundle" });
+  const validation = await lintAuditReport(paths.auditRoot, false);
   await updateProjectIndex(workspaceRoot, report, paths.auditRoot, outputs);
 
   await writeJson(path.join(paths.auditRoot, "audit-state.json"), {
     auditId: config.auditId,
     status: "completed",
     updatedAt: new Date().toISOString(),
-    report: outputs
+    report: outputs,
+    validation
   });
 
   options.onProgress?.({ stage: "done", message: `Audit completed at ${paths.auditRoot}` });
@@ -88,7 +93,8 @@ export async function runAudit(input: AuditInput | AuditConfig, options: RunAudi
     config,
     auditRoot: paths.auditRoot,
     report,
-    outputs
+    outputs,
+    validation
   };
 }
 
