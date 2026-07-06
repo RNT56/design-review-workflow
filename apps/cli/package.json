@@ -6,7 +6,7 @@
     "wdr": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig ../../tsconfig.base.json --external playwright --external playwright-core --external chromium-bidi --external chromium-bidi/* --external axe-core --external lighthouse --external chrome-launcher --external puppeteer-core --external puppeteer-core/* --external ws --external pngjs --external pixelmatch",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --tsconfig ../../tsconfig.base.json --external node:sqlite --external playwright --external playwright-core --external chromium-bidi --external chromium-bidi/* --external axe-core --external lighthouse --external chrome-launcher --external puppeteer-core --external puppeteer-core/* --external ws --external pngjs --external pixelmatch",
     "typecheck": "tsc --noEmit -p ../../tsconfig.base.json"
   },
   "dependencies": {

@@ -21,11 +21,14 @@ import { reviewEvidence } from "./review/findings.js";
 export * from "./config/defaults.js";
 export * from "./criteria/library.js";
 export * from "./model/router.js";
+export * from "./model/providers.js";
 export * from "./schemas/audit.js";
 export * from "./review/classification.js";
 export * from "./review/scoring.js";
 export * from "./compare/compare.js";
 export * from "./storage/index.js";
+export * from "./integrations/figma.js";
+export * from "./monitoring/monitor.js";
 
 export type RunAuditOptions = {
   workspaceRoot?: string;

@@ -1,0 +1,5 @@
+monitors:
+  - name: Example
+    url: https://example.com
+    mode: quick_scan
+    maxPages: 1

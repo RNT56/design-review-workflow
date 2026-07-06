@@ -1,9 +1,20 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { Command } from "commander";
 import * as yaml from "js-yaml";
-import { compareAuditDirs, createAuditConfig, runAudit, validateReport, type AuditInput } from "../../../packages/core/src/index.js";
+import {
+  compareAuditDirs,
+  createAuditConfig,
+  createModelRouterFromEnv,
+  fetchFigmaEvidence,
+  readProjectIndex,
+  runAudit,
+  runMonitorConfig,
+  sampleMonitorConfig,
+  validateReport,
+  type AuditInput
+} from "../../../packages/core/src/index.js";
 
 const program = new Command();
 
@@ -102,6 +113,71 @@ program
     console.log(`Comparison JSON: ${outputPath}`);
     for (const finding of result.newFindings.slice(0, 5)) {
       console.log(`- [new ${finding.severity}] ${finding.title}`);
+    }
+  });
+
+program
+  .command("history")
+  .description("List indexed local audits")
+  .option("--site <slug>", "Filter by site slug")
+  .action(async (options) => {
+    const index = await readProjectIndex(process.cwd());
+    const audits = options.site ? index.audits.filter((audit) => audit.site === options.site) : index.audits;
+    for (const audit of audits.slice(0, 50)) {
+      console.log(`${audit.generatedAt} ${audit.site} ${audit.overallScore}/100 ${audit.findings} findings ${audit.auditRoot}`);
+    }
+  });
+
+const providers = program.command("providers").description("Inspect configured model providers");
+providers
+  .command("status")
+  .action(() => {
+    const router = createModelRouterFromEnv();
+    console.log(router.hasProviders() ? "Model providers configured." : "No model providers configured. Set provider API key and model env vars.");
+    console.log("Expected env pairs: OPENAI_API_KEY+OPENAI_MODEL, OPENROUTER_API_KEY+OPENROUTER_MODEL, ANTHROPIC_API_KEY+ANTHROPIC_MODEL, GEMINI_API_KEY+GEMINI_MODEL");
+  });
+
+const figma = program.command("figma").description("Read-only Figma evidence utilities");
+figma
+  .command("fetch")
+  .argument("<fileKeyOrUrl>", "Figma file key or URL")
+  .option("--node <id...>", "Optional Figma node ID(s)")
+  .action(async (fileKeyOrUrl, options) => {
+    const evidence = await fetchFigmaEvidence({
+      fileKeyOrUrl,
+      nodeIds: Array.isArray(options.node) ? options.node.map(String) : []
+    });
+    console.log(`Figma evidence stored: ${evidence.root}`);
+    console.log(`Summary: ${evidence.summaryPath}`);
+  });
+
+const monitor = program.command("monitor").description("Local monitoring utilities");
+monitor
+  .command("init")
+  .argument("[path]", "Path to write monitor config", "monitor.yaml")
+  .action(async (filePath) => {
+    await writeFile(filePath, yaml.dump(sampleMonitorConfig()), "utf8");
+    console.log(`Wrote ${filePath}`);
+  });
+monitor
+  .command("run")
+  .argument("<config>", "Monitor YAML/JSON config")
+  .action(async (configPath) => {
+    const result = await runMonitorConfig(configPath, process.cwd());
+    console.log(`Monitor run: ${result.generatedAt}`);
+    for (const run of result.runs) {
+      const delta = run.scoreDelta === undefined ? "" : ` delta ${run.scoreDelta >= 0 ? "+" : ""}${run.scoreDelta}`;
+      console.log(`- ${run.name}: ${run.score}/100, ${run.findings} findings${delta}`);
+      console.log(`  ${run.auditRoot}`);
+    }
+  });
+monitor
+  .command("status")
+  .action(async () => {
+    const index = await readProjectIndex(process.cwd());
+    console.log(`Indexed audits: ${index.audits.length}`);
+    for (const audit of index.audits.slice(0, 10)) {
+      console.log(`- ${audit.site}: ${audit.generatedAt} ${audit.overallScore}/100`);
     }
   });
 

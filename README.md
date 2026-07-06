@@ -32,6 +32,10 @@ npm run full -- https://example.com --competitor https://competitor.example
 npm run validate -- ./projects/example-com/audits/latest/report/report.json
 npm run build
 node apps/cli/dist/index.js compare ./projects/example-com/audits/before ./projects/example-com/audits/after
+npm run build
+node apps/cli/dist/index.js monitor init monitor.yaml
+node apps/cli/dist/index.js monitor run monitor.yaml
+node apps/cli/dist/index.js providers status
 ```
 
 ## What The MVP Does
@@ -51,6 +55,10 @@ node apps/cli/dist/index.js compare ./projects/example-com/audits/before ./proje
 - Competitor benchmark output when competitor URLs are supplied
 - Local ticket export files for GitHub Issues, Linear, Jira, and JSON backlog
 - Audit compare artifacts with subscore deltas and screenshot diffs where dimensions match
+- SQLite-backed local audit index with JSON fallback
+- Local monitor runs from YAML/JSON config
+- Read-only Figma evidence fetch command when `FIGMA_TOKEN` is configured
+- Environment-configured model provider adapters
 
 ## What It Does Not Claim Yet
 
@@ -61,6 +69,7 @@ node apps/cli/dist/index.js compare ./projects/example-com/audits/before ./proje
 - No true Lighthouse report yet
 - No Figma or external ticketing integrations yet
 - No live writes to external ticketing systems without explicit credentials and a dedicated command
+- No model call is made unless both provider API key and model env vars are configured
 
 See [AGENTS.md](./AGENTS.md) for the source-of-truth implementation contract.
 

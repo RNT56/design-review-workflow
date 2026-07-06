@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { AuditReport, AuditReportSchema } from "../schemas/audit.js";
 import { ensureDir, writeJson } from "../utils/fs.js";
 import { siteSlug } from "../utils/url.js";
+import { readAuditIndexSqlite, upsertAuditIndexSqlite } from "./sqlite.js";
 
 export type ProjectIndexEntry = {
   auditId: string;
@@ -50,10 +51,19 @@ export async function updateProjectIndex(workspaceRoot: string, report: AuditRep
     audits: [entry, ...withoutCurrent].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
   };
   await writeJson(indexPath, next);
+  await upsertAuditIndexSqlite(workspaceRoot, entry).catch(() => undefined);
   return next;
 }
 
 export async function readProjectIndex(workspaceRoot: string): Promise<ProjectIndex> {
+  const sqliteAudits = await readAuditIndexSqlite(workspaceRoot).catch(() => []);
+  if (sqliteAudits.length > 0) {
+    return {
+      updatedAt: new Date().toISOString(),
+      audits: sqliteAudits
+    };
+  }
+
   const indexPath = path.join(workspaceRoot, "projects", "index.json");
   try {
     const parsed = JSON.parse(await readFile(indexPath, "utf8")) as ProjectIndex;

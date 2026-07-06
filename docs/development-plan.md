@@ -25,6 +25,10 @@ Implemented or targeted in the current codebase:
 - Manual competitor benchmark output
 - Basic annotated screenshots
 - Compare command with score/finding deltas and compatible screenshot diffs
+- SQLite-backed local audit index with JSON fallback
+- Local monitor command for repeated checks and comparisons
+- Read-only Figma evidence fetch seam
+- Environment-configured model provider adapters
 - Markdown, HTML, PDF, and JSON exports
 
 ## MVP Gaps To Close Before Internal Production Use
@@ -34,6 +38,8 @@ Implemented or targeted in the current codebase:
 - Harden crawler behavior for consent banners, SPAs, and failed pages.
 - Add stronger mobile-specific extraction instead of desktop-derived tap-target heuristics.
 - Add more criteria-library coverage for website and page types.
+- Wire model-backed reviewers into the QA gate after provider-specific evals exist.
+- Promote local monitor configs into a scheduled service or CI workflow.
 
 ## Planned V1
 

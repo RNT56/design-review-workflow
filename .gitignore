@@ -7,6 +7,10 @@ coverage/
 .DS_Store
 projects/*/audits/
 projects/index.json
+projects/index.sqlite
+projects/index.sqlite-*
+projects/figma/
+projects/monitor-runs/
 apps/web/dist/
 playwright-report/
 test-results/

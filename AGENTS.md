@@ -51,7 +51,11 @@ The implemented MVP is deterministic and local-first:
 - Manual competitor benchmark mode for supplied competitor URLs
 - Local ticket export bundle for GitHub Issues, Linear, Jira, and JSON backlog
 - Local project index under `projects/index.json`
+- SQLite-backed local project index under `projects/index.sqlite` with JSON fallback
 - Regression compare command with score deltas, finding deltas, and screenshot pixel diffs where screenshots are compatible
+- Environment-configured LLM provider adapters for future reviewer use
+- Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
+- Local monitor runs from YAML/JSON configuration
 - axe-core accessibility basics where injection succeeds
 - Browser navigation-timing performance basics plus Lighthouse summaries where local Chrome/Lighthouse succeeds
 
@@ -60,7 +64,7 @@ The following are planned seams, not completed product claims unless code and te
 - External LLM-backed review agents
 - Provider-specific model quality claims
 - Continuous scheduled monitoring
-- Figma analysis
+- Figma analysis beyond read-only evidence fetch
 - Login-area audits
 - SaaS/cloud multi-user storage
 - Live Jira, Linear, GitHub Issues, Notion, Slack, or Google Docs writes
@@ -132,6 +136,7 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - Any future LLM reviewer must produce the same `Finding` schema and pass the same deterministic QA gate.
 - Use local files and `.env` for credentials. Never commit secrets.
 - Keep generated `projects/*/audits/*` output out of Git except curated examples.
+- Keep `projects/index.sqlite`, `projects/index.json`, and `projects/figma/` out of Git.
 
 ## Verification Expectations
 
@@ -162,7 +167,7 @@ V1:
 
 - LLM provider adapters used in production
 - External ticket/document live-write commands
-- SQLite project index
+- Continuous scheduled monitoring daemon or external scheduler
 
 V2+:
 
