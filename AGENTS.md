@@ -56,6 +56,8 @@ The implemented MVP is deterministic and local-first:
 - Environment-configured LLM provider adapters for future reviewer use
 - Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
 - Local monitor runs from YAML/JSON configuration
+- One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
+- Strict report lint, quality gate files, and generated agent handoff instructions
 - axe-core accessibility basics where injection succeeds
 - Browser navigation-timing performance basics plus Lighthouse summaries where local Chrome/Lighthouse succeeds
 
@@ -132,6 +134,8 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - Keep model names and provider choices in config/adapters, never hard-coded through core logic.
 - Save intermediate artifacts in the audit project folder so failures are inspectable.
 - Reports must reference existing screenshot/evidence files only.
+- Agent handoff files must be generated under `report/agent-instructions/`.
+- `report lint --strict` must fail unsupported report bundles.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
 - Any future LLM reviewer must produce the same `Finding` schema and pass the same deterministic QA gate.
 - Use local files and `.env` for credentials. Never commit secrets.

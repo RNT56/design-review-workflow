@@ -13,6 +13,12 @@ npm run build
 npm run audit -- https://example.com --mode quick
 ```
 
+For agent handoff from a fresh clone:
+
+```bash
+bash scripts/agent-run.sh https://example.com
+```
+
 Audit outputs are written to `projects/<site>/audits/<timestamp>-<mode>/`.
 
 Run the local UI:
@@ -36,6 +42,9 @@ npm run build
 node apps/cli/dist/index.js monitor init monitor.yaml
 node apps/cli/dist/index.js monitor run monitor.yaml
 node apps/cli/dist/index.js providers status
+node apps/cli/dist/index.js doctor
+node apps/cli/dist/index.js report lint ./projects/example-com/audits/<audit-id> --strict
+node apps/cli/dist/index.js plan build --report ./projects/example-com/audits/<audit-id>
 ```
 
 ## What The MVP Does
@@ -59,6 +68,9 @@ node apps/cli/dist/index.js providers status
 - Local monitor runs from YAML/JSON config
 - Read-only Figma evidence fetch command when `FIGMA_TOKEN` is configured
 - Environment-configured model provider adapters
+- One-command agent runner for repo-capable agents
+- Strict report lint and quality-gate files
+- Agent execution plan and agent-specific instructions
 
 ## What It Does Not Claim Yet
 
@@ -72,6 +84,7 @@ node apps/cli/dist/index.js providers status
 - No model call is made unless both provider API key and model env vars are configured
 
 See [AGENTS.md](./AGENTS.md) for the source-of-truth implementation contract.
+See [AGENT-RUNBOOK.md](./AGENT-RUNBOOK.md) for handing this workflow to another agent.
 
 ## Project Structure
 

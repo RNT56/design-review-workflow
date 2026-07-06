@@ -8,6 +8,7 @@ import {
   createAuditConfig,
   createModelRouterFromEnv,
   fetchFigmaEvidence,
+  lintAuditReport,
   readProjectIndex,
   runAudit,
   runMonitorConfig,
@@ -43,6 +44,29 @@ program
   });
 
 program
+  .command("agent-run")
+  .argument("<url>", "Website URL")
+  .description("One-command agent path: audit, write bundle, lint, and print handoff files")
+  .option("--mode <mode>", "Audit mode: quick, quick_scan, full, full_audit", "quick_scan")
+  .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
+  .option("--goal <text>", "Website goal")
+  .option("--audience <text>", "Target audience")
+  .option("--industry <text>", "Industry")
+  .option("--brand-context <text>", "Brand context")
+  .option("--competitor <url...>", "Competitor URL(s)")
+  .action(async (url, options) => {
+    const result = await runFromOptions(url, options);
+    const lint = await lintAuditReport(result.auditRoot, true);
+    console.log("");
+    console.log(`Agent bundle: ${path.join(result.auditRoot, "report")}`);
+    console.log(`Read: ${path.join(result.auditRoot, "report", "agent-execution-plan.md")}`);
+    console.log(`Lint: ${lint.status}`);
+    if (lint.status !== "pass") {
+      process.exitCode = 1;
+    }
+  });
+
+program
   .command("quick")
   .argument("<url>", "Website URL")
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
@@ -71,10 +95,15 @@ program
     console.log(`Overall score: ${report.scorecard.overallScore}`);
   });
 
-program
+const reportCommand = program
   .command("report")
-  .argument("<auditDir>", "Audit directory")
+  .description("Report utilities")
+  .argument("[auditDir]", "Audit directory")
   .action(async (auditDir) => {
+    if (!auditDir) {
+      console.log("Use `report <auditDir>` for a summary or `report lint <auditDir> --strict` for validation.");
+      return;
+    }
     const reportPath = path.join(auditDir, "report", "report.json");
     const data = JSON.parse(await readFile(reportPath, "utf8"));
     const report = validateReport(data);
@@ -96,6 +125,66 @@ program
     }
     for (const finding of report.findings.slice(0, 5)) {
       console.log(`- [${finding.severity}] ${finding.title}`);
+    }
+  });
+
+reportCommand
+  .command("lint")
+  .argument("<auditDir>", "Audit directory")
+  .option("--strict", "Fail on warnings")
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (auditDir, options) => {
+    const result = await lintAuditReport(auditDir, Boolean(options.strict));
+    if (options.format === "json") {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(`Report lint: ${result.status}`);
+      console.log(`Findings: ${result.summary.findings}`);
+      console.log(`Pages: ${result.summary.pages}`);
+      console.log(`Screenshots: ${result.summary.screenshots}`);
+      for (const warning of result.warnings) console.log(`warning: ${warning}`);
+      for (const error of result.errors) console.log(`error: ${error}`);
+    }
+    if (result.status === "fail") {
+      process.exitCode = 1;
+    }
+  });
+
+const plan = program.command("plan").description("Agent remediation handoff utilities");
+plan
+  .command("build")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .action(async (options) => {
+    const auditDir = String(options.report);
+    const lint = await lintAuditReport(auditDir, false);
+    console.log(`Agent execution plan: ${path.join(auditDir, "report", "agent-execution-plan.md")}`);
+    console.log(`Priority action plan: ${path.join(auditDir, "report", "priority-action-plan.md")}`);
+    console.log(`Agent instructions: ${path.join(auditDir, "report", "agent-instructions")}`);
+    console.log(`Quality gate: ${lint.status}`);
+  });
+
+program
+  .command("doctor")
+  .description("Check runtime, build output, browser availability, and safety defaults")
+  .action(async () => {
+    const checks: Array<[string, boolean, string]> = [];
+    checks.push(["Node runtime", Number(process.versions.node.split(".")[0]) >= 24, process.version]);
+    checks.push(["Dependencies installed", await exists(path.join(process.cwd(), "node_modules")), "node_modules"]);
+    checks.push(["Built CLI", await exists(path.join(process.cwd(), "apps", "cli", "dist", "index.js")), "apps/cli/dist/index.js"]);
+    checks.push(["AGENTS source of truth", await exists(path.join(process.cwd(), "AGENTS.md")), "AGENTS.md"]);
+    checks.push(["Generated output ignored", await gitignoreContains("projects/*/audits/"), ".gitignore"]);
+    try {
+      const playwright = await import("playwright");
+      checks.push(["Playwright chromium", Boolean(playwright.chromium.executablePath()), playwright.chromium.executablePath()]);
+    } catch (error) {
+      checks.push(["Playwright chromium", false, error instanceof Error ? error.message : String(error)]);
+    }
+
+    for (const [name, ok, detail] of checks) {
+      console.log(`${ok ? "pass" : "fail"} ${name}: ${detail}`);
+    }
+    if (checks.some(([, ok]) => !ok)) {
+      process.exitCode = 1;
     }
   });
 
@@ -221,6 +310,7 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
   if (result.outputs.json) console.log(`JSON: ${result.outputs.json}`);
   console.log(`Overall score: ${result.report.scorecard.overallScore}`);
   console.log(`Findings: ${result.report.findings.length}`);
+  return result;
 }
 
 async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
@@ -254,4 +344,18 @@ function parseIntValue(value: string): number {
 
 function stringOption(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+async function exists(filePath: string): Promise<boolean> {
+  return import("node:fs/promises").then(({ access }) => access(filePath).then(
+    () => true,
+    () => false
+  ));
+}
+
+async function gitignoreContains(pattern: string): Promise<boolean> {
+  return readFile(path.join(process.cwd(), ".gitignore"), "utf8").then(
+    (content) => content.includes(pattern),
+    () => false
+  );
 }

@@ -14,6 +14,7 @@
     "audit": "node apps/cli/dist/index.js audit",
     "quick": "node apps/cli/dist/index.js quick",
     "full": "node apps/cli/dist/index.js full",
+    "agent": "npm run build && node apps/cli/dist/index.js agent-run",
     "validate": "node apps/cli/dist/index.js validate",
     "web": "NODE_ENV=production node apps/web/dist/server/server.js"
   },

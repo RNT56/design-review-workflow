@@ -6,6 +6,7 @@ import { renderHtmlReport } from "./html.js";
 import { renderMarkdownReport } from "./markdown.js";
 import { renderPdfFromHtml } from "./pdf.js";
 import { writeTicketExports } from "./ticket-exports.js";
+import { writeAgentBundle } from "./agent-bundle.js";
 
 export type ReportOutputs = {
   json?: string;
@@ -53,6 +54,8 @@ export async function writeReports(config: AuditConfig, report: AuditReport, pat
     outputs.pdf = path.join(paths.report, "report.pdf");
     await renderPdfFromHtml(outputs.html, outputs.pdf);
   }
+
+  await writeAgentBundle(report, paths, outputs);
 
   return outputs;
 }
