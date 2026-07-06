@@ -132,7 +132,7 @@ export type TextNode = z.infer<typeof TextNodeSchema>;
 export const ScreenshotRefSchema = z.object({
   id: z.string(),
   viewport: ViewportNameSchema,
-  kind: z.enum(["above_fold", "full_page", "state"]),
+  kind: z.enum(["above_fold", "full_page", "state", "annotated", "diff"]),
   path: z.string(),
   width: z.number(),
   height: z.number(),
@@ -212,6 +212,22 @@ export const PerformanceSummarySchema = z.object({
   firstPaintMs: z.number().optional(),
   firstContentfulPaintMs: z.number().optional(),
   transferSizeKb: z.number().optional(),
+  lighthouse: z
+    .object({
+      status: z.enum(["completed", "failed", "skipped"]),
+      performanceScore: z.number().min(0).max(100).optional(),
+      accessibilityScore: z.number().min(0).max(100).optional(),
+      bestPracticesScore: z.number().min(0).max(100).optional(),
+      seoScore: z.number().min(0).max(100).optional(),
+      firstContentfulPaintMs: z.number().optional(),
+      largestContentfulPaintMs: z.number().optional(),
+      totalBlockingTimeMs: z.number().optional(),
+      cumulativeLayoutShift: z.number().optional(),
+      speedIndexMs: z.number().optional(),
+      reportPath: z.string().optional(),
+      error: z.string().optional()
+    })
+    .optional(),
   error: z.string().optional()
 });
 export type PerformanceSummary = z.infer<typeof PerformanceSummarySchema>;
@@ -347,6 +363,42 @@ export const TicketRecommendationSchema = z.object({
 });
 export type TicketRecommendation = z.infer<typeof TicketRecommendationSchema>;
 
+export const ScreenshotAnnotationSchema = z.object({
+  annotationId: z.string(),
+  findingId: z.string(),
+  pageId: z.string(),
+  sourceScreenshotId: z.string(),
+  annotatedScreenshot: ScreenshotRefSchema,
+  label: z.string(),
+  marker: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number()
+  })
+});
+export type ScreenshotAnnotation = z.infer<typeof ScreenshotAnnotationSchema>;
+
+export const CompetitorBenchmarkSchema = z.object({
+  competitorUrl: z.string().url(),
+  auditRoot: z.string(),
+  pagesReviewed: z.number(),
+  scorecard: ScorecardSchema,
+  topFindings: z.array(FindingSchema),
+  relativeStrengths: z.array(z.string()),
+  relativeWeaknesses: z.array(z.string()),
+  differentiationOpportunities: z.array(z.string())
+});
+export type CompetitorBenchmark = z.infer<typeof CompetitorBenchmarkSchema>;
+
+export const TicketExportBundleSchema = z.object({
+  githubIssuesPath: z.string().optional(),
+  linearCsvPath: z.string().optional(),
+  jiraCsvPath: z.string().optional(),
+  backlogJsonPath: z.string().optional()
+});
+export type TicketExportBundle = z.infer<typeof TicketExportBundleSchema>;
+
 export const AuditReportSchema = z.object({
   auditId: z.string(),
   generatedAt: z.string(),
@@ -357,12 +409,43 @@ export const AuditReportSchema = z.object({
   findings: z.array(FindingSchema),
   quickWins: z.array(FindingSchema),
   scorecard: ScorecardSchema,
+  screenshotAnnotations: z.array(ScreenshotAnnotationSchema).default([]),
+  competitorBenchmarks: z.array(CompetitorBenchmarkSchema).default([]),
   redesignBriefing: z.array(z.object({ title: z.string(), body: z.string() })),
   tickets: z.array(TicketRecommendationSchema),
+  ticketExports: TicketExportBundleSchema.optional(),
   assumptions: z.array(z.string()),
   limitations: z.array(z.string())
 });
 export type AuditReport = z.infer<typeof AuditReportSchema>;
+
+export const AuditCompareResultSchema = z.object({
+  generatedAt: z.string(),
+  beforeAuditId: z.string(),
+  afterAuditId: z.string(),
+  beforeUrl: z.string().url(),
+  afterUrl: z.string().url(),
+  scoreDelta: z.number(),
+  subscoreDeltas: z.record(z.string(), z.number()),
+  resolvedFindings: z.array(FindingSchema),
+  newFindings: z.array(FindingSchema),
+  persistentFindings: z.array(FindingSchema),
+  screenshotDiffs: z
+    .array(
+      z.object({
+        beforeScreenshot: z.string(),
+        afterScreenshot: z.string(),
+        diffPath: z.string().optional(),
+        comparedPixels: z.number(),
+        changedPixels: z.number(),
+        changedRatio: z.number(),
+        status: z.enum(["completed", "skipped", "failed"]),
+        reason: z.string().optional()
+      })
+    )
+    .default([])
+});
+export type AuditCompareResult = z.infer<typeof AuditCompareResultSchema>;
 
 export type ProgressEvent = {
   stage: string;

@@ -82,7 +82,7 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
       if (viewport.name === "desktop") {
         desktopExtraction = await extractPage(page, "desktop");
         accessibility = await captureAccessibilitySummary(page);
-        performance = await capturePerformanceSummary(page);
+        performance = await capturePerformanceSummary(page, normalizedUrl, paths.auditRoot, pageId);
       }
 
       if (viewport.name === "mobile" && config.interactions.level >= 1) {

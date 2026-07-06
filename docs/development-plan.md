@@ -15,12 +15,16 @@ Implemented or targeted in the current codebase:
 - DOM, text, links, buttons, forms, sections, components, CSS signals
 - Basic interaction capture for common mobile navigation state
 - axe-core accessibility basics when injection succeeds
-- Browser navigation-timing performance basics
+- Browser navigation-timing performance basics and Lighthouse summaries where local Chrome succeeds
 - Rule-based page classification
 - Criteria-backed deterministic reviewer findings
 - Synthesis, dedupe, QA validation, scorecard, quick wins
 - Redesign briefing
 - Ticket-ready recommendation objects
+- Local ticket export bundle
+- Manual competitor benchmark output
+- Basic annotated screenshots
+- Compare command with score/finding deltas and compatible screenshot diffs
 - Markdown, HTML, PDF, and JSON exports
 
 ## MVP Gaps To Close Before Internal Production Use
@@ -29,8 +33,6 @@ Implemented or targeted in the current codebase:
 - Calibrate findings and score penalties against human review.
 - Harden crawler behavior for consent banners, SPAs, and failed pages.
 - Add stronger mobile-specific extraction instead of desktop-derived tap-target heuristics.
-- Add true Lighthouse navigation summaries.
-- Add screenshot annotation image generation.
 - Add more criteria-library coverage for website and page types.
 
 ## Planned V1

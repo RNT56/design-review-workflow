@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import { createAuditConfig, runAudit, validateReport, type AuditReport } from "../../../packages/core/src/index.js";
+import { createAuditConfig, readProjectIndex, runAudit, validateReport, type AuditReport } from "../../../packages/core/src/index.js";
 
 type Job = {
   id: string;
@@ -111,6 +111,20 @@ app.listen(port, () => {
 });
 
 async function listAudits() {
+  const indexed = await readProjectIndex(workspaceRoot);
+  if (indexed.audits.length > 0) {
+    return indexed.audits.map((audit) => ({
+      site: audit.site,
+      audit: audit.auditId,
+      reportPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.json`,
+      htmlPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.html`,
+      pdfPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.pdf`,
+      generatedAt: audit.generatedAt,
+      score: audit.overallScore,
+      findings: audit.findings
+    }));
+  }
+
   const projectsRoot = path.join(workspaceRoot, "projects");
   const sites = await readdir(projectsRoot).catch(() => []);
   const audits: Array<{

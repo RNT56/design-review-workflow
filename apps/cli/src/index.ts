@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { Command } from "commander";
 import * as yaml from "js-yaml";
-import { createAuditConfig, runAudit, validateReport, type AuditInput } from "../../../packages/core/src/index.js";
+import { compareAuditDirs, createAuditConfig, runAudit, validateReport, type AuditInput } from "../../../packages/core/src/index.js";
 
 const program = new Command();
 
@@ -71,6 +71,18 @@ program
     console.log(`Markdown: ${path.join(auditDir, "report", "report.md")}`);
     console.log(`PDF: ${path.join(auditDir, "report", "report.pdf")}`);
     console.log(`Overall score: ${report.scorecard.overallScore}`);
+    if (report.ticketExports) {
+      console.log("Ticket exports:");
+      for (const [key, value] of Object.entries(report.ticketExports)) {
+        console.log(`- ${key}: ${value}`);
+      }
+    }
+    if (report.competitorBenchmarks.length > 0) {
+      console.log("Competitors:");
+      for (const competitor of report.competitorBenchmarks) {
+        console.log(`- ${competitor.competitorUrl}: ${competitor.scorecard.overallScore}`);
+      }
+    }
     for (const finding of report.findings.slice(0, 5)) {
       console.log(`- [${finding.severity}] ${finding.title}`);
     }
@@ -81,18 +93,14 @@ program
   .argument("<beforeAuditDir>", "Previous audit directory")
   .argument("<afterAuditDir>", "New audit directory")
   .action(async (beforeAuditDir, afterAuditDir) => {
-    const before = validateReport(JSON.parse(await readFile(path.join(beforeAuditDir, "report", "report.json"), "utf8")));
-    const after = validateReport(JSON.parse(await readFile(path.join(afterAuditDir, "report", "report.json"), "utf8")));
-    const scoreDelta = after.scorecard.overallScore - before.scorecard.overallScore;
-    const beforeTitles = new Set(before.findings.map((finding) => finding.title));
-    const afterTitles = new Set(after.findings.map((finding) => finding.title));
-    const resolved = before.findings.filter((finding) => !afterTitles.has(finding.title));
-    const newFindings = after.findings.filter((finding) => !beforeTitles.has(finding.title));
-
-    console.log(`Score delta: ${scoreDelta >= 0 ? "+" : ""}${scoreDelta}`);
-    console.log(`Resolved findings: ${resolved.length}`);
-    console.log(`New findings: ${newFindings.length}`);
-    for (const finding of newFindings.slice(0, 5)) {
+    const { result, outputPath } = await compareAuditDirs(beforeAuditDir, afterAuditDir);
+    console.log(`Score delta: ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}`);
+    console.log(`Resolved findings: ${result.resolvedFindings.length}`);
+    console.log(`New findings: ${result.newFindings.length}`);
+    console.log(`Persistent findings: ${result.persistentFindings.length}`);
+    console.log(`Screenshot diffs: ${result.screenshotDiffs.filter((diff) => diff.status === "completed").length}`);
+    console.log(`Comparison JSON: ${outputPath}`);
+    for (const finding of result.newFindings.slice(0, 5)) {
       console.log(`- [new ${finding.severity}] ${finding.title}`);
     }
   });

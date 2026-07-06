@@ -47,19 +47,23 @@ The implemented MVP is deterministic and local-first:
 - Rule-based reviewer agents that emit structured findings
 - Deterministic synthesis, QA validation, scoring, quick wins, tickets, and redesign briefing
 - Markdown, HTML, JSON, and PDF report generation
+- Basic annotated screenshot generation for validated findings
+- Manual competitor benchmark mode for supplied competitor URLs
+- Local ticket export bundle for GitHub Issues, Linear, Jira, and JSON backlog
+- Local project index under `projects/index.json`
+- Regression compare command with score deltas, finding deltas, and screenshot pixel diffs where screenshots are compatible
 - axe-core accessibility basics where injection succeeds
-- Browser navigation-timing performance basics
+- Browser navigation-timing performance basics plus Lighthouse summaries where local Chrome/Lighthouse succeeds
 
 The following are planned seams, not completed product claims unless code and tests prove otherwise:
 
 - External LLM-backed review agents
 - Provider-specific model quality claims
-- Full Lighthouse navigation reports
-- True visual regression compare
+- Continuous scheduled monitoring
 - Figma analysis
 - Login-area audits
 - SaaS/cloud multi-user storage
-- Jira, Linear, GitHub Issues, Notion, Slack, or Google Docs export
+- Live Jira, Linear, GitHub Issues, Notion, Slack, or Google Docs writes
 - Full WCAG certification
 - Deep SEO, analytics, privacy, bundle, server, or tracking analysis
 
@@ -137,6 +141,7 @@ Before closing implementation work, run the strongest feasible local checks:
 - `npm test`
 - `npm run build`
 - At least one smoke audit against a small local or public page when browser dependencies are installed
+- A compare smoke when two compatible audit snapshots exist
 
 If a check cannot run, document the exact reason in the final response.
 
@@ -156,11 +161,7 @@ MVP:
 V1:
 
 - LLM provider adapters used in production
-- Lighthouse navigation summaries
-- Competitor benchmark mode hardening
-- Compare command
-- Better screenshot annotations
-- External ticket/document exports
+- External ticket/document live-write commands
 - SQLite project index
 
 V2+:

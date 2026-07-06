@@ -298,6 +298,21 @@ td {
   gap: 10px;
 }
 
+.annotation-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.annotation-list a {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  text-decoration: none;
+}
+
 .briefing section {
   border: 1px solid var(--line);
   border-radius: 8px;

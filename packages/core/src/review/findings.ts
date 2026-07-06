@@ -13,6 +13,7 @@ import { writeJson } from "../utils/fs.js";
 import { stableId } from "../utils/id.js";
 import { inferWebsiteType } from "./classification.js";
 import { createScorecard, priorityScore } from "./scoring.js";
+import { createScreenshotAnnotations } from "../report/annotations.js";
 
 type FindingDraft = Omit<Finding, "findingId" | "priorityScore" | "relatedFindings">;
 
@@ -36,6 +37,7 @@ export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[],
   const quickWins = findings.filter((finding) => finding.effort === "low" && finding.impact !== "low" && finding.confidence !== "low").slice(0, 10);
   const tickets = createTickets(findings);
   const redesignBriefing = createRedesignBriefing(config, pages, findings, website.websiteType);
+  const screenshotAnnotations = await createScreenshotAnnotations(config, paths, findings, pages);
 
   return {
     auditId: config.auditId,
@@ -47,6 +49,8 @@ export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[],
     findings,
     quickWins,
     scorecard,
+    screenshotAnnotations,
+    competitorBenchmarks: [],
     redesignBriefing,
     tickets,
     assumptions: [

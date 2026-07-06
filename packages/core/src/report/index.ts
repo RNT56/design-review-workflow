@@ -5,6 +5,7 @@ import { writeJson, writeText } from "../utils/fs.js";
 import { renderHtmlReport } from "./html.js";
 import { renderMarkdownReport } from "./markdown.js";
 import { renderPdfFromHtml } from "./pdf.js";
+import { writeTicketExports } from "./ticket-exports.js";
 
 export type ReportOutputs = {
   json?: string;
@@ -16,6 +17,7 @@ export type ReportOutputs = {
 
 export async function writeReports(config: AuditConfig, report: AuditReport, paths: AuditPaths): Promise<ReportOutputs> {
   const outputs: ReportOutputs = {};
+  report.ticketExports = await writeTicketExports(report, paths);
 
   if (config.outputs.json) {
     outputs.json = path.join(paths.report, "report.json");

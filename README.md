@@ -30,6 +30,8 @@ npm run audit -- https://example.com --mode full --max-pages 15 --pdf --html --j
 npm run quick -- https://example.com
 npm run full -- https://example.com --competitor https://competitor.example
 npm run validate -- ./projects/example-com/audits/latest/report/report.json
+npm run build
+node apps/cli/dist/index.js compare ./projects/example-com/audits/before ./projects/example-com/audits/after
 ```
 
 ## What The MVP Does
@@ -45,6 +47,10 @@ npm run validate -- ./projects/example-com/audits/latest/report/report.json
 - Rule-based reviewer agents for design, UX, conversion, brand/trust, content, mobile, accessibility, performance, and design-system consistency
 - Deterministic synthesis, QA gate, scorecard, quick wins, redesign briefing, and ticket-ready recommendations
 - Markdown, HTML, PDF, and JSON report exports
+- Basic annotated screenshots for validated findings
+- Competitor benchmark output when competitor URLs are supplied
+- Local ticket export files for GitHub Issues, Linear, Jira, and JSON backlog
+- Audit compare artifacts with subscore deltas and screenshot diffs where dimensions match
 
 ## What It Does Not Claim Yet
 
@@ -54,6 +60,7 @@ npm run validate -- ./projects/example-com/audits/latest/report/report.json
 - No production LLM provider calls yet
 - No true Lighthouse report yet
 - No Figma or external ticketing integrations yet
+- No live writes to external ticketing systems without explicit credentials and a dedicated command
 
 See [AGENTS.md](./AGENTS.md) for the source-of-truth implementation contract.
 

@@ -43,6 +43,9 @@ type AuditReport = {
     evidence: { url: string; section?: string; screenshotRefs: string[] };
   }>;
   quickWins: Array<{ findingId: string; title: string; recommendation: string }>;
+  screenshotAnnotations: Array<{ annotationId: string; label: string; annotatedScreenshot: { path: string } }>;
+  competitorBenchmarks: Array<{ competitorUrl: string; pagesReviewed: number; scorecard: { overallScore: number }; relativeWeaknesses: string[]; differentiationOpportunities: string[] }>;
+  ticketExports?: Record<string, string>;
   scorecard: {
     overallScore: number;
     subscores: Record<string, { score: number; confidence: string; rationale: string }>;
@@ -215,6 +218,48 @@ function App() {
             </section>
 
             <section>
+              {selected.competitorBenchmarks.length > 0 ? (
+                <>
+                  <h3>Competitors</h3>
+                  <table>
+                    <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
+                    <tbody>
+                      {selected.competitorBenchmarks.map((competitor) => (
+                        <tr key={competitor.competitorUrl}>
+                          <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{new URL(competitor.competitorUrl).hostname}</a></td>
+                          <td>{competitor.scorecard.overallScore}</td>
+                          <td>{competitor.pagesReviewed}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              ) : null}
+
+              {selected.screenshotAnnotations.length > 0 ? (
+                <>
+                  <h3>Annotations</h3>
+                  <div className="annotation-list">
+                    {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
+                      <a key={annotation.annotationId} href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/${annotation.annotatedScreenshot.path}`} target="_blank" rel="noreferrer">
+                        {annotation.label}
+                      </a>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
+              {selected.ticketExports ? (
+                <>
+                  <h3>Exports</h3>
+                  <div className="annotation-list">
+                    {Object.entries(selected.ticketExports).map(([key, value]) => (
+                      <a key={key} href={toProjectHref(value, selected)} target="_blank" rel="noreferrer">{label(key)}</a>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+
               <h3>Pages</h3>
               <table>
                 <thead><tr><th>Type</th><th>Page</th><th>Importance</th></tr></thead>
@@ -252,6 +297,15 @@ function label(value: string) {
 
 function siteSlug(url: string) {
   return new URL(url).hostname.replace(/^www\./, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function toProjectHref(value: string, report: AuditReport) {
+  const marker = `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/`;
+  const index = value.indexOf(marker);
+  if (index >= 0) {
+    return value.slice(index);
+  }
+  return value;
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

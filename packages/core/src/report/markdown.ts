@@ -50,6 +50,26 @@ export function renderMarkdownReport(report: AuditReport): string {
 
   lines.push("## Page Inventory");
   lines.push("");
+
+  if (report.competitorBenchmarks.length > 0) {
+    lines.push("## Competitor Benchmark");
+    lines.push("");
+    lines.push("| Competitor | Score | Pages | Top Gap |");
+    lines.push("| --- | ---: | ---: | --- |");
+    for (const competitor of report.competitorBenchmarks) {
+      lines.push(`| ${competitor.competitorUrl} | ${competitor.scorecard.overallScore} | ${competitor.pagesReviewed} | ${competitor.relativeWeaknesses[0] ?? ""} |`);
+    }
+    lines.push("");
+  }
+
+  if (report.screenshotAnnotations.length > 0) {
+    lines.push("## Screenshot Annotations");
+    lines.push("");
+    for (const annotation of report.screenshotAnnotations.slice(0, 20)) {
+      lines.push(`- ${annotation.label}: ${annotation.annotatedScreenshot.path}`);
+    }
+    lines.push("");
+  }
   lines.push("| Page | Type | Importance | Title |");
   lines.push("| --- | --- | --- | --- |");
   for (const page of report.pages) {
@@ -81,6 +101,16 @@ export function renderMarkdownReport(report: AuditReport): string {
     for (const criterion of ticket.acceptanceCriteria) {
       lines.push(`- ${criterion}`);
     }
+    lines.push("");
+  }
+
+  if (report.ticketExports) {
+    lines.push("## Ticket Export Files");
+    lines.push("");
+    if (report.ticketExports.githubIssuesPath) lines.push(`- GitHub issue markdown: ${report.ticketExports.githubIssuesPath}`);
+    if (report.ticketExports.linearCsvPath) lines.push(`- Linear CSV: ${report.ticketExports.linearCsvPath}`);
+    if (report.ticketExports.jiraCsvPath) lines.push(`- Jira CSV: ${report.ticketExports.jiraCsvPath}`);
+    if (report.ticketExports.backlogJsonPath) lines.push(`- Backlog JSON: ${report.ticketExports.backlogJsonPath}`);
     lines.push("");
   }
 
