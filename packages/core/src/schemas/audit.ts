@@ -88,6 +88,19 @@ export const ViewportConfigSchema = z.object({
 });
 export type ViewportConfig = z.infer<typeof ViewportConfigSchema>;
 
+export const CaptureSettingsSchema = z
+  .object({
+    settleScroll: z.boolean().default(true),
+    reducedMotion: z.boolean().default(true),
+    waitForImages: z.boolean().default(true),
+    maxScrollPasses: z.number().int().min(1).max(3).default(2),
+    scrollStepRatio: z.number().min(0.25).max(1).default(0.75),
+    stepDelayMs: z.number().int().min(0).max(1500).default(180),
+    settleTimeoutMs: z.number().int().min(500).max(15000).default(4000)
+  })
+  .default({});
+export type CaptureSettings = z.infer<typeof CaptureSettingsSchema>;
+
 export const AuditConfigSchema = z.object({
   auditId: z.string().min(1),
   mode: AuditModeSchema,
@@ -105,6 +118,7 @@ export const AuditConfigSchema = z.object({
   auditRunId: z.string().optional(),
   outputDir: z.string().optional(),
   viewports: z.array(ViewportConfigSchema).min(1),
+  capture: CaptureSettingsSchema,
   crawl: z.object({
     sameDomainOnly: z.boolean().default(true),
     includeSubdomains: z.boolean().default(false),

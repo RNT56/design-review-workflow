@@ -52,6 +52,7 @@ function report(id: string, score: number, findingTitles: string[]): AuditReport
       language: "auto",
       competitors: [],
       viewports: [{ name: "desktop", width: 1440, height: 1000, deviceScaleFactor: 1, isMobile: false }],
+      capture: { settleScroll: true, reducedMotion: true, waitForImages: true, maxScrollPasses: 2, scrollStepRatio: 0.75, stepDelayMs: 180, settleTimeoutMs: 4000 },
       crawl: { sameDomainOnly: true, includeSubdomains: false, maxDepth: 1, excludePatterns: [] },
       interactions: { level: 1, allowCheckoutStart: false, allowFormErrorChecks: false, allowPurchase: false, allowLogin: false },
       outputs: { markdown: true, html: true, pdf: false, json: true, screenshotAnnotations: "basic" },

@@ -59,6 +59,10 @@ program
   .option("--no-html", "Disable HTML output")
   .option("--no-json", "Disable JSON output")
   .option("--no-markdown", "Disable Markdown output")
+  .option("--no-capture-settle-scroll", "Disable pre-screenshot scroll settling for reveal/lazy content")
+  .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
+  .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
+  .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
   .option("--config <path>", "Optional YAML or JSON config file")
   .action(async (url, options) => {
     await runFromOptions(url, options);
@@ -75,6 +79,10 @@ program
   .option("--audit-root <dir>", "Audit output root")
   .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
   .option("--output <dir>", "Explicit audit output directory override")
+  .option("--no-capture-settle-scroll", "Disable pre-screenshot scroll settling for reveal/lazy content")
+  .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
+  .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
+  .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "quick_scan" });
   });
@@ -88,6 +96,10 @@ program
   .option("--audit-root <dir>", "Audit output root")
   .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
   .option("--output <dir>", "Explicit audit output directory override")
+  .option("--no-capture-settle-scroll", "Disable pre-screenshot scroll settling for reveal/lazy content")
+  .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
+  .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
+  .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "full_audit" });
   });
@@ -665,6 +677,10 @@ function configureAgentRunCommand(command: Command): void {
     .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
     .option("--output <dir>", "Explicit audit output directory override")
     .option("--config <path>", "Optional YAML or JSON config file")
+    .option("--no-capture-settle-scroll", "Disable pre-screenshot scroll settling for reveal/lazy content")
+    .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
+    .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
+    .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
     .option("--no-pdf", "Disable PDF output")
     .option("--no-html", "Disable full HTML report output")
     .option("--no-markdown", "Disable full Markdown report output")
@@ -920,7 +936,26 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
     outputPdf: options.pdf !== false,
     outputHtml: options.html !== false,
     outputJson: options.json !== false,
-    outputMarkdown: options.markdown !== false
+    outputMarkdown: options.markdown !== false,
+    capture: {
+      ...(fileInput.capture ?? {}),
+      settleScroll:
+        typeof options.captureSettleScroll === "boolean"
+          ? options.captureSettleScroll
+          : fileInput.capture?.settleScroll,
+      reducedMotion:
+        typeof options.captureReducedMotion === "boolean"
+          ? options.captureReducedMotion
+          : fileInput.capture?.reducedMotion,
+      maxScrollPasses:
+        typeof options.captureScrollPasses === "number"
+          ? Number(options.captureScrollPasses)
+          : fileInput.capture?.maxScrollPasses,
+      settleTimeoutMs:
+        typeof options.captureSettleTimeout === "number"
+          ? Number(options.captureSettleTimeout)
+          : fileInput.capture?.settleTimeoutMs
+    }
   };
 
   const config = createAuditConfig(input);
@@ -970,6 +1005,7 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
   }
   const value = parsed as Record<string, unknown>;
   const audit = value.audit && typeof value.audit === "object" ? (value.audit as Record<string, unknown>) : value;
+  const capture = audit.capture && typeof audit.capture === "object" ? (audit.capture as Record<string, unknown>) : {};
   return {
     mode: normalizeMode(String(audit.mode ?? "quick_scan")),
     url: typeof audit.url === "string" ? audit.url : undefined,
@@ -984,7 +1020,16 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
     auditName: typeof audit.auditName === "string" ? audit.auditName : typeof audit.audit_name === "string" ? audit.audit_name : undefined,
     auditSlug: typeof audit.auditSlug === "string" ? audit.auditSlug : typeof audit.audit_slug === "string" ? audit.audit_slug : undefined,
     auditRunId: typeof audit.auditRunId === "string" ? audit.auditRunId : typeof audit.audit_run_id === "string" ? audit.audit_run_id : undefined,
-    outputDir: typeof audit.outputDir === "string" ? audit.outputDir : typeof audit.output === "string" ? audit.output : undefined
+    outputDir: typeof audit.outputDir === "string" ? audit.outputDir : typeof audit.output === "string" ? audit.output : undefined,
+    capture: {
+      settleScroll: booleanOption(capture.settleScroll) ?? booleanOption(capture.settle_scroll),
+      reducedMotion: booleanOption(capture.reducedMotion) ?? booleanOption(capture.reduced_motion),
+      waitForImages: booleanOption(capture.waitForImages) ?? booleanOption(capture.wait_for_images),
+      maxScrollPasses: numberOption(capture.maxScrollPasses) ?? numberOption(capture.max_scroll_passes),
+      scrollStepRatio: numberOption(capture.scrollStepRatio) ?? numberOption(capture.scroll_step_ratio),
+      stepDelayMs: numberOption(capture.stepDelayMs) ?? numberOption(capture.step_delay_ms),
+      settleTimeoutMs: numberOption(capture.settleTimeoutMs) ?? numberOption(capture.settle_timeout_ms)
+    }
   };
 }
 
@@ -1003,6 +1048,14 @@ function parseIntValue(value: string): number {
 
 function stringOption(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function booleanOption(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function numberOption(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 async function exists(filePath: string): Promise<boolean> {

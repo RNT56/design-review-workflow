@@ -66,6 +66,7 @@ The implemented MVP is deterministic and local-first:
 - Local web UI
 - Deterministic local audit storage under `audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/`
 - Playwright capture for desktop and mobile screenshots
+- Scroll-reveal-aware screenshot capture with reduced-motion contexts, asset readiness waits, viewport-step page settling, and final top-of-page reset before evidence extraction
 - DOM, text, form, link, button, section, and CSS-signal extraction
 - Basic same-domain crawl and page selection
 - Rule-based page classification and website-type inference

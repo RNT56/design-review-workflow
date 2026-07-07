@@ -1,4 +1,4 @@
-import { AuditConfig, AuditConfigSchema, AuditMode, ViewportConfig } from "../schemas/audit.js";
+import { AuditConfig, AuditConfigSchema, AuditMode, CaptureSettings, ViewportConfig } from "../schemas/audit.js";
 import { AUDIT_ROOT_ENV, DEFAULT_AUDIT_ROOT } from "../storage/audit-output.js";
 import { createAuditId } from "../utils/id.js";
 
@@ -38,6 +38,7 @@ export type AuditInput = {
   outputHtml?: boolean;
   outputJson?: boolean;
   outputMarkdown?: boolean;
+  capture?: Partial<CaptureSettings>;
 };
 
 export function createAuditConfig(input: AuditInput): AuditConfig {
@@ -61,6 +62,7 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
     auditRunId: input.auditRunId,
     outputDir: input.outputDir,
     viewports: defaultViewports,
+    capture: input.capture ?? {},
     crawl: {
       sameDomainOnly: true,
       includeSubdomains: false,

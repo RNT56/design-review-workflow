@@ -13,6 +13,7 @@ import { extractPage } from "./extraction.js";
 import { capturePerformanceSummary } from "./performance.js";
 import { classifyPage } from "../review/classification.js";
 import { buildPageReviewSignals } from "./review-signals.js";
+import { resetScrollPosition, settlePageForCapture } from "./render-readiness.js";
 
 export type CaptureResult = {
   pages: PageEvidence[];
@@ -26,10 +27,10 @@ export async function captureEvidence(
 ): Promise<CaptureResult> {
   const browser = await chromium.launch({ headless: true });
   try {
-    const discoveryPage = await newPage(browser, config.viewports.find((viewport) => viewport.name === "desktop") ?? config.viewports[0]);
+    const discoveryPage = await newPage(browser, config.viewports.find((viewport) => viewport.name === "desktop") ?? config.viewports[0], config);
     onProgress?.({ stage: "crawl", message: "Discovering candidate pages" });
     const candidates = await discoverPages(discoveryPage, config);
-    await discoveryPage.close();
+    await discoveryPage.context().close();
     await writeJson(path.join(paths.auditRoot, "crawl-map.json"), candidates);
 
     const pages: PageEvidence[] = [];
@@ -73,15 +74,17 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
   let performance: PageEvidence["performance"];
 
   for (const viewport of config.viewports) {
-    const page = await newPage(browser, viewport);
+    const page = await newPage(browser, viewport, config);
     try {
       await gotoForAudit(page, normalizedUrl);
+      await settlePageForCapture(page, config.capture);
       const folder = viewport.name === "desktop" ? paths.screenshotsDesktop : paths.screenshotsMobile;
       const aboveFold = await saveScreenshot(page, folder, pageId, slug, viewport, "above_fold");
       const fullPage = await saveScreenshot(page, folder, pageId, slug, viewport, "full_page");
       screenshots[aboveFold.id] = aboveFold;
       screenshots[fullPage.id] = fullPage;
 
+      await resetScrollPosition(page);
       const extraction = await extractPage(page, viewport.name);
       extractions[viewport.name] = extraction;
 
@@ -97,7 +100,7 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
         }
       }
     } finally {
-      await page.close();
+      await page.context().close();
     }
   }
 
@@ -142,11 +145,12 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
   };
 }
 
-async function newPage(browser: Browser, viewport: ViewportConfig): Promise<Page> {
+async function newPage(browser: Browser, viewport: ViewportConfig, config: AuditConfig): Promise<Page> {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: viewport.deviceScaleFactor,
     isMobile: viewport.isMobile,
+    reducedMotion: config.capture.reducedMotion ? "reduce" : "no-preference",
     userAgent:
       viewport.name === "mobile"
         ? "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
@@ -202,6 +206,7 @@ async function captureMobileNavigationState(
   slug: string,
   viewport: ViewportConfig
 ): Promise<ScreenshotRef | null> {
+  await resetScrollPosition(page);
   const candidates = [
     page.getByRole("button", { name: /menu|navigation|nav|open|hamburger|menü/i }).first(),
     page.locator("button[aria-expanded='false']").first(),
