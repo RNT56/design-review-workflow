@@ -64,7 +64,8 @@ Business-grade lane:
 ```bash
 node apps/cli/dist/index.js run https://example.com --business-grade
 node apps/cli/dist/index.js review-pack build --report <audit-dir>
-# Agent visually inspects report/contact-sheets/*.png and writes agent-runs/<agent>/visual-review.json.
+# Agent follows report/agent-review-pack/review-pack-manifest.json,
+# inspects the gallery and optimized PNG sheets, then writes agent-runs/<agent>/visual-review.json.
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 ```
@@ -107,6 +108,11 @@ Agents must report:
 - `report/business-grade-gate.json`
 - `report/grouped-issues.json`
 - `report/screenshot-manifest.json`
+- `report/agent-review-pack/review-pack-manifest.json` when built
+- `report/agent-review-pack/gallery/index.html` when built
+- `report/contact-sheets/first-viewports.png` when built
+- `report/contact-sheets/pages/*.png` when built
+- `report/contact-sheets/issues/*.png` when built
 - `report/agent-execution-plan.md`
 - `report/implementation-plan.json`
 - `report/evidence-index.json`
@@ -140,6 +146,7 @@ The stable machine-readable files are:
 - `report/actionability.json`
 - `report/evidence-index.json`
 - `report/screenshot-manifest.json`
+- `report/agent-review-pack/review-pack-manifest.json` when built
 - `report/grouped-issues.json`
 - `report/business-grade-gate.json`
 - `report/evidence.jsonl`
@@ -158,6 +165,17 @@ The stable machine-readable files are:
 - `report/agent-visual-review.json` when imported
 
 Agents should not scrape Markdown when these JSON files are available.
+
+## Visual Review Order
+
+For business-grade work, use `report/agent-review-pack/review-pack-manifest.json` as the review source of truth:
+
+1. First viewports: `report/contact-sheets/first-viewports.png` and per-page `*-first-viewports.png` sheets.
+2. Grouped issue evidence: `report/contact-sheets/issues/*.png`.
+3. Full page flows: `report/contact-sheets/pages/*-flow.png`.
+4. Raw screenshots listed in `report/screenshot-manifest.json`.
+
+`report/contact-sheets/all-pages.png` is retained as an overview/index for older agents. It is not the primary inspection surface.
 
 ## Safety
 

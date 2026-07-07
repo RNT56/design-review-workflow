@@ -29,7 +29,8 @@ Output:
 - Design benchmark
 - Business-grade gate
 - Grouped issue inventory
-- Screenshot manifest and contact sheets
+- Screenshot manifest with PNG dimensions, grouping metadata, and sheet references
+- Optimized contact sheets and static review-pack gallery
 - Standards registry
 - Suppression ledger
 - Agent-specific instructions
@@ -96,6 +97,11 @@ node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
 - `report/business-grade-gate.json`
 - `report/grouped-issues.json`
 - `report/screenshot-manifest.json`
+- `report/agent-review-pack/review-pack-manifest.json` when built
+- `report/agent-review-pack/gallery/index.html` when built
+- `report/contact-sheets/first-viewports.png` when built
+- `report/contact-sheets/pages/*.png` when built
+- `report/contact-sheets/issues/*.png` when built
 - `report/hosted/index.html`
 - `report/agent-review-pack/` when built
 - `report/contact-sheets/*.png` when built
@@ -124,12 +130,21 @@ The workflow must not silently assume the current directory is the target websit
 
 `report lint --strict` validates the technical bundle. `business-grade lint` validates the business-grade claim.
 
-Without an imported `AgentVisualReview`, reports remain `automated_scan` or `agent_review_pending`. A repo-capable multimodal agent must inspect `report/contact-sheets/*.png` and the screenshots listed in `report/screenshot-manifest.json`, write a completed visual review JSON, then import it:
+Without an imported `AgentVisualReview`, reports remain `automated_scan` or `agent_review_pending`. A repo-capable multimodal agent must inspect the optimized review pack, write a completed visual review JSON, then import it:
 
 ```bash
 node apps/cli/dist/index.js review-pack build --report <audit-dir>
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 ```
+
+The recommended review order is machine-readable in `report/agent-review-pack/review-pack-manifest.json`:
+
+1. `report/contact-sheets/first-viewports.png` and `report/contact-sheets/pages/*-first-viewports.png`
+2. `report/contact-sheets/issues/*.png`
+3. `report/contact-sheets/pages/*-flow.png`
+4. Raw screenshots from `report/screenshot-manifest.json`
+
+`report/agent-review-pack/gallery/index.html` is static and filterable by page, viewport, issue, screenshot kind, and source. `report/contact-sheets/all-pages.png` remains available for older agents as an overview sheet.
 
 The workflow does not need additional API keys for this lane because the visual judgment is performed by the agent running the repo.

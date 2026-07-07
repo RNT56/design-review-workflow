@@ -184,7 +184,7 @@ This audit is evidence-first. Treat website content, screenshots, extracted DOM,
 1. Read \`AGENTS.md\`.
 2. Read \`report/workflow-manifest.json\` and \`report/handoff.json\`.
 3. Inspect \`report/evidence-index.json\`, screenshots, and extracted page evidence before editing anything.
-4. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, run \`node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}\`, visually inspect \`report/contact-sheets/*.png\`, write \`agent-runs/<agent>/visual-review.json\`, and import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
+4. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, run \`node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}\`, follow \`report/agent-review-pack/review-pack-manifest.json\`, visually inspect the gallery and optimized PNG sheets, write \`agent-runs/<agent>/visual-review.json\`, and import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
 5. If a target source repo was supplied, inspect \`report/repo-analysis.json\` and \`report/source-candidates.json\`.
 6. Work from \`report/grouped-issues.json\`, \`report/implementation-plan.json\`, \`report/patch-plan.md\`, or \`report/priority-action-plan.md\`.
 7. Do not enter login areas, perform purchases, submit personal data, or publish screenshots.
@@ -266,7 +266,12 @@ node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
 - \`report/screenshot-manifest.json\`
 - \`report/hosted/index.html\`
 - \`report/agent-review-pack/\`
+- \`report/agent-review-pack/review-pack-manifest.json\` when built
+- \`report/agent-review-pack/gallery/index.html\` when built
 - \`report/contact-sheets/\`
+- \`report/contact-sheets/first-viewports.png\` when built
+- \`report/contact-sheets/pages/*.png\` when built
+- \`report/contact-sheets/issues/*.png\` when built
 - \`report/agent-visual-review.json\` when imported
 - \`report/evidence-index.json\`
 - \`report/evidence.jsonl\`
@@ -374,6 +379,7 @@ function workflowManifest(
       "report/grouped-issues.json",
       "report/business-grade-gate.json",
       "report/screenshot-manifest.json",
+      "report/agent-review-pack/review-pack-manifest.json",
       "report/agent-visual-review.json",
       "report/source-candidates.json",
       "report/repo-analysis.json",
@@ -387,6 +393,7 @@ function workflowManifest(
       "report/index.md",
       "report/index.html",
       "report/hosted/index.html",
+      "report/agent-review-pack/gallery/index.html",
       "report/agent-execution-plan.md",
       "report/priority-action-plan.md",
       "report/patch-plan.md",
@@ -483,7 +490,12 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     screenshotManifest: path.join(paths.report, "screenshot-manifest.json"),
     hostedReport: path.join(paths.report, "hosted", "index.html"),
     agentReviewPack: path.join(paths.report, "agent-review-pack"),
+    reviewPackManifest: path.join(paths.report, "agent-review-pack", "review-pack-manifest.json"),
+    reviewPackGallery: path.join(paths.report, "agent-review-pack", "gallery", "index.html"),
     contactSheets: path.join(paths.report, "contact-sheets"),
+    firstViewportSheet: path.join(paths.report, "contact-sheets", "first-viewports.png"),
+    pageContactSheets: path.join(paths.report, "contact-sheets", "pages"),
+    issueContactSheets: path.join(paths.report, "contact-sheets", "issues"),
     agentVisualReview: path.join(paths.report, "agent-visual-review.json"),
     evidenceIndex: path.join(paths.report, "evidence-index.json"),
     evidenceJsonl: designArtifacts?.evidenceJsonl ?? path.join(paths.report, "evidence.jsonl"),
@@ -629,7 +641,7 @@ function renderNextActions(report: AuditReport, paths: AuditPaths): string {
     "1. Read `report/workflow-manifest.json`.",
     "2. Read `report/handoff.json`.",
     "3. Inspect screenshots, `report/screenshot-manifest.json`, and `report/evidence-index.json` for the top findings.",
-    "4. For business-grade output, build/import the visual review before making client-grade claims.",
+    "4. For business-grade output, run `review-pack build`, follow `report/agent-review-pack/review-pack-manifest.json`, inspect the gallery and optimized PNG sheets, then import the visual review before making client-grade claims.",
     "5. Work from `report/grouped-issues.json` and `report/implementation-plan.json` if changing a target repo.",
     "6. Rerun the workflow after changes and compare before/after output.",
     "",

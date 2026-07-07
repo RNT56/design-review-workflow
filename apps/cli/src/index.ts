@@ -520,9 +520,14 @@ type AgentCloseout = {
     groupedIssues: string;
     screenshotManifest: string;
     reviewPack: string;
+    reviewPackManifest: string;
+    reviewPackGallery: string;
     agentVisualReview: string;
     hostedReport: string;
     contactSheets: string;
+    firstViewportSheet: string;
+    pageContactSheets: string;
+    issueContactSheets: string;
     agentInstructions: string;
   };
 };
@@ -559,6 +564,9 @@ function configureAgentRunCommand(command: Command): void {
           console.log("");
           console.log("Business-grade review pack created.");
           console.log(`Review pack: ${pack.packRoot}`);
+          console.log(`Review pack manifest: ${path.join(pack.packRoot, "review-pack-manifest.json")}`);
+          console.log(`Review gallery: ${path.join(pack.packRoot, "gallery", "index.html")}`);
+          console.log(`First viewports: ${path.join(result.auditRoot, "report", "contact-sheets", "first-viewports.png")}`);
           console.log(`Contact sheets: ${path.join(result.auditRoot, "report", "contact-sheets")}`);
           console.log(`Import required: node apps/cli/dist/index.js agent-review import --report ${result.auditRoot} --file agent-runs/<agent>/visual-review.json`);
         }
@@ -649,9 +657,14 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     groupedIssues: path.join(reportRoot, "grouped-issues.json"),
     screenshotManifest: path.join(reportRoot, "screenshot-manifest.json"),
     reviewPack: path.join(reportRoot, "agent-review-pack"),
+    reviewPackManifest: path.join(reportRoot, "agent-review-pack", "review-pack-manifest.json"),
+    reviewPackGallery: path.join(reportRoot, "agent-review-pack", "gallery", "index.html"),
     agentVisualReview: path.join(reportRoot, "agent-visual-review.json"),
     hostedReport: path.join(reportRoot, "hosted", "index.html"),
     contactSheets: path.join(reportRoot, "contact-sheets"),
+    firstViewportSheet: path.join(reportRoot, "contact-sheets", "first-viewports.png"),
+    pageContactSheets: path.join(reportRoot, "contact-sheets", "pages"),
+    issueContactSheets: path.join(reportRoot, "contact-sheets", "issues"),
     agentInstructions: path.join(reportRoot, "agent-instructions")
   };
 }
@@ -668,6 +681,8 @@ function printCloseout(closeout: AgentCloseout): void {
   if (closeout.status === "agent_review_required") {
     console.log(`Business-grade gate: agent review required`);
     console.log(`Review pack: ${closeout.files.reviewPack}`);
+    console.log(`Review pack manifest: ${closeout.files.reviewPackManifest}`);
+    console.log(`Review gallery: ${closeout.files.reviewPackGallery}`);
   }
   console.log(`Score: ${closeout.score}`);
   console.log(`Findings: ${closeout.findings}`);
@@ -726,6 +741,11 @@ function repositoryWorkflowContract() {
       "report/experience-timing.json",
       "report/hosted/index.html",
       "report/agent-review-pack/",
+      "report/agent-review-pack/review-pack-manifest.json when built",
+      "report/agent-review-pack/gallery/index.html when built",
+      "report/contact-sheets/first-viewports.png when built",
+      "report/contact-sheets/pages/*.png when built",
+      "report/contact-sheets/issues/*.png when built",
       "report/agent-instructions/"
     ],
     safetyRules: [

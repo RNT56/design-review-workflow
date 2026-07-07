@@ -75,6 +75,40 @@ Business-grade reports require an imported visual review from the repo-capable m
 
 All screenshot references must match IDs or paths in `report/screenshot-manifest.json`. The import step rejects unknown screenshot references and unsupported analytics, user-behavior, revenue, heatmap, or competitor claims.
 
+## ScreenshotManifest
+
+`report/screenshot-manifest.json` is the raw screenshot inventory plus derived review-pack metadata:
+
+- `id`
+- `pageId`
+- `url`
+- `viewport`
+- `kind`
+- `path`
+- `pixelWidth` and `pixelHeight` read from the actual PNG
+- `aspectRatio`
+- `displayRole`: `first_viewport`, `full_page_flow`, `state_capture`, `annotated`, or `raw`
+- `pageTitle`
+- `pageType`
+- `groups`: page, viewport, kind, display role, and issue memberships when applicable
+- `sheetRefs`: generated contact-sheet paths that include this screenshot
+
+Raw screenshots remain unchanged. Contact sheets and gallery files are derived surfaces over these entries.
+
+## ReviewPackManifest
+
+`report/agent-review-pack/review-pack-manifest.json` is the visual-review source of truth:
+
+- `schemaVersion`
+- `auditId`
+- `generatedAt`
+- `gallery.path`
+- `recommendedReviewOrder`
+- `sheets`
+- `statistics`
+
+Agents should follow `recommendedReviewOrder`: first viewports, grouped issue evidence, page-flow sheets, then raw screenshots. `contact-sheets/all-pages.png` is a compatibility overview, not the primary inspection artifact.
+
 ## GroupedIssue
 
 Grouped issues merge duplicate deterministic and agent visual findings into root-cause recommendations:
@@ -134,7 +168,12 @@ Every completed audit writes machine-readable agent contracts under `report/`:
 - `quality-gate.json`: compact pass/warn/fail gate
 - `business-grade-gate.json`: pass/fail gate for business-grade claims
 - `grouped-issues.json`: root-cause issue inventory
-- `screenshot-manifest.json`: page screenshot IDs, paths, dimensions, and absolute local paths for agent review
+- `screenshot-manifest.json`: page screenshot IDs, paths, actual PNG dimensions, display roles, groups, sheet refs, and absolute local paths for agent review
+- `agent-review-pack/review-pack-manifest.json`: generated sheet inventory and recommended visual review order when built
+- `agent-review-pack/gallery/index.html`: static filterable screenshot and sheet gallery when built
+- `contact-sheets/first-viewports.png`: first-viewport overview sheet when built
+- `contact-sheets/pages/*.png`: per-page first-viewport and page-flow sheets when built
+- `contact-sheets/issues/*.png`: grouped issue evidence sheets when built
 - `agent-visual-review.json`: imported multimodal agent review when present
 - `hosted/index.html`: standalone static report with copied screenshot assets
 

@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
+import { PNG } from "pngjs";
 import { AuditConfig, PageEvidence, ProgressEvent, ScreenshotRef, ViewportConfig } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
 import { writeJson } from "../utils/fs.js";
@@ -176,13 +178,14 @@ async function saveScreenshot(
   const fileName = `${slug}_${viewport.name}_${kind}.png`;
   const filePath = path.join(folder, fileName);
   await page.screenshot({ path: filePath, fullPage: kind === "full_page" });
+  const dimensions = await readPngDimensions(filePath, { width: viewport.width, height: viewport.height });
   return {
     id,
     viewport: viewport.name,
     kind,
     path: path.relative(path.dirname(path.dirname(folder)), filePath),
-    width: viewport.width,
-    height: viewport.height
+    width: dimensions.width,
+    height: dimensions.height
   };
 }
 
@@ -208,16 +211,26 @@ async function captureMobileNavigationState(
     const id = `${pageId}_mobile_nav_state`;
     const filePath = path.join(folder, `${slug}_mobile_nav_open.png`);
     await page.screenshot({ path: filePath, fullPage: false });
+    const dimensions = await readPngDimensions(filePath, { width: viewport.width, height: viewport.height });
     return {
       id,
       viewport: "mobile",
       kind: "state",
       state: "mobile_nav_open",
       path: path.relative(path.dirname(path.dirname(folder)), filePath),
-      width: viewport.width,
-      height: viewport.height
+      width: dimensions.width,
+      height: dimensions.height
     };
   }
 
   return null;
+}
+
+async function readPngDimensions(filePath: string, fallback: { width: number; height: number }): Promise<{ width: number; height: number }> {
+  try {
+    const png = PNG.sync.read(await readFile(filePath));
+    return { width: png.width, height: png.height };
+  } catch {
+    return fallback;
+  }
 }

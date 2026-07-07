@@ -37,7 +37,7 @@ Classifies pages by URL and visible evidence. Unknown pages remain `unknown` wit
 
 The MVP ships deterministic reviewers that emit structured `Finding` objects. These reviewers triage evidence and produce useful automated findings, but they do not unlock business-grade visual judgment by themselves.
 
-High-fidelity design judgment is handled through an explicit multimodal agent lane: the workflow generates a review pack, the repo-capable agent running the workflow visually inspects screenshots/contact sheets, and `agent-review import` validates the completed `AgentVisualReview` artifact before merging it.
+High-fidelity design judgment is handled through an explicit multimodal agent lane: the workflow generates a review pack, the repo-capable agent running the workflow visually inspects the gallery, optimized PNG sheets, and raw screenshots, and `agent-review import` validates the completed `AgentVisualReview` artifact before merging it.
 
 ### Synthesis And QA
 
@@ -72,6 +72,11 @@ The design-review bundle adds stable operational artifacts:
 - `report/business-grade-gate.json`
 - `report/screenshot-manifest.json`
 - `report/agent-review-pack/`
+- `report/agent-review-pack/review-pack-manifest.json` when built
+- `report/agent-review-pack/gallery/index.html` when built
+- `report/contact-sheets/first-viewports.png` when built
+- `report/contact-sheets/pages/*.png` when built
+- `report/contact-sheets/issues/*.png` when built
 - `report/contact-sheets/*.png` when built
 - `report/patch-plan.md`
 - `report/changed-files.json`
@@ -93,7 +98,9 @@ The workflow must not silently assume the current directory is the website sourc
 
 ### Optional Multimodal Agent Visual Review
 
-Business-grade mode is local and keyless. `review-pack build` writes screenshot manifests, contact sheets, per-page prompts, a JSON schema, and a template. The running agent must inspect those screenshots and write `agent-runs/<agent>/visual-review.json`.
+Business-grade mode is local and keyless. `review-pack build` writes screenshot manifests, optimized contact sheets, a static filterable gallery, per-page prompts, a JSON schema, and a template. The running agent must inspect those screenshots and write `agent-runs/<agent>/visual-review.json`.
+
+The review-pack order is first viewports, grouped issue evidence, page-flow sheets split into readable chunks, then raw screenshots. `contact-sheets/all-pages.png` is retained as a compatibility overview. Raw screenshots remain unchanged; sheets and gallery files are derived inspection surfaces.
 
 `agent-review import` validates the review against the captured screenshot inventory, rejects unsupported analytics/user/competitor claims, converts visual findings into the normal finding pipeline, refreshes grouped issues, scoring, tickets, report surfaces, and writes `report/agent-visual-review.json`.
 

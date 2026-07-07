@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import * as path from "node:path";
+import { PNG } from "pngjs";
 import { AuditReport } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
 import { writeJson } from "../utils/fs.js";
@@ -12,6 +14,14 @@ export type ScreenshotManifestEntry = {
   path: string;
   width: number;
   height: number;
+  pixelWidth: number;
+  pixelHeight: number;
+  aspectRatio: number;
+  displayRole: "first_viewport" | "full_page_flow" | "state_capture" | "annotated" | "raw";
+  pageTitle?: string;
+  pageType: string;
+  groups: string[];
+  sheetRefs: string[];
   absolutePath: string;
 };
 
@@ -52,6 +62,14 @@ export function buildScreenshotManifest(report: AuditReport, paths: AuditPaths):
         path: screenshot.path,
         width: screenshot.width,
         height: screenshot.height,
+        pixelWidth: screenshot.width,
+        pixelHeight: screenshot.height,
+        aspectRatio: screenshot.width / Math.max(1, screenshot.height),
+        displayRole: displayRoleFor(screenshot.kind),
+        pageTitle: page.title,
+        pageType: page.pageType,
+        groups: groupsFor(page.pageId, screenshot.viewport, screenshot.kind),
+        sheetRefs: [],
         absolutePath: path.join(paths.auditRoot, screenshot.path)
       }))
     ),
@@ -75,6 +93,41 @@ export function buildScreenshotManifest(report: AuditReport, paths: AuditPaths):
 
 export async function writeScreenshotManifest(report: AuditReport, paths: AuditPaths): Promise<ScreenshotManifest> {
   const manifest = buildScreenshotManifest(report, paths);
+  await enrichManifestDimensions(manifest);
   await writeJson(path.join(paths.report, "screenshot-manifest.json"), manifest);
   return manifest;
+}
+
+async function enrichManifestDimensions(manifest: ScreenshotManifest): Promise<void> {
+  await Promise.all(
+    manifest.screenshots.map(async (screenshot) => {
+      const dimensions = await readPngDimensions(screenshot.absolutePath, { width: screenshot.width, height: screenshot.height });
+      screenshot.pixelWidth = dimensions.width;
+      screenshot.pixelHeight = dimensions.height;
+      screenshot.width = dimensions.width;
+      screenshot.height = dimensions.height;
+      screenshot.aspectRatio = dimensions.width / Math.max(1, dimensions.height);
+    })
+  );
+}
+
+async function readPngDimensions(filePath: string, fallback: { width: number; height: number }): Promise<{ width: number; height: number }> {
+  try {
+    const png = PNG.sync.read(await readFile(filePath));
+    return { width: png.width, height: png.height };
+  } catch {
+    return fallback;
+  }
+}
+
+function displayRoleFor(kind: string): ScreenshotManifestEntry["displayRole"] {
+  if (kind === "above_fold") return "first_viewport";
+  if (kind === "full_page") return "full_page_flow";
+  if (kind === "state") return "state_capture";
+  if (kind === "annotated") return "annotated";
+  return "raw";
+}
+
+function groupsFor(pageId: string, viewport: string, kind: string): string[] {
+  return [`page:${pageId}`, `viewport:${viewport}`, `kind:${kind}`, displayRoleFor(kind)];
 }

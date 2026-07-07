@@ -1,4 +1,4 @@
-import { copyFile } from "node:fs/promises";
+import { access, copyFile, cp } from "node:fs/promises";
 import * as path from "node:path";
 import { AuditReport, GroupedIssue } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
@@ -19,6 +19,7 @@ async function writeHostedReport(report: AuditReport, paths: AuditPaths): Promis
   await ensureDir(assetRoot);
 
   const screenshotAssetMap = new Map<string, string>();
+  const issueSheetAssetMap = new Map<string, string>();
   for (const page of report.pages) {
     for (const screenshot of Object.values(page.screenshots)) {
       const source = path.join(paths.auditRoot, screenshot.path);
@@ -40,11 +41,21 @@ async function writeHostedReport(report: AuditReport, paths: AuditPaths): Promis
     screenshotAssetMap.set(annotation.annotatedScreenshot.path, targetRelative);
   }
 
-  await writeText(path.join(hostedRoot, "index.html"), renderHostedHtml(report, screenshotAssetMap));
+  const contactSheetsRoot = path.join(paths.report, "contact-sheets");
+  const hostedContactSheetsRoot = path.join(assetRoot, "contact-sheets");
+  await cp(contactSheetsRoot, hostedContactSheetsRoot, { recursive: true, force: true }).catch(() => undefined);
+  for (const issue of report.groupedIssues) {
+    const source = path.join(contactSheetsRoot, "issues", `${issue.issueId}.png`);
+    await access(source)
+      .then(() => issueSheetAssetMap.set(issue.issueId, path.join("assets", "contact-sheets", "issues", `${issue.issueId}.png`).replace(/\\/g, "/")))
+      .catch(() => undefined);
+  }
+
+  await writeText(path.join(hostedRoot, "index.html"), renderHostedHtml(report, screenshotAssetMap, issueSheetAssetMap));
 }
 
-function renderHostedHtml(report: AuditReport, screenshotAssetMap: Map<string, string>): string {
-  const groupedIssues = report.groupedIssues.map((issue) => renderIssue(issue, screenshotAssetMap)).join("");
+function renderHostedHtml(report: AuditReport, screenshotAssetMap: Map<string, string>, issueSheetAssetMap: Map<string, string>): string {
+  const groupedIssues = report.groupedIssues.map((issue) => renderIssue(issue, screenshotAssetMap, issueSheetAssetMap.get(issue.issueId))).join("");
   const pageSections = report.pages
     .map((page) => {
       const screenshots = Object.values(page.screenshots)
@@ -80,6 +91,7 @@ function renderHostedHtml(report: AuditReport, screenshotAssetMap: Map<string, s
     .metric strong { display:block; font-size:28px; }
     .status { display:inline-block; border-radius:999px; padding:4px 10px; background:#e8f5f1; color:var(--accent); font-weight:700; }
     .status--warn { background:#fff7ed; color:var(--warn); }
+    .sheet-link { display:inline-flex; min-height:34px; align-items:center; border:1px solid var(--line); border-radius:8px; padding:6px 10px; background:white; color:var(--accent); font-weight:700; text-decoration:none; }
     details { margin-top:12px; }
     summary { cursor:pointer; color:var(--accent); font-weight:700; }
     .shots { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:12px; }
@@ -110,14 +122,16 @@ function renderHostedHtml(report: AuditReport, screenshotAssetMap: Map<string, s
 </html>`;
 }
 
-function renderIssue(issue: GroupedIssue, screenshotAssetMap: Map<string, string>): string {
+function renderIssue(issue: GroupedIssue, screenshotAssetMap: Map<string, string>, issueSheetSrc: string | undefined): string {
   const screenshots = issue.evidenceRefs.map((ref) => renderScreenshot(ref, screenshotAssetMap.get(ref), ref)).join("");
+  const issueSheetLink = issueSheetSrc ? `<p><a class="sheet-link" href="${escapeAttribute(issueSheetSrc)}">Open issue evidence sheet</a></p>` : "";
   return `<article class="issue">
     <h3>${escapeHtml(issue.title)}</h3>
     <p>${escapeHtml(issue.severity)} / ${escapeHtml(issue.category)} / priority ${issue.priorityScore}</p>
     <p><strong>Affected pages:</strong> ${issue.affectedPages.map((page) => escapeHtml(page.url)).join(", ")}</p>
     <p><strong>Observation:</strong> ${escapeHtml(issue.observation)}</p>
     <p><strong>Recommendation:</strong> ${escapeHtml(issue.recommendation)}</p>
+    ${issueSheetLink}
     <ul>${issue.acceptanceCriteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
     <details><summary>Evidence screenshots (${issue.evidenceRefs.length})</summary><div class="shots">${screenshots}</div></details>
   </article>`;

@@ -40,7 +40,8 @@ Required outputs for the MVP:
 - Grouped issue inventory
 - Prioritized findings
 - Screenshot references
-- Screenshot manifest and contact sheets
+- Screenshot manifest and optimized review-pack contact sheets
+- Static review-pack gallery
 - Evidence JSONL
 - Route template inventory
 - Visual system inventory
@@ -82,7 +83,10 @@ The implemented MVP is deterministic and local-first:
 - `business-grade lint` for the business-grade gate separate from technical `report lint`
 - Grouped root-cause issues under `grouped-issues.json`
 - Standalone static hosted report under `report/hosted/index.html` with copied screenshot assets
-- Screenshot manifest and contact sheets for agent visual review
+- Screenshot manifest with actual PNG dimensions, display roles, grouping metadata, and sheet references
+- Optimized review-pack contact sheets for first viewports, page flows split into readable chunks, and grouped issue evidence
+- Static review-pack gallery under `report/agent-review-pack/gallery/index.html`
+- Issue evidence sheets with numbered markers and side legends for agent visual review
 - Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
 - Design-native parity mechanics: `benchmark`, `standards update`, non-destructive `suppressions`, `--repo` source mapping, patch-plan proposals, changed-file proposals, evidence JSONL, route templates, visual-system inventory, and experience-timing artifacts
 - Latest-audit pointers under `projects/latest-audit.json` and `projects/<site>/latest-audit.json`
@@ -171,6 +175,11 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `business-grade-gate.json`
 - `grouped-issues.json`
 - `screenshot-manifest.json`
+- `agent-review-pack/review-pack-manifest.json` when a review pack has been built
+- `agent-review-pack/gallery/index.html` when a review pack has been built
+- `contact-sheets/first-viewports.png` when a review pack has been built
+- `contact-sheets/pages/*.png` when a review pack has been built
+- `contact-sheets/issues/*.png` when a review pack has been built
 - `agent-execution-plan.md`
 - `implementation-plan.json`
 - `evidence-index.json`
@@ -202,6 +211,15 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `agent-instructions/hermes.md`
 
 The report bundle is the stable interface for downstream agents. Agents should read `workflow-manifest.json` first, then `handoff.json`, then `agent-execution-plan.md`.
+
+When business-grade review is required, agents must use the review-pack order from `agent-review-pack/review-pack-manifest.json`:
+
+1. First viewports: `contact-sheets/first-viewports.png` plus per-page `contact-sheets/pages/*-first-viewports.png`.
+2. Grouped issue evidence: `contact-sheets/issues/*.png`.
+3. Page flows: `contact-sheets/pages/*-flow.png`.
+4. Raw screenshots listed in `screenshot-manifest.json` for dispute resolution or closer inspection.
+
+`contact-sheets/all-pages.png` remains a compatibility overview, not the primary visual review artifact.
 
 Stable closeout commands:
 
@@ -238,6 +256,10 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - Keep model names and provider choices in config/adapters, never hard-coded through core logic.
 - Save intermediate artifacts in the audit project folder so failures are inspectable.
 - Reports must reference existing screenshot/evidence files only.
+- Raw screenshots must remain unchanged; generated contact sheets and gallery files are derived review surfaces.
+- `screenshot-manifest.json` must include actual PNG pixel dimensions, display roles, group memberships, and derived sheet references when the review pack is built.
+- `agent-review-pack/review-pack-manifest.json` is the source of truth for visual review order and sheet mappings.
+- Local UI and hosted reports should keep raw screenshot drawers collapsed by default while linking optimized issue/page evidence sheets.
 - Agent handoff files must be generated under `report/agent-instructions/`.
 - `workflow-manifest.json` and `handoff.json` must be machine-readable and must not require scraping Markdown.
 - `source-candidates.json`, `patch-plan.md`, and `changed-files.json` are proposal artifacts, not proof that edits were made.

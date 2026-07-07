@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 import { AgentVisualReview, AuditReport } from "../schemas/audit.js";
 import { readReportFromAuditDir } from "../storage/index.js";
 import { AuditPaths, createNestedAuditPaths } from "../storage/project.js";
@@ -20,6 +21,40 @@ export type ReviewPackResult = {
   pagePrompts: string[];
 };
 
+type ReviewPackSheet = {
+  id: string;
+  type: "overview" | "first_viewports" | "page_first_viewports" | "page_flow" | "issue_evidence";
+  title: string;
+  path: string;
+  absolutePath: string;
+  screenshotIds: string[];
+  pageId?: string;
+  issueId?: string;
+};
+
+type ReviewPackManifest = {
+  schemaVersion: "design-review-workflow.review-pack.v1";
+  auditId: string;
+  generatedAt: string;
+  gallery: {
+    path: string;
+    absolutePath: string;
+  };
+  recommendedReviewOrder: Array<{
+    step: "first_viewports" | "issue_evidence" | "page_flows" | "raw_screenshots";
+    title: string;
+    paths: string[];
+  }>;
+  sheets: ReviewPackSheet[];
+  statistics: {
+    pages: number;
+    screenshots: number;
+    firstViewportSheets: number;
+    pageFlowSheets: number;
+    issueSheets: number;
+  };
+};
+
 export async function buildReviewPack(auditDir: string): Promise<ReviewPackResult> {
   const report = await readReportFromAuditDir(auditDir);
   const paths = await createNestedAuditPaths(auditDir);
@@ -31,13 +66,23 @@ export async function buildReviewPack(auditDir: string): Promise<ReviewPackResul
   await ensureDir(contactSheetRoot);
 
   const manifest = await writeScreenshotManifest(report, paths);
-  await writeJson(path.join(packRoot, "screenshot-manifest.json"), manifest);
   await writeJson(path.join(packRoot, "agent-review-template.json"), reviewTemplate(report, manifest));
   await writeJson(path.join(packRoot, "agent-review.schema.json"), agentReviewJsonSchema());
   await writeText(path.join(packRoot, "README.md"), renderReviewPackReadme(report, paths));
 
   const pagePrompts = await writePagePrompts(report, manifest, promptRoot);
-  const contactSheets = await renderContactSheets(report, paths, manifest, contactSheetRoot);
+  const { sheets, galleryPath } = await renderReviewPackSurfaces(report, paths, manifest, contactSheetRoot);
+  applySheetRefs(manifest, sheets);
+  const reviewPackManifest = buildReviewPackManifest(report, paths, manifest, sheets, galleryPath);
+  await writeJson(path.join(paths.report, "screenshot-manifest.json"), manifest);
+  await writeJson(path.join(packRoot, "screenshot-manifest.json"), manifest);
+  await writeJson(path.join(packRoot, "review-pack-manifest.json"), reviewPackManifest);
+  await writeJson(path.join(packRoot, "contact-sheets.json"), {
+    schemaVersion: "design-review-workflow.contact-sheets.v1",
+    auditId: report.auditId,
+    generatedAt: reviewPackManifest.generatedAt,
+    sheets: sheets.map((sheet) => sheet.absolutePath)
+  });
 
   return {
     auditId: report.auditId,
@@ -47,7 +92,7 @@ export async function buildReviewPack(auditDir: string): Promise<ReviewPackResul
     template: path.join(packRoot, "agent-review-template.json"),
     schema: path.join(packRoot, "agent-review.schema.json"),
     instructions: path.join(packRoot, "README.md"),
-    contactSheets,
+    contactSheets: sheets.map((sheet) => sheet.absolutePath),
     pagePrompts
   };
 }
@@ -171,12 +216,14 @@ This pack is for the repo-capable multimodal agent running the workflow. It inte
 
 ## Required Steps
 
-1. Open \`../screenshot-manifest.json\` and the PNG files in \`../contact-sheets/\`.
-2. Inspect desktop and mobile screenshots for each captured page.
-3. Use \`agent-review-template.json\` as the starting shape.
-4. Replace every TODO with concrete visual observations based on screenshots.
-5. Save your completed artifact at \`agent-runs/<agent>/visual-review.json\` or another local path.
-6. Import it:
+1. Open \`review-pack-manifest.json\`.
+2. Follow the recommended order: first viewports, issue evidence, page flows, then raw screenshots.
+3. Use \`gallery/index.html\` for filtering by page, viewport, issue, screenshot kind, and source.
+4. Inspect the optimized PNG sheets under \`../contact-sheets/\`.
+5. Use \`agent-review-template.json\` as the starting shape.
+6. Replace every TODO with concrete visual observations based on screenshots.
+7. Save your completed artifact at \`agent-runs/<agent>/visual-review.json\` or another local path.
+8. Import it:
 
 \`\`\`bash
 node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
@@ -230,77 +277,421 @@ async function writePagePrompts(report: AuditReport, manifest: ScreenshotManifes
   return output;
 }
 
-async function renderContactSheets(report: AuditReport, paths: AuditPaths, manifest: ScreenshotManifest, contactSheetRoot: string): Promise<string[]> {
+async function renderReviewPackSurfaces(
+  report: AuditReport,
+  paths: AuditPaths,
+  manifest: ScreenshotManifest,
+  contactSheetRoot: string
+): Promise<{ sheets: ReviewPackSheet[]; galleryPath: string }> {
   const browser = await chromium.launch();
   try {
-    const output: string[] = [];
-    const allPath = path.join(contactSheetRoot, "all-pages.png");
-    await renderContactSheet(browser, allPath, "All Captured Screenshots", manifest.screenshots);
-    output.push(allPath);
+    const sheets: ReviewPackSheet[] = [];
+    const pageSheetRoot = path.join(contactSheetRoot, "pages");
+    const issueSheetRoot = path.join(contactSheetRoot, "issues");
+    const galleryRoot = path.join(paths.report, "agent-review-pack", "gallery");
+    await ensureDir(pageSheetRoot);
+    await ensureDir(issueSheetRoot);
+    await ensureDir(galleryRoot);
+
+    const overviewPath = path.join(contactSheetRoot, "all-pages.png");
+    await renderSheet(browser, overviewPath, await renderOverviewSheetHtml(report, manifest));
+    sheets.push(sheet("all-pages", "overview", "All Pages Screenshot Index", paths.report, overviewPath, manifest.screenshots.map((screenshot) => screenshot.id)));
+
+    const firstViewportsPath = path.join(contactSheetRoot, "first-viewports.png");
+    const firstViewportScreenshots = manifest.screenshots.filter((screenshot) => screenshot.displayRole === "first_viewport");
+    await renderSheet(browser, firstViewportsPath, await renderFirstViewportsSheetHtml("First Viewports", report, manifest, firstViewportScreenshots));
+    sheets.push(sheet("first-viewports", "first_viewports", "First Viewports", paths.report, firstViewportsPath, firstViewportScreenshots.map((screenshot) => screenshot.id)));
 
     for (const page of report.pages) {
-      const screenshots = manifest.screenshots.filter((screenshot) => screenshot.pageId === page.pageId);
-      if (screenshots.length === 0) continue;
-      const sheetPath = path.join(contactSheetRoot, `${page.pageId}.png`);
-      await renderContactSheet(browser, sheetPath, page.title ?? page.url, screenshots);
-      output.push(sheetPath);
+      const pageScreenshots = manifest.screenshots.filter((screenshot) => screenshot.pageId === page.pageId);
+      const pageFirstViewports = pageScreenshots.filter((screenshot) => screenshot.displayRole === "first_viewport");
+      if (pageFirstViewports.length > 0) {
+        const sheetPath = path.join(pageSheetRoot, `${page.pageId}-first-viewports.png`);
+        await renderSheet(browser, sheetPath, await renderFirstViewportsSheetHtml(page.title ?? page.url, report, manifest, pageFirstViewports));
+        sheets.push(sheet(`${page.pageId}-first-viewports`, "page_first_viewports", `${page.title ?? page.url} first viewports`, paths.report, sheetPath, pageFirstViewports.map((screenshot) => screenshot.id), page.pageId));
+      }
+
+      const pageFlows = pageScreenshots.filter((screenshot) => screenshot.displayRole === "full_page_flow");
+      if (pageFlows.length > 0) {
+        const flowPath = path.join(pageSheetRoot, `${page.pageId}-flow.png`);
+        await renderSheet(browser, flowPath, await renderPageFlowSheetHtml(page.title ?? page.url, pageFlows));
+        sheets.push(sheet(`${page.pageId}-flow`, "page_flow", `${page.title ?? page.url} page flow`, paths.report, flowPath, pageFlows.map((screenshot) => screenshot.id), page.pageId));
+      }
     }
-    await writeText(path.join(contactSheetRoot, "index.html"), await renderContactSheetHtml("All Captured Screenshots", manifest.screenshots));
-    await writeJson(path.join(paths.report, "agent-review-pack", "contact-sheets.json"), {
-      schemaVersion: "design-review-workflow.contact-sheets.v1",
-      auditId: report.auditId,
-      generatedAt: new Date().toISOString(),
-      sheets: output
-    });
-    return output;
+
+    for (const issue of report.groupedIssues) {
+      const issueScreenshots = screenshotRefsForIssue(manifest, issue.evidenceRefs);
+      if (issueScreenshots.length === 0) continue;
+      const issuePath = path.join(issueSheetRoot, `${issue.issueId}.png`);
+      await renderSheet(browser, issuePath, await renderIssueSheetHtml(report, manifest, issue.issueId));
+      sheets.push(sheet(issue.issueId, "issue_evidence", issue.title, paths.report, issuePath, issueScreenshots.map((screenshot) => screenshot.id), undefined, issue.issueId));
+    }
+
+    await writeText(path.join(contactSheetRoot, "index.html"), await renderGalleryHtml(report, manifest, sheets, "../", "../../"));
+    const galleryPath = path.join(galleryRoot, "index.html");
+    await writeText(galleryPath, await renderGalleryHtml(report, manifest, sheets, "../../", "../../../"));
+    return { sheets, galleryPath };
   } finally {
     await browser.close();
   }
 }
 
-async function renderContactSheet(browser: Awaited<ReturnType<typeof chromium.launch>>, outputPath: string, title: string, screenshots: ScreenshotManifest["screenshots"]): Promise<void> {
+async function renderSheet(browser: Awaited<ReturnType<typeof chromium.launch>>, outputPath: string, html: string): Promise<void> {
   const page = await browser.newPage({ viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1 });
-  await page.setContent(await renderContactSheetHtml(title, screenshots), { waitUntil: "networkidle" });
+  await page.setContent(html, { waitUntil: "load", timeout: 60_000 });
   await page.screenshot({ path: outputPath, fullPage: true });
   await page.close();
 }
 
-async function renderContactSheetHtml(title: string, screenshots: ScreenshotManifest["screenshots"]): Promise<string> {
-  const rows = await Promise.all(
-    screenshots.map(async (screenshot) => {
-      const src = await screenshotSrc(screenshot.absolutePath);
-      return `<figure>
-        <img src="${escapeAttribute(src)}" alt="${escapeAttribute(screenshot.id)}" />
-        <figcaption><strong>${escapeHtml(screenshot.id)}</strong><br />${escapeHtml(screenshot.url)}<br />${escapeHtml(screenshot.viewport)} / ${escapeHtml(screenshot.kind)} / ${screenshot.width}x${screenshot.height}</figcaption>
-      </figure>`;
+async function renderOverviewSheetHtml(report: AuditReport, manifest: ScreenshotManifest): Promise<string> {
+  const pageRows = await Promise.all(
+    report.pages.map(async (page) => {
+      const screenshots = manifest.screenshots.filter((screenshot) => screenshot.pageId === page.pageId);
+      const thumbs = await Promise.all(
+        screenshots
+          .filter((screenshot) => screenshot.kind === "above_fold" || screenshot.kind === "state")
+          .slice(0, 4)
+          .map((screenshot) => renderThumbnailFigure(screenshot, "overview-thumb"))
+      );
+      return `<article class="page-summary">
+        <h2>${escapeHtml(page.title ?? page.url)}</h2>
+        <p>${escapeHtml(page.pageType)} / ${escapeHtml(page.url)}</p>
+        <div class="thumbs">${thumbs.join("")}</div>
+      </article>`;
     })
   );
+  return shellHtml("All Pages Screenshot Index", `<section class="page-stack">${pageRows.join("")}</section>`);
+}
+
+async function renderFirstViewportsSheetHtml(title: string, report: AuditReport, manifest: ScreenshotManifest, screenshots: ScreenshotManifest["screenshots"]): Promise<string> {
+  const rows = await Promise.all(
+    report.pages
+      .map((page) => ({
+        page,
+        screenshots: screenshots.filter((screenshot) => screenshot.pageId === page.pageId)
+      }))
+      .filter((row) => row.screenshots.length > 0)
+      .map(async ({ page, screenshots: pageScreenshots }) => {
+        const desktop = pageScreenshots.find((screenshot) => screenshot.viewport === "desktop") ?? pageScreenshots[0];
+        const mobile = pageScreenshots.find((screenshot) => screenshot.viewport === "mobile");
+        return `<article class="viewport-pair">
+          <header><h2>${escapeHtml(page.title ?? page.url)}</h2><p>${escapeHtml(page.url)}</p></header>
+          <div class="viewport-grid ${mobile ? "" : "viewport-grid--single"}">
+            ${desktop ? await renderReadableFigure(desktop, "Desktop first viewport") : ""}
+            ${mobile ? await renderReadableFigure(mobile, "Mobile first viewport") : ""}
+          </div>
+        </article>`;
+      })
+  );
+  return shellHtml(title, `<section class="page-stack">${rows.join("")}</section>`);
+}
+
+async function renderPageFlowSheetHtml(title: string, screenshots: ScreenshotManifest["screenshots"]): Promise<string> {
+  const sections = await Promise.all(
+    screenshots.map(async (screenshot) => {
+      const chunks = await renderFlowChunks(screenshot);
+      return `<article class="flow-section">
+        <h2>${escapeHtml(screenshot.viewport)} full-page flow</h2>
+        <p>${escapeHtml(screenshot.id)} / ${screenshot.pixelWidth}x${screenshot.pixelHeight}</p>
+        <div class="flow-chunks">${chunks}</div>
+      </article>`;
+    })
+  );
+  return shellHtml(`${title} Page Flow`, `<section class="flow-layout">${sections.join("")}</section>`);
+}
+
+async function renderIssueSheetHtml(report: AuditReport, manifest: ScreenshotManifest, issueId: string): Promise<string> {
+  const issue = report.groupedIssues.find((item) => item.issueId === issueId);
+  if (!issue) return shellHtml("Issue Evidence", "<p>Issue not found.</p>");
+  const screenshots = screenshotRefsForIssue(manifest, issue.evidenceRefs);
+  const figures = await Promise.all(
+    screenshots.map((screenshot, index) => renderReadableFigure(screenshot, `${index + 1}. ${screenshot.viewport} ${screenshot.kind}`, index + 1))
+  );
+  const legend = screenshots
+    .map((screenshot, index) => `<li><strong>${index + 1}</strong> ${escapeHtml(screenshot.pageTitle ?? screenshot.url)} / ${escapeHtml(screenshot.viewport)} / ${escapeHtml(screenshot.kind)}</li>`)
+    .join("");
+  return shellHtml(
+    `Issue Evidence: ${issue.title}`,
+    `<section class="issue-sheet">
+      <aside class="issue-legend">
+        <div class="severity">${escapeHtml(issue.severity)} / ${escapeHtml(issue.category)} / priority ${issue.priorityScore}</div>
+        <h2>${escapeHtml(issue.title)}</h2>
+        <p>${escapeHtml(issue.observation)}</p>
+        <p><strong>Recommendation:</strong> ${escapeHtml(issue.recommendation)}</p>
+        <h3>Evidence Legend</h3>
+        <ol>${legend}</ol>
+      </aside>
+      <div class="issue-shots">${figures.join("")}</div>
+    </section>`
+  );
+}
+
+async function renderGalleryHtml(report: AuditReport, manifest: ScreenshotManifest, sheets: ReviewPackSheet[], contactSheetPrefix: string, rawScreenshotPrefix: string): Promise<string> {
+  const sheetCards = sheets
+    .map(
+      (sheet) => `<article class="gallery-card" data-kind="sheet" data-page="${escapeAttribute(sheet.pageId ?? "")}" data-issue="${escapeAttribute(sheet.issueId ?? "")}" data-viewport="" data-source="${escapeAttribute(sheet.type)}">
+        <h3>${escapeHtml(sheet.title)}</h3>
+        <p>${escapeHtml(sheet.type)} / ${sheet.screenshotIds.length} screenshot(s)</p>
+        <a href="${escapeAttribute(`${contactSheetPrefix}${sheet.path}`)}">Open sheet</a>
+      </article>`
+    )
+    .join("");
+  const rawCards = manifest.screenshots
+    .map(
+      (screenshot) => `<article class="gallery-card" data-kind="${escapeAttribute(screenshot.kind)}" data-page="${escapeAttribute(screenshot.pageId)}" data-issue="" data-viewport="${escapeAttribute(screenshot.viewport)}" data-source="raw">
+        <h3>${escapeHtml(screenshot.pageTitle ?? screenshot.url)}</h3>
+        <p>${escapeHtml(screenshot.viewport)} / ${escapeHtml(screenshot.kind)} / ${screenshot.pixelWidth}x${screenshot.pixelHeight}</p>
+        <img src="${escapeAttribute(`${rawScreenshotPrefix}${screenshot.path}`)}" alt="${escapeAttribute(screenshot.id)}" loading="lazy" />
+      </article>`
+    )
+    .join("");
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Review Pack Gallery - ${escapeHtml(new URL(report.config.url).hostname)}</title>
+  <style>
+    :root { color-scheme: light; --ink:#172026; --muted:#61717b; --line:#d8e2e0; --panel:#f6faf8; --accent:#0f766e; }
+    body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--ink); background:#fff; }
+    main { max-width:1280px; margin:0 auto; padding:28px; }
+    h1 { margin:0 0 8px; font-size:30px; }
+    .filters { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+    select { min-height:36px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; background:#fff; }
+    .gallery { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+    .gallery-card { border:1px solid var(--line); border-radius:8px; padding:12px; background:var(--panel); }
+    .gallery-card[hidden] { display:none; }
+    .gallery-card img { display:block; width:100%; max-height:280px; object-fit:cover; object-position:top; border:1px solid var(--line); border-radius:6px; background:#fff; }
+    a { color:var(--accent); font-weight:700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Review Pack Gallery</h1>
+    <p>${escapeHtml(report.config.url)} / ${escapeHtml(report.auditId)}</p>
+    <section class="filters">
+      <label>Page <select data-filter="page"><option value="">All pages</option>${manifest.pages.map((page) => `<option value="${escapeAttribute(page.pageId)}">${escapeHtml(page.title ?? page.url)}</option>`).join("")}</select></label>
+      <label>Viewport <select data-filter="viewport"><option value="">All viewports</option><option value="desktop">Desktop</option><option value="mobile">Mobile</option></select></label>
+      <label>Kind <select data-filter="kind"><option value="">All kinds</option><option value="sheet">Sheets</option><option value="above_fold">Above fold</option><option value="full_page">Full page</option><option value="state">State</option></select></label>
+      <label>Source <select data-filter="source"><option value="">All sources</option><option value="first_viewports">First viewports</option><option value="issue_evidence">Issue evidence</option><option value="page_flow">Page flows</option><option value="raw">Raw screenshots</option></select></label>
+    </section>
+    <section class="gallery">${sheetCards}${rawCards}</section>
+  </main>
+  <script>
+    const controls = [...document.querySelectorAll('[data-filter]')];
+    const cards = [...document.querySelectorAll('.gallery-card')];
+    function applyFilters() {
+      const active = Object.fromEntries(controls.map((control) => [control.dataset.filter, control.value]));
+      for (const card of cards) {
+        const visible = (!active.page || card.dataset.page === active.page) &&
+          (!active.viewport || card.dataset.viewport === active.viewport) &&
+          (!active.kind || card.dataset.kind === active.kind) &&
+          (!active.source || card.dataset.source === active.source);
+        card.hidden = !visible;
+      }
+    }
+    controls.forEach((control) => control.addEventListener('change', applyFilters));
+  </script>
+</body>
+</html>`;
+}
+
+async function renderThumbnailFigure(screenshot: ScreenshotManifest["screenshots"][number], className: string): Promise<string> {
+  const src = await screenshotSrc(screenshot.absolutePath);
+  return `<figure class="${escapeAttribute(className)}">
+    <img src="${escapeAttribute(src)}" alt="${escapeAttribute(screenshot.id)}" />
+    <figcaption>${escapeHtml(screenshot.viewport)} / ${escapeHtml(screenshot.kind)}</figcaption>
+  </figure>`;
+}
+
+async function renderReadableFigure(screenshot: ScreenshotManifest["screenshots"][number], label: string, marker?: number): Promise<string> {
+  const src = await screenshotSrc(screenshot.absolutePath);
+  return `<figure class="readable-shot ${screenshot.viewport === "mobile" ? "readable-shot--mobile" : ""}">
+    <div class="shot-frame">
+      ${marker ? `<span class="marker">${marker}</span>` : ""}
+      <img src="${escapeAttribute(src)}" alt="${escapeAttribute(screenshot.id)}" />
+    </div>
+    <figcaption><strong>${escapeHtml(label)}</strong><br />${escapeHtml(screenshot.id)} / ${screenshot.pixelWidth}x${screenshot.pixelHeight}</figcaption>
+  </figure>`;
+}
+
+async function renderFlowChunks(screenshot: ScreenshotManifest["screenshots"][number]): Promise<string> {
+  const chunkHeight = screenshot.viewport === "mobile" ? 844 : 900;
+  const displayWidth = screenshot.viewport === "mobile" ? 330 : 780;
+  const imageChunks = await chunkScreenshot(screenshot, chunkHeight);
+  const chunks: string[] = [];
+  for (let index = 0; index < imageChunks.length; index += 1) {
+    const chunk = imageChunks[index];
+    const scale = displayWidth / Math.max(1, chunk.width);
+    const displayHeight = Math.max(120, Math.round(chunk.height * scale));
+    chunks.push(`<figure class="flow-chunk">
+      <div class="flow-crop" style="width:${displayWidth}px;height:${displayHeight}px">
+        <img src="${escapeAttribute(chunk.src)}" alt="${escapeAttribute(`${screenshot.id} chunk ${index + 1}`)}" style="width:${displayWidth}px" />
+      </div>
+      <figcaption>${escapeHtml(screenshot.id)} / segment ${index + 1} of ${imageChunks.length}</figcaption>
+    </figure>`);
+  }
+  return chunks.join("");
+}
+
+async function chunkScreenshot(
+  screenshot: ScreenshotManifest["screenshots"][number],
+  chunkHeight: number
+): Promise<Array<{ src: string; width: number; height: number }>> {
+  try {
+    const source = PNG.sync.read(await readFile(screenshot.absolutePath));
+    const chunks: Array<{ src: string; width: number; height: number }> = [];
+    const bytesPerRow = source.width * 4;
+    for (let y = 0; y < source.height; y += chunkHeight) {
+      const height = Math.min(chunkHeight, source.height - y);
+      const chunk = new PNG({ width: source.width, height });
+      for (let row = 0; row < height; row += 1) {
+        source.data.copy(chunk.data, row * bytesPerRow, (y + row) * bytesPerRow, (y + row + 1) * bytesPerRow);
+      }
+      chunks.push({
+        src: `data:image/png;base64,${PNG.sync.write(chunk).toString("base64")}`,
+        width: source.width,
+        height
+      });
+    }
+    return chunks;
+  } catch {
+    return [{ src: await screenshotSrc(screenshot.absolutePath), width: screenshot.pixelWidth, height: screenshot.pixelHeight }];
+  }
+}
+
+function shellHtml(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(title)}</title>
   <style>
-    :root { color-scheme: light; --ink:#172026; --muted:#61717b; --line:#d8e2e0; --panel:#f6faf8; --accent:#0f766e; }
+    :root { color-scheme: light; --ink:#172026; --muted:#61717b; --line:#d8e2e0; --panel:#f6faf8; --accent:#0f766e; --risk:#b42318; }
     body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color:var(--ink); background:#fff; }
     main { padding:28px; }
-    h1 { margin:0 0 18px; font-size:28px; }
-    .grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; align-items:start; }
-    figure { margin:0; border:1px solid var(--line); border-radius:8px; background:var(--panel); overflow:hidden; }
-    img { display:block; width:100%; height:auto; background:#fff; }
-    figcaption { padding:10px 12px; color:var(--muted); font-size:13px; }
-    strong { color:var(--ink); }
+    h1 { margin:0 0 18px; font-size:30px; }
+    h2 { font-size:18px; margin:0 0 4px; }
+    h3 { font-size:15px; }
+    p { color:var(--muted); margin:0 0 10px; }
+    .page-stack { display:grid; gap:22px; }
+    .page-summary, .viewport-pair, .flow-section, .issue-sheet { border:1px solid var(--line); border-radius:8px; padding:16px; background:var(--panel); }
+    .thumbs { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
+    .overview-thumb { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }
+    .overview-thumb img { width:100%; height:220px; object-fit:cover; object-position:top; display:block; }
+    .viewport-grid { display:grid; grid-template-columns:minmax(0, 1fr) 330px; gap:16px; align-items:start; }
+    .viewport-grid--single { grid-template-columns:minmax(0, 1fr); }
+    .readable-shot { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }
+    .readable-shot img { display:block; width:100%; height:auto; }
+    .readable-shot--mobile { max-width:330px; }
+    .shot-frame { position:relative; background:#fff; }
+    .marker { position:absolute; z-index:2; top:12px; left:12px; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:var(--risk); color:#fff; font-weight:800; border:2px solid #fff; }
+    figcaption { padding:9px 11px; color:var(--muted); font-size:12px; }
+    .flow-layout { display:grid; gap:18px; }
+    .flow-chunks { display:grid; grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); gap:14px; align-items:start; }
+    .flow-chunk { margin:0; border:1px solid var(--line); border-radius:8px; background:#fff; overflow:hidden; }
+    .flow-crop { overflow:hidden; background:#fff; background-repeat:no-repeat; }
+    .flow-crop img { display:block; transform-origin:top left; }
+    .issue-sheet { display:grid; grid-template-columns:360px minmax(0,1fr); gap:18px; align-items:start; }
+    .issue-legend { position:sticky; top:16px; }
+    .severity { display:inline-block; border-radius:999px; padding:4px 10px; background:#fff0ec; color:var(--risk); font-weight:800; font-size:12px; }
+    .issue-shots { display:grid; gap:14px; }
+    ol { padding-left:22px; }
   </style>
 </head>
-<body>
-  <main>
-    <h1>${escapeHtml(title)}</h1>
-    <section class="grid">
-      ${rows.join("")}
-    </section>
-  </main>
-</body>
+<body><main><h1>${escapeHtml(title)}</h1>${body}</main></body>
 </html>`;
+}
+
+function screenshotRefsForIssue(manifest: ScreenshotManifest, refs: string[]): ScreenshotManifest["screenshots"] {
+  const index = new Map<string, ScreenshotManifest["screenshots"][number]>();
+  for (const screenshot of manifest.screenshots) {
+    index.set(screenshot.id, screenshot);
+    index.set(screenshot.path, screenshot);
+  }
+  const seen = new Set<string>();
+  return refs.flatMap((ref) => {
+    const screenshot = index.get(ref);
+    if (!screenshot || seen.has(screenshot.id)) return [];
+    seen.add(screenshot.id);
+    return [screenshot];
+  });
+}
+
+function sheet(
+  id: string,
+  type: ReviewPackSheet["type"],
+  title: string,
+  reportRoot: string,
+  absolutePath: string,
+  screenshotIds: string[],
+  pageId?: string,
+  issueId?: string
+): ReviewPackSheet {
+  return {
+    id,
+    type,
+    title,
+    path: toPosix(path.relative(reportRoot, absolutePath)),
+    absolutePath,
+    screenshotIds,
+    pageId,
+    issueId
+  };
+}
+
+function applySheetRefs(manifest: ScreenshotManifest, sheets: ReviewPackSheet[]): void {
+  const byScreenshot = new Map(manifest.screenshots.map((screenshot) => [screenshot.id, screenshot]));
+  for (const screenshot of manifest.screenshots) {
+    screenshot.sheetRefs = [];
+  }
+  for (const sheet of sheets) {
+    for (const screenshotId of sheet.screenshotIds) {
+      const screenshot = byScreenshot.get(screenshotId);
+      if (!screenshot || screenshot.sheetRefs.includes(sheet.path)) continue;
+      screenshot.sheetRefs.push(sheet.path);
+      if (sheet.issueId && !screenshot.groups.includes(`issue:${sheet.issueId}`)) {
+        screenshot.groups.push(`issue:${sheet.issueId}`);
+      }
+    }
+  }
+}
+
+function buildReviewPackManifest(
+  report: AuditReport,
+  paths: AuditPaths,
+  manifest: ScreenshotManifest,
+  sheets: ReviewPackSheet[],
+  galleryPath: string
+): ReviewPackManifest {
+  const byType = (type: ReviewPackSheet["type"]) => sheets.filter((sheet) => sheet.type === type).map((sheet) => sheet.path);
+  return {
+    schemaVersion: "design-review-workflow.review-pack.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    gallery: {
+      path: toPosix(path.relative(paths.report, galleryPath)),
+      absolutePath: galleryPath
+    },
+    recommendedReviewOrder: [
+      { step: "first_viewports", title: "Review first viewports before detailed flows.", paths: byType("first_viewports") },
+      { step: "issue_evidence", title: "Review grouped issue evidence sheets.", paths: byType("issue_evidence") },
+      { step: "page_flows", title: "Review full page flows split into readable chunks.", paths: byType("page_flow") },
+      { step: "raw_screenshots", title: "Use raw screenshots for any disputed evidence.", paths: manifest.screenshots.map((screenshot) => screenshot.path) }
+    ],
+    sheets,
+    statistics: {
+      pages: report.pages.length,
+      screenshots: manifest.screenshots.length,
+      firstViewportSheets: sheets.filter((sheet) => sheet.type === "first_viewports" || sheet.type === "page_first_viewports").length,
+      pageFlowSheets: sheets.filter((sheet) => sheet.type === "page_flow").length,
+      issueSheets: sheets.filter((sheet) => sheet.type === "issue_evidence").length
+    }
+  };
+}
+
+function toPosix(value: string): string {
+  return value.replace(/\\/g, "/");
 }
 
 async function screenshotSrc(filePath: string): Promise<string> {

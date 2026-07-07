@@ -34,7 +34,8 @@ Business-grade lane:
 ```bash
 node apps/cli/dist/index.js run https://example.com --business-grade
 node apps/cli/dist/index.js review-pack build --report projects/<site>/audits/<audit-id>
-# The repo-capable multimodal agent inspects report/contact-sheets/*.png and writes a completed visual-review JSON.
+# The repo-capable multimodal agent follows report/agent-review-pack/review-pack-manifest.json,
+# inspects the gallery and optimized PNG sheets, then writes a completed visual-review JSON.
 node apps/cli/dist/index.js agent-review import --report projects/<site>/audits/<audit-id> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report projects/<site>/audits/<audit-id>
 ```
@@ -50,6 +51,11 @@ Each completed audit writes:
 - `report/business-grade-gate.json`
 - `report/grouped-issues.json`
 - `report/screenshot-manifest.json`
+- `report/agent-review-pack/review-pack-manifest.json` when built
+- `report/agent-review-pack/gallery/index.html` when built
+- `report/contact-sheets/first-viewports.png` when built
+- `report/contact-sheets/pages/*.png` when built
+- `report/contact-sheets/issues/*.png` when built
 - `report/agent-execution-plan.md`
 - `report/implementation-plan.json`
 - `report/evidence-index.json`
@@ -120,7 +126,7 @@ npm run doctor
 - Markdown, HTML, PDF, and JSON report exports
 - Basic annotated screenshots for validated findings
 - Screenshot manifest, contact sheets, and static hosted report with local screenshot assets
-- Business-grade visual-review pack for repo-capable multimodal agents
+- Business-grade visual-review pack for repo-capable multimodal agents, including optimized first-viewport, page-flow, issue-evidence PNG sheets and a static filterable gallery
 - Visual-review import that merges agent observations, grouped issues, refreshed score confidence, and report/UI output
 - Competitor benchmark output when competitor URLs are supplied
 - Local ticket export files for GitHub Issues, Linear, Jira, and JSON backlog
@@ -152,6 +158,19 @@ npm run doctor
 
 See [AGENTS.md](./AGENTS.md) for the source-of-truth implementation contract.
 See [AGENT-RUNBOOK.md](./AGENT-RUNBOOK.md) for handing this workflow to another agent.
+
+## Review Pack Order
+
+When business-grade depth is required, agents should build the review pack and inspect evidence in this order:
+
+1. `report/agent-review-pack/review-pack-manifest.json`
+2. `report/agent-review-pack/gallery/index.html`
+3. `report/contact-sheets/first-viewports.png`
+4. `report/contact-sheets/issues/*.png`
+5. `report/contact-sheets/pages/*-flow.png`
+6. Raw screenshots listed in `report/screenshot-manifest.json`
+
+Raw screenshots are never modified. The generated sheets are inspection surfaces over that evidence.
 
 ## Project Structure
 

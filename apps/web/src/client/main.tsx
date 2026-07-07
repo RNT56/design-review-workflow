@@ -145,6 +145,7 @@ function App() {
   const [history, setHistory] = useState<AuditSummary[]>([]);
   const [selected, setSelected] = useState<AuditReport | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent">("overview");
+  const [evidenceView, setEvidenceView] = useState<"pages" | "issues" | "agent" | "raw">("pages");
   const latestProgress = job?.progress[job.progress.length - 1];
 
   useEffect(() => {
@@ -161,6 +162,7 @@ function App() {
         if (next.report) {
           setSelected(next.report);
           setActiveTab("overview");
+          setEvidenceView("pages");
           await refreshHistory();
         }
         if (next.status !== "running") {
@@ -203,6 +205,7 @@ function App() {
     if (response.ok) {
       setSelected((await response.json()) as AuditReport);
       setActiveTab("overview");
+      setEvidenceView("pages");
     }
   }
 
@@ -374,63 +377,148 @@ function App() {
           ) : null}
 
           {activeTab === "evidence" ? (
-            <div className="report-grid">
-              <section>
-                <h3>Pages</h3>
-                <div className="page-list">
-                  {selected.pages.map((page) => (
-                    <article className="page-card" key={page.pageId}>
-                      <div className="finding-meta">
-                        <span>{page.pageType}</span>
-                        <span>{page.businessImportance}</span>
-                        <span>{Object.keys(page.screenshots).length} screenshots</span>
-                      </div>
-                      <h4><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></h4>
-                      <ScreenshotDrawer report={selected} refs={Object.keys(page.screenshots)} title="Page screenshots" />
-                    </article>
-                  ))}
-                </div>
-
-                {selected.competitorBenchmarks.length > 0 ? (
-                  <>
-                    <h3>Competitors</h3>
-                    <table>
-                      <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
-                      <tbody>
-                        {selected.competitorBenchmarks.map((competitor) => (
-                          <tr key={competitor.competitorUrl}>
-                            <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{new URL(competitor.competitorUrl).hostname}</a></td>
-                            <td>{competitor.scorecard.overallScore}</td>
-                            <td>{competitor.pagesReviewed}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </>
-                ) : null}
+            <div>
+              <section className="evidence-summary">
+                <span>{selected.agentVisualReview ? "Reviewed by agent" : "Agent visual review pending"}</span>
+                <span>{totalScreenshotCount(selected)} screenshots</span>
+                <span>{selected.groupedIssues.length} grouped issues</span>
+                <span>{evidenceCompletenessLabel(selected)}</span>
               </section>
 
-              <section>
-                <h3>Evidence Files</h3>
-                <div className="artifact-grid">
-                  {artifactLinks(selected).filter((item) => ["Evidence Index", "Evidence JSONL", "Visual System", "Route Templates", "Experience Timing", "Annotations"].includes(item.label)).map((item) => (
+              <div className="evidence-actions">
+                <div className="segmented evidence-segmented" role="group" aria-label="Evidence view">
+                  <button type="button" className={evidenceView === "pages" ? "active" : ""} onClick={() => setEvidenceView("pages")}>Page Evidence</button>
+                  <button type="button" className={evidenceView === "issues" ? "active" : ""} onClick={() => setEvidenceView("issues")}>Issue Evidence</button>
+                  <button type="button" className={evidenceView === "agent" ? "active" : ""} onClick={() => setEvidenceView("agent")}>Agent Review Evidence</button>
+                  <button type="button" className={evidenceView === "raw" ? "active" : ""} onClick={() => setEvidenceView("raw")}>Raw Screenshots</button>
+                </div>
+                <div className="artifact-grid evidence-link-grid">
+                  {reviewPackLinks(selected).map((item) => (
                     <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
                   ))}
                 </div>
+              </div>
 
-                {selected.screenshotAnnotations.length > 0 ? (
-                  <>
-                    <h3>Annotations</h3>
-                    <div className="annotation-list">
-                      {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
-                        <a key={annotation.annotationId} href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/${annotation.annotatedScreenshot.path}`} target="_blank" rel="noreferrer">
-                          {annotation.label}
-                        </a>
+              {evidenceView === "pages" ? (
+                <div className="report-grid">
+                  <section>
+                    <h3>Page Evidence</h3>
+                    <div className="page-list">
+                      {selected.pages.map((page) => (
+                        <article className="page-card" key={page.pageId}>
+                          <div className="finding-meta">
+                            <span>{page.pageType}</span>
+                            <span>{page.businessImportance}</span>
+                            <span>{Object.keys(page.screenshots).length} screenshots</span>
+                          </div>
+                          <h4><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></h4>
+                          <div className="evidence-sheet-links">
+                            <a href={pageFirstViewportSheetHref(selected, page.pageId)} target="_blank" rel="noreferrer">First viewport sheet</a>
+                            <a href={pageFlowSheetHref(selected, page.pageId)} target="_blank" rel="noreferrer">Page flow sheet</a>
+                          </div>
+                          <ScreenshotDrawer report={selected} refs={Object.keys(page.screenshots)} title="Raw page screenshots" />
+                        </article>
                       ))}
                     </div>
-                  </>
-                ) : null}
-              </section>
+                  </section>
+
+                  <section>
+                    <h3>Evidence Files</h3>
+                    <div className="artifact-grid">
+                      {artifactLinks(selected).filter((item) => ["Evidence Index", "Evidence JSONL", "Visual System", "Route Templates", "Experience Timing", "Annotations"].includes(item.label)).map((item) => (
+                        <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+                      ))}
+                    </div>
+
+                    {selected.competitorBenchmarks.length > 0 ? (
+                      <>
+                        <h3>Competitors</h3>
+                        <table>
+                          <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
+                          <tbody>
+                            {selected.competitorBenchmarks.map((competitor) => (
+                              <tr key={competitor.competitorUrl}>
+                                <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{new URL(competitor.competitorUrl).hostname}</a></td>
+                                <td>{competitor.scorecard.overallScore}</td>
+                                <td>{competitor.pagesReviewed}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </>
+                    ) : null}
+                  </section>
+                </div>
+              ) : null}
+
+              {evidenceView === "issues" ? (
+                <section>
+                  <h3>Issue Evidence</h3>
+                  <div className="findings">
+                    {sortedIssues.length > 0 ? sortedIssues.map((issue) => <IssueCard issue={issue} report={selected} key={issue.issueId} />) : <p className="muted">No grouped issues are available for this audit.</p>}
+                  </div>
+                </section>
+              ) : null}
+
+              {evidenceView === "agent" ? (
+                <section>
+                  <h3>Agent Review Evidence</h3>
+                  {selected.agentVisualReview ? (
+                    <div className="page-list">
+                      <article className="review-summary">
+                        <div className="finding-meta">
+                          <span>{selected.agentVisualReview.reviewer}</span>
+                          <span>{selected.agentVisualReview.confidence} confidence</span>
+                          <span>{selected.agentVisualReview.screenshotsReviewed.length} reviewed screenshots</span>
+                        </div>
+                        <ScreenshotDrawer report={selected} refs={selected.agentVisualReview.screenshotsReviewed} title="Agent reviewed screenshots" />
+                      </article>
+                      {selected.agentVisualReview.visualFindings.map((finding) => (
+                        <article className="finding" key={finding.reviewId}>
+                          <div className="finding-meta">
+                            <span>{finding.severity}</span>
+                            <span>{finding.category}</span>
+                            <span>{finding.confidence}</span>
+                          </div>
+                          <h4>{finding.title}</h4>
+                          <p>{finding.observation}</p>
+                          <p><strong>Recommendation:</strong> {finding.recommendation}</p>
+                          <ScreenshotDrawer report={selected} refs={finding.evidenceRefs} title="Agent finding screenshots" />
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">Agent visual review has not been imported. Build the review pack, inspect the gallery and PNG sheets, then import a validated visual-review JSON.</p>
+                  )}
+                </section>
+              ) : null}
+
+              {evidenceView === "raw" ? (
+                <section>
+                  <h3>Raw Screenshots</h3>
+                  <div className="raw-shot-grid">
+                    {allScreenshots(selected).map((screenshot) => (
+                      <a className="shot" key={screenshot.id} href={screenshot.href} target="_blank" rel="noreferrer">
+                        <img src={screenshot.href} alt={screenshot.label} loading="lazy" />
+                        <span>{screenshot.label}</span>
+                      </a>
+                    ))}
+                  </div>
+
+                  {selected.screenshotAnnotations.length > 0 ? (
+                    <>
+                      <h3>Annotations</h3>
+                      <div className="annotation-list">
+                        {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
+                          <a key={annotation.annotationId} href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/${annotation.annotatedScreenshot.path}`} target="_blank" rel="noreferrer">
+                            {annotation.label}
+                          </a>
+                        ))}
+                      </div>
+                    </>
+                  ) : null}
+                </section>
+              ) : null}
             </div>
           ) : null}
 
@@ -551,6 +639,9 @@ function IssueCard({ issue, report }: { issue: AuditReport["groupedIssues"][numb
       <p>{issue.observation}</p>
       <p><strong>Recommendation:</strong> {issue.recommendation}</p>
       <p><strong>Affected:</strong> {issue.affectedPages.map((page) => page.section ? `${page.url} (${page.section})` : page.url).join(", ")}</p>
+      <div className="evidence-sheet-links">
+        <a href={issueSheetHref(report, issue.issueId)} target="_blank" rel="noreferrer">Issue evidence sheet</a>
+      </div>
       <ul>
         {issue.acceptanceCriteria.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
       </ul>
@@ -579,18 +670,22 @@ function FindingCard({ finding, report }: { finding: AuditReport["findings"][num
 
 function ScreenshotDrawer({ report, refs, title }: { report: AuditReport; refs: string[]; title: string }) {
   const screenshots = screenshotRefsFor(report, refs);
+  const missingRefs = missingScreenshotRefsFor(report, refs);
   return (
     <details className="screenshot-drawer">
       <summary>{title} ({screenshots.length || refs.length})</summary>
       {screenshots.length > 0 ? (
-        <div className="shot-grid">
-          {screenshots.map((screenshot) => (
-            <a className="shot" key={`${screenshot.id}-${screenshot.href}`} href={screenshot.href} target="_blank" rel="noreferrer">
-              <img src={screenshot.href} alt={screenshot.label} loading="lazy" />
-              <span>{screenshot.label}</span>
-            </a>
-          ))}
-        </div>
+        <>
+          <div className="shot-grid">
+            {screenshots.map((screenshot) => (
+              <a className="shot" key={`${screenshot.id}-${screenshot.href}`} href={screenshot.href} target="_blank" rel="noreferrer">
+                <img src={screenshot.href} alt={screenshot.label} loading="lazy" />
+                <span>{screenshot.label}</span>
+              </a>
+            ))}
+          </div>
+          {missingRefs.length > 0 ? <p className="warning-text">Missing screenshot refs: {missingRefs.join(", ")}</p> : null}
+        </>
       ) : (
         <p className="muted">{refs.length > 0 ? refs.join(", ") : "No screenshot reference was attached."}</p>
       )}
@@ -609,6 +704,10 @@ function artifactLinks(report: AuditReport) {
     ["Screenshot Manifest", "screenshot-manifest.json"],
     ["Hosted Report", "hosted/index.html"],
     ["Review Pack", "agent-review-pack/README.md"],
+    ["Review Pack Manifest", "agent-review-pack/review-pack-manifest.json"],
+    ["Review Gallery", "agent-review-pack/gallery/index.html"],
+    ["First Viewports", "contact-sheets/first-viewports.png"],
+    ["All Pages Sheet", "contact-sheets/all-pages.png"],
     ["Agent Visual Review", "agent-visual-review.json"],
     ["HTML Report", "report.html"],
     ["Markdown Report", "report.md"],
@@ -630,6 +729,15 @@ function artifactLinks(report: AuditReport) {
   ].map(([labelText, file]) => ({ label: labelText, href: reportFileHref(report, file) }));
 }
 
+function reviewPackLinks(report: AuditReport) {
+  return [
+    ["Review Gallery", "agent-review-pack/gallery/index.html"],
+    ["Review Pack Manifest", "agent-review-pack/review-pack-manifest.json"],
+    ["First Viewports", "contact-sheets/first-viewports.png"],
+    ["All Pages Index", "contact-sheets/all-pages.png"]
+  ].map(([labelText, file]) => ({ label: labelText, href: reportFileHref(report, file) }));
+}
+
 function reportTabs(report: AuditReport): Array<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent"> {
   const tabs: Array<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent"> = ["overview", "findings", "implementation", "evidence"];
   if (report.agentVisualReview) tabs.push("agentReview");
@@ -646,6 +754,21 @@ function screenshotRefsFor(report: AuditReport, refs: string[]) {
     seen.add(`${screenshot.id}:${screenshot.href}`);
     return [screenshot];
   });
+}
+
+function missingScreenshotRefsFor(report: AuditReport, refs: string[]) {
+  const index = screenshotIndex(report);
+  return refs.filter((ref) => !index.has(ref));
+}
+
+function allScreenshots(report: AuditReport) {
+  return report.pages.flatMap((page) =>
+    Object.values(page.screenshots).map((screenshot) => ({
+      id: screenshot.id,
+      href: auditFileHref(report, screenshot.path),
+      label: `${page.title ?? page.url} / ${screenshot.viewport} / ${screenshot.kind} / ${screenshot.width}x${screenshot.height}`
+    }))
+  );
 }
 
 function screenshotIndex(report: AuditReport) {
@@ -669,6 +792,31 @@ function screenshotIndex(report: AuditReport) {
 
 function reportFileHref(report: AuditReport, file: string) {
   return `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/report/${file}`;
+}
+
+function issueSheetHref(report: AuditReport, issueId: string) {
+  return reportFileHref(report, `contact-sheets/issues/${issueId}.png`);
+}
+
+function pageFirstViewportSheetHref(report: AuditReport, pageId: string) {
+  return reportFileHref(report, `contact-sheets/pages/${pageId}-first-viewports.png`);
+}
+
+function pageFlowSheetHref(report: AuditReport, pageId: string) {
+  return reportFileHref(report, `contact-sheets/pages/${pageId}-flow.png`);
+}
+
+function totalScreenshotCount(report: AuditReport) {
+  return report.pages.reduce((count, page) => count + Object.keys(page.screenshots).length, 0);
+}
+
+function evidenceCompletenessLabel(report: AuditReport) {
+  const missing = [
+    ...report.findings.flatMap((finding) => missingScreenshotRefsFor(report, finding.evidence.screenshotRefs)),
+    ...report.groupedIssues.flatMap((issue) => missingScreenshotRefsFor(report, issue.evidenceRefs)),
+    ...(report.agentVisualReview?.visualFindings.flatMap((finding) => missingScreenshotRefsFor(report, finding.evidenceRefs)) ?? [])
+  ];
+  return missing.length === 0 ? "Evidence complete" : `${new Set(missing).size} missing refs`;
 }
 
 function auditFileHref(report: AuditReport, file: string) {
