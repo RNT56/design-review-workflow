@@ -140,6 +140,9 @@ type AuditReport = {
   redesignBriefing: Array<{ title: string; body: string }>;
 };
 
+type ReportTab = "overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent";
+type EvidenceView = "pages" | "issues" | "agent" | "raw";
+
 function App() {
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<"quick_scan" | "full_audit">("quick_scan");
@@ -149,8 +152,8 @@ function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [history, setHistory] = useState<AuditSummary[]>([]);
   const [selected, setSelected] = useState<AuditReport | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent">("overview");
-  const [evidenceView, setEvidenceView] = useState<"pages" | "issues" | "agent" | "raw">("pages");
+  const [activeTab, setActiveTab] = useState<ReportTab>("overview");
+  const [evidenceView, setEvidenceView] = useState<EvidenceView>("pages");
   const latestProgress = job?.progress[job.progress.length - 1];
 
   useEffect(() => {
@@ -178,6 +181,7 @@ function App() {
     return () => window.clearInterval(interval);
   }, [jobId]);
 
+  const historyStats = useMemo(() => summarizeHistory(history), [history]);
   const sortedFindings = useMemo(() => selected?.findings.slice().sort((a, b) => b.priorityScore - a.priorityScore) ?? [], [selected]);
   const sortedIssues = useMemo(() => selected?.groupedIssues.slice().sort((a, b) => b.priorityScore - a.priorityScore) ?? [], [selected]);
 
@@ -215,439 +219,586 @@ function App() {
   }
 
   return (
-    <main className="shell">
-      <section className="toolbar">
-        <div>
+    <main className="app-shell">
+      <header className="hero-bar">
+        <div className="brand-block">
+          <span className="eyebrow">Local-first design intelligence</span>
           <h1>Website Design Review</h1>
-          <p>Local evidence capture, structured findings, scorecard, and reports.</p>
+          <p>
+            Capture real pages, inspect screenshot evidence, group design issues, and hand off a report that stays honest about
+            automated versus agent-reviewed depth.
+          </p>
         </div>
-        <button type="button" onClick={() => void refreshHistory()}>Refresh</button>
-      </section>
+        <div className="hero-actions">
+          <button type="button" className="quiet-button" onClick={() => void refreshHistory()}>
+            Refresh audits
+          </button>
+        </div>
+      </header>
 
-      <section className="workspace">
-        <form className="audit-form" onSubmit={(event) => void startAudit(event)}>
+      <section className="top-layout" aria-label="Audit cockpit">
+        <form className="launch-panel" onSubmit={(event) => void startAudit(event)}>
+          <div className="panel-heading">
+            <span className="eyebrow">Run setup</span>
+            <h2>Start a review</h2>
+            <p>Public URL in, local evidence bundle out. No login areas, no external model keys.</p>
+          </div>
+
           <label>
             URL
             <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com" required />
           </label>
 
           <div className="segmented" role="group" aria-label="Audit mode">
-            <button type="button" className={mode === "quick_scan" ? "active" : ""} onClick={() => { setMode("quick_scan"); setMaxPages(6); }}>Quick Scan</button>
-            <button type="button" className={mode === "full_audit" ? "active" : ""} onClick={() => { setMode("full_audit"); setMaxPages(15); }}>Full Audit</button>
+            <button
+              type="button"
+              className={mode === "quick_scan" ? "active" : ""}
+              onClick={() => {
+                setMode("quick_scan");
+                setMaxPages(6);
+              }}
+            >
+              Quick Scan
+            </button>
+            <button
+              type="button"
+              className={mode === "full_audit" ? "active" : ""}
+              onClick={() => {
+                setMode("full_audit");
+                setMaxPages(15);
+              }}
+            >
+              Full Audit
+            </button>
           </div>
 
-          <label>
-            Max pages
-            <input type="number" min={1} max={15} value={maxPages} onChange={(event) => setMaxPages(Number(event.target.value))} />
-          </label>
+          <div className="field-grid">
+            <label>
+              Max pages
+              <input type="number" min={1} max={15} value={maxPages} onChange={(event) => setMaxPages(Number(event.target.value))} />
+            </label>
+            <label>
+              Website goal
+              <input value={websiteGoal} onChange={(event) => setWebsiteGoal(event.target.value)} placeholder="Optional" />
+            </label>
+          </div>
 
-          <label>
-            Website goal
-            <input value={websiteGoal} onChange={(event) => setWebsiteGoal(event.target.value)} placeholder="Optional" />
-          </label>
+          <button type="submit" className="primary-button" disabled={job?.status === "running"}>
+            {job?.status === "running" ? "Audit running" : "Start audit"}
+          </button>
 
-          <button type="submit" className="primary" disabled={job?.status === "running"}>Start Audit</button>
-
-          {job && (
+          {job ? (
             <div className={`job job--${job.status}`}>
-              <strong>{job.status}</strong>
-              <span>{job.error ?? latestProgress?.message ?? "Waiting for progress"}</span>
-              {latestProgress?.current && latestProgress.total ? <span>{latestProgress.current}/{latestProgress.total}</span> : null}
+              <div>
+                <strong>{label(job.status)}</strong>
+                <span>{job.error ?? latestProgress?.message ?? "Waiting for progress"}</span>
+              </div>
+              {latestProgress?.current && latestProgress.total ? <span className="progress-count">{latestProgress.current}/{latestProgress.total}</span> : null}
             </div>
-          )}
+          ) : null}
         </form>
 
-        <aside className="history">
-          <h2>Project History</h2>
-          {history.length === 0 ? <p>No completed audits yet.</p> : null}
-          {history.map((item) => (
-            <button type="button" className="history-row" key={`${item.site}-${item.audit}`} onClick={() => void openHistory(item)}>
-              <span>{item.site}</span>
-              <strong>{item.score ?? "-"} / 100</strong>
-              <small>{item.findings ?? 0} findings</small>
-            </button>
-          ))}
+        <aside className="library-panel">
+          <div className="panel-heading library-heading">
+            <div>
+              <span className="eyebrow">Audit library</span>
+              <h2>Project history</h2>
+            </div>
+            <span className="count-pill">{historyStats.total} runs</span>
+          </div>
+
+          <div className="library-metrics" aria-label="Audit history summary">
+            <MetricTile label="Average score" value={historyStats.averageScore == null ? "-" : `${historyStats.averageScore}`} />
+            <MetricTile label="Findings" value={`${historyStats.totalFindings}`} />
+            <MetricTile label="Tracked sites" value={`${historyStats.sites}`} />
+          </div>
+
+          <HistoryScoreChart history={history} />
+
+          <div className="history-list" aria-label="Completed audits">
+            {history.length === 0 ? <p className="muted">No completed audits yet. Run the first audit to populate this cockpit.</p> : null}
+            {history.map((item, index) => (
+              <button
+                type="button"
+                className={`history-row ${selected?.auditId && selected.auditId === item.auditId ? "active" : ""}`}
+                key={`${item.site}-${item.audit}-${index}`}
+                onClick={() => void openHistory(item)}
+              >
+                <span>
+                  <strong>{item.site}</strong>
+                  <small>{formatRunLabel(item)}</small>
+                </span>
+                <strong>{item.score ?? "-"} / 100</strong>
+                <small>{item.findings ?? 0} findings</small>
+              </button>
+            ))}
+          </div>
         </aside>
       </section>
 
       {selected ? (
-        <section className="report">
-          <div className="report-header">
-            <div>
-              <h2>{selected.config.url}</h2>
-              <p>{selected.websiteType} / {selected.websiteTypeConfidence} confidence / {selected.generatedAt}</p>
-              <span className={`status-badge status-badge--${selected.businessGradeStatus}`}>{label(selected.businessGradeStatus)}</span>
-            </div>
-            <div className="exports">
-              <a href={reportFileHref(selected, "report.html")} target="_blank" rel="noreferrer">HTML</a>
-              {selected.config.outputs?.pdf !== false ? <a href={reportFileHref(selected, "report.pdf")} target="_blank" rel="noreferrer">PDF</a> : null}
-              <a href={reportFileHref(selected, "report.json")} target="_blank" rel="noreferrer">JSON</a>
-              <a href={reportFileHref(selected, "handoff.json")} target="_blank" rel="noreferrer">Handoff</a>
-              <a href={reportFileHref(selected, "workflow-manifest.json")} target="_blank" rel="noreferrer">Manifest</a>
-              <a href={reportFileHref(selected, "agent-execution-plan.md")} target="_blank" rel="noreferrer">Plan</a>
-            </div>
-          </div>
+        <ReportDashboard
+          report={selected}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          evidenceView={evidenceView}
+          setEvidenceView={setEvidenceView}
+          sortedFindings={sortedFindings}
+          sortedIssues={sortedIssues}
+        />
+      ) : (
+        <EmptyState historyStats={historyStats} />
+      )}
+    </main>
+  );
+}
 
-          <div className="score-strip">
-            <div className="score-main"><span>Overall</span><strong>{selected.scorecard.overallScore}</strong></div>
-            <div className="score-cell"><span>Business Grade</span><strong>{selected.businessGradeStatus === "business_grade" ? "Pass" : "No"}</strong></div>
-            {Object.entries(selected.scorecard.subscores).map(([key, value]) => (
-              <div className="score-cell" key={key}><span>{label(key)}</span><strong>{value.score}</strong></div>
+function ReportDashboard({
+  report,
+  activeTab,
+  setActiveTab,
+  evidenceView,
+  setEvidenceView,
+  sortedFindings,
+  sortedIssues
+}: {
+  report: AuditReport;
+  activeTab: ReportTab;
+  setActiveTab: (tab: ReportTab) => void;
+  evidenceView: EvidenceView;
+  setEvidenceView: (tab: EvidenceView) => void;
+  sortedFindings: AuditReport["findings"];
+  sortedIssues: AuditReport["groupedIssues"];
+}) {
+  const pageCount = report.pages.length;
+  const screenshotCount = totalScreenshotCount(report);
+  const evidenceCompleteness = evidenceCompletenessLabel(report);
+  const highestSignal = sortedIssues[0]?.title ?? sortedFindings[0]?.title ?? "No priority issue detected by the current report.";
+
+  return (
+    <section className="report-shell">
+      <div className="report-hero">
+        <ScoreGauge score={report.scorecard.overallScore} status={report.businessGradeStatus} />
+
+        <div className="report-title-block">
+          <span className={`status-badge status-badge--${report.businessGradeStatus}`}>{businessGradeLabel(report.businessGradeStatus)}</span>
+          <h2>{report.config.url}</h2>
+          <p>
+            {label(report.websiteType)} review, {label(report.websiteTypeConfidence)} confidence, generated {formatDate(report.generatedAt)}.
+          </p>
+          <div className="signal-callout">
+            <span>Highest signal</span>
+            <strong>{highestSignal}</strong>
+          </div>
+        </div>
+
+        <div className="report-actions">
+          <a href={reportFileHref(report, "report.html")} target="_blank" rel="noreferrer">HTML</a>
+          {report.config.outputs?.pdf !== false ? <a href={reportFileHref(report, "report.pdf")} target="_blank" rel="noreferrer">PDF</a> : null}
+          <a href={reportFileHref(report, "hosted/index.html")} target="_blank" rel="noreferrer">Hosted</a>
+          <a href={reportFileHref(report, "agent-review-pack/gallery/index.html")} target="_blank" rel="noreferrer">Gallery</a>
+          <a href={reportFileHref(report, "handoff.json")} target="_blank" rel="noreferrer">Handoff</a>
+        </div>
+      </div>
+
+      <section className="report-metrics" aria-label="Report summary">
+        <MetricTile label="Pages captured" value={`${pageCount}`} detail={`${screenshotCount} screenshots`} />
+        <MetricTile label="Grouped issues" value={`${report.groupedIssues.length}`} detail={`${report.findings.length} raw findings`} />
+        <MetricTile label="Evidence" value={evidenceCompleteness} detail={report.agentVisualReview ? "Agent review imported" : "Agent review pending"} />
+        <MetricTile label="Tickets" value={`${report.tickets.length}`} detail="Implementation-ready items" />
+      </section>
+
+      <section className="visual-dashboard" aria-label="Report visuals">
+        <ScoreBreakdownChart report={report} />
+        <IssueDistribution report={report} />
+        <WorkflowMap status={report.businessGradeStatus} />
+      </section>
+
+      <nav className="tabs" aria-label="Report sections">
+        {reportTabs(report).map((tab) => (
+          <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
+            {label(tab)}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "overview" ? (
+        <div className="content-grid">
+          <section>
+            <SectionTitle eyebrow="Decision queue" title="Priority issues" />
+            <div className="findings">
+              {sortedIssues.length > 0
+                ? sortedIssues.slice(0, 5).map((issue) => <IssueCard issue={issue} report={report} key={issue.issueId} />)
+                : sortedFindings.slice(0, 5).map((finding) => <FindingCard report={report} finding={finding} key={finding.findingId} />)}
+              {sortedIssues.length === 0 && sortedFindings.length === 0 ? <EmptyPanel title="No findings in this report" body="The current bundle did not produce validated issues. Check evidence coverage and business-grade status before treating that as a clean bill." /> : null}
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle eyebrow="Narrative" title="Redesign briefing" />
+            <div className="briefing">
+              {report.redesignBriefing.map((section) => (
+                <section key={section.title}>
+                  <h4>{section.title}</h4>
+                  <p>{section.body}</p>
+                </section>
+              ))}
+              {report.redesignBriefing.length === 0 ? <EmptyPanel title="No briefing available" body="Run plan build or complete a visual review to enrich the narrative." /> : null}
+            </div>
+
+            <SectionTitle eyebrow="Low effort" title="Quick wins" />
+            <div className="annotation-list">
+              {report.quickWins.slice(0, 6).map((finding) => (
+                <span className="note-row" key={finding.findingId}>{finding.title}</span>
+              ))}
+              {report.quickWins.length === 0 ? <p className="muted">No quick wins were generated for this audit.</p> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "findings" ? (
+        <section>
+          <SectionTitle eyebrow="Validated findings" title="Findings" />
+          <div className="findings">
+            {sortedFindings.map((finding) => (
+              <FindingCard report={report} finding={finding} key={finding.findingId} />
+            ))}
+            {sortedFindings.length === 0 ? <EmptyPanel title="No validated findings" body="The report may still need agent visual review, review-pack inspection, or stricter target context." /> : null}
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "implementation" ? (
+        <div className="content-grid">
+          <section>
+            <SectionTitle eyebrow="Delivery" title="Implementation queue" />
+            <div className="queue">
+              {report.tickets.map((ticket, index) => (
+                <article className="queue-item" key={`${ticket.title}-${index}`}>
+                  <div className="finding-meta">
+                    <span>{ticket.priority}</span>
+                    <span>{ticket.effort} effort</span>
+                    <span>{ticket.role.join(", ")}</span>
+                  </div>
+                  <h4>{ticket.title}</h4>
+                  <p>{ticket.goal}</p>
+                  <ul>
+                    {ticket.acceptanceCriteria.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                  <small>{ticket.sourceFindingIds.join(", ")}</small>
+                </article>
+              ))}
+              {report.tickets.length === 0 ? <EmptyPanel title="No implementation tickets" body="Ticket exports appear when validated findings produce implementation-ready work." /> : null}
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle eyebrow="Files" title="Implementation artifacts" />
+            <div className="artifact-grid">
+              {artifactLinks(report).filter((item) => ["Implementation Plan", "Patch Plan", "Changed Files", "Source Candidates", "Repo Analysis"].includes(item.label)).map((item) => (
+                <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "evidence" ? (
+        <EvidenceSection report={report} evidenceView={evidenceView} setEvidenceView={setEvidenceView} sortedIssues={sortedIssues} />
+      ) : null}
+
+      {activeTab === "agentReview" && report.agentVisualReview ? <AgentReviewSection report={report} /> : null}
+
+      {activeTab === "agent" ? <AgentBundleSection report={report} /> : null}
+    </section>
+  );
+}
+
+function EvidenceSection({
+  report,
+  evidenceView,
+  setEvidenceView,
+  sortedIssues
+}: {
+  report: AuditReport;
+  evidenceView: EvidenceView;
+  setEvidenceView: (tab: EvidenceView) => void;
+  sortedIssues: AuditReport["groupedIssues"];
+}) {
+  return (
+    <div>
+      <section className="evidence-summary">
+        <span>{report.agentVisualReview ? "Reviewed by agent" : "Agent visual review pending"}</span>
+        <span>{totalScreenshotCount(report)} screenshots</span>
+        <span>{report.groupedIssues.length} grouped issues</span>
+        <span>{evidenceCompletenessLabel(report)}</span>
+      </section>
+
+      <div className="evidence-actions">
+        <div className="segmented evidence-segmented" role="group" aria-label="Evidence view">
+          <button type="button" className={evidenceView === "pages" ? "active" : ""} onClick={() => setEvidenceView("pages")}>Page Evidence</button>
+          <button type="button" className={evidenceView === "issues" ? "active" : ""} onClick={() => setEvidenceView("issues")}>Issue Evidence</button>
+          <button type="button" className={evidenceView === "agent" ? "active" : ""} onClick={() => setEvidenceView("agent")}>Agent Review Evidence</button>
+          <button type="button" className={evidenceView === "raw" ? "active" : ""} onClick={() => setEvidenceView("raw")}>Raw Screenshots</button>
+        </div>
+        <div className="artifact-grid evidence-link-grid">
+          {reviewPackLinks(report).map((item) => (
+            <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+          ))}
+        </div>
+      </div>
+
+      {evidenceView === "pages" ? (
+        <div className="content-grid">
+          <section>
+            <SectionTitle eyebrow="Captured pages" title="Page evidence" />
+            <div className="page-list">
+              {report.pages.map((page) => (
+                <article className="page-card" key={page.pageId}>
+                  <div className="finding-meta">
+                    <span>{page.pageType}</span>
+                    <span>{page.businessImportance}</span>
+                    <span>{Object.keys(page.screenshots).length} screenshots</span>
+                  </div>
+                  <h4><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></h4>
+                  <div className="evidence-sheet-links">
+                    <a href={pageFirstViewportSheetHref(report, page.pageId)} target="_blank" rel="noreferrer">First viewport sheet</a>
+                    <a href={pageFlowSheetHref(report, page.pageId)} target="_blank" rel="noreferrer">Page flow sheet</a>
+                  </div>
+                  <ScreenshotDrawer report={report} refs={Object.keys(page.screenshots)} title="Raw page screenshots" />
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <SectionTitle eyebrow="Evidence files" title="Supporting artifacts" />
+            <div className="artifact-grid">
+              {artifactLinks(report).filter((item) => ["Evidence Index", "Evidence JSONL", "Visual System", "Route Templates", "Experience Timing", "Annotations"].includes(item.label)).map((item) => (
+                <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+              ))}
+            </div>
+
+            {report.competitorBenchmarks.length > 0 ? (
+              <>
+                <SectionTitle eyebrow="Reference set" title="Competitors" />
+                <table>
+                  <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
+                  <tbody>
+                    {report.competitorBenchmarks.map((competitor) => (
+                      <tr key={competitor.competitorUrl}>
+                        <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{safeHost(competitor.competitorUrl)}</a></td>
+                        <td>{competitor.scorecard.overallScore}</td>
+                        <td>{competitor.pagesReviewed}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+
+      {evidenceView === "issues" ? (
+        <section>
+          <SectionTitle eyebrow="Issue proof" title="Issue evidence" />
+          <div className="findings">
+            {sortedIssues.length > 0 ? sortedIssues.map((issue) => <IssueCard issue={issue} report={report} key={issue.issueId} />) : <p className="muted">No grouped issues are available for this audit.</p>}
+          </div>
+        </section>
+      ) : null}
+
+      {evidenceView === "agent" ? (
+        <section>
+          <SectionTitle eyebrow="Visual review" title="Agent review evidence" />
+          {report.agentVisualReview ? (
+            <div className="page-list">
+              <article className="review-summary">
+                <div className="finding-meta">
+                  <span>{report.agentVisualReview.reviewer}</span>
+                  <span>{report.agentVisualReview.confidence} confidence</span>
+                  <span>{report.agentVisualReview.screenshotsReviewed.length} reviewed screenshots</span>
+                </div>
+                <ScreenshotDrawer report={report} refs={report.agentVisualReview.screenshotsReviewed} title="Agent reviewed screenshots" />
+              </article>
+              {report.agentVisualReview.visualFindings.map((finding) => (
+                <article className="finding finding-card" key={finding.reviewId}>
+                  <div className="finding-meta">
+                    <span>{finding.severity}</span>
+                    <span>{finding.category}</span>
+                    <span>{finding.confidence}</span>
+                  </div>
+                  <h4>{finding.title}</h4>
+                  <p>{finding.observation}</p>
+                  <p><strong>Recommendation:</strong> {finding.recommendation}</p>
+                  <ScreenshotDrawer report={report} refs={finding.evidenceRefs} title="Agent finding screenshots" />
+                </article>
+              ))}
+            </div>
+          ) : (
+            <EmptyPanel title="Agent visual review pending" body="Build the review pack, inspect the gallery and PNG sheets, then import a validated visual-review JSON." />
+          )}
+        </section>
+      ) : null}
+
+      {evidenceView === "raw" ? (
+        <section>
+          <SectionTitle eyebrow="Source media" title="Raw screenshots" />
+          <div className="raw-shot-grid">
+            {allScreenshots(report).map((screenshot) => (
+              <a className="shot" key={screenshot.id} href={screenshot.href} target="_blank" rel="noreferrer">
+                <img src={screenshot.href} alt={screenshot.label} loading="lazy" />
+                <span>{screenshot.label}</span>
+              </a>
             ))}
           </div>
 
-          <nav className="tabs" aria-label="Report sections">
-            {reportTabs(selected).map((tab) => (
-              <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
-                {label(tab)}
-              </button>
-            ))}
-          </nav>
-
-          {activeTab === "overview" ? (
-            <div className="report-grid">
-              <section>
-                <h3>Priority Issues</h3>
-                <div className="findings">
-                  {sortedIssues.length > 0
-                    ? sortedIssues.slice(0, 5).map((issue) => <IssueCard issue={issue} report={selected} key={issue.issueId} />)
-                    : sortedFindings.slice(0, 5).map((finding) => <FindingCard report={selected} finding={finding} key={finding.findingId} />)}
-                </div>
-              </section>
-
-              <section>
-                <h3>Redesign Briefing</h3>
-                <div className="briefing">
-                  {selected.redesignBriefing.map((section) => (
-                    <section key={section.title}>
-                      <h4>{section.title}</h4>
-                      <p>{section.body}</p>
-                    </section>
-                  ))}
-                </div>
-
-                <h3>Quick Wins</h3>
-                <div className="annotation-list">
-                  {selected.quickWins.slice(0, 6).map((finding) => (
-                    <span className="note-row" key={finding.findingId}>{finding.title}</span>
-                  ))}
-                </div>
-              </section>
-            </div>
-          ) : null}
-
-          {activeTab === "findings" ? (
-            <section>
-              <h3>Findings</h3>
-              <div className="findings">
-                {sortedFindings.map((finding) => (
-                  <FindingCard report={selected} finding={finding} key={finding.findingId} />
+          {report.screenshotAnnotations.length > 0 ? (
+            <>
+              <SectionTitle eyebrow="Marked evidence" title="Annotations" />
+              <div className="annotation-list">
+                {report.screenshotAnnotations.slice(0, 8).map((annotation) => (
+                  <a key={annotation.annotationId} href={auditFileHref(report, annotation.annotatedScreenshot.path)} target="_blank" rel="noreferrer">
+                    {annotation.label}
+                  </a>
                 ))}
               </div>
-            </section>
-          ) : null}
-
-          {activeTab === "implementation" ? (
-            <div className="report-grid">
-              <section>
-                <h3>Implementation Queue</h3>
-                <div className="queue">
-                  {selected.tickets.map((ticket, index) => (
-                    <article className="queue-item" key={`${ticket.title}-${index}`}>
-                      <div className="finding-meta">
-                        <span>{ticket.priority}</span>
-                        <span>{ticket.effort} effort</span>
-                        <span>{ticket.role.join(", ")}</span>
-                      </div>
-                      <h4>{ticket.title}</h4>
-                      <p>{ticket.goal}</p>
-                      <ul>
-                        {ticket.acceptanceCriteria.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
-                      </ul>
-                      <small>{ticket.sourceFindingIds.join(", ")}</small>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <h3>Implementation Files</h3>
-                <div className="artifact-grid">
-                  {artifactLinks(selected).filter((item) => ["Implementation Plan", "Patch Plan", "Changed Files", "Source Candidates", "Repo Analysis"].includes(item.label)).map((item) => (
-                    <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
-                  ))}
-                </div>
-              </section>
-            </div>
-          ) : null}
-
-          {activeTab === "evidence" ? (
-            <div>
-              <section className="evidence-summary">
-                <span>{selected.agentVisualReview ? "Reviewed by agent" : "Agent visual review pending"}</span>
-                <span>{totalScreenshotCount(selected)} screenshots</span>
-                <span>{selected.groupedIssues.length} grouped issues</span>
-                <span>{evidenceCompletenessLabel(selected)}</span>
-              </section>
-
-              <div className="evidence-actions">
-                <div className="segmented evidence-segmented" role="group" aria-label="Evidence view">
-                  <button type="button" className={evidenceView === "pages" ? "active" : ""} onClick={() => setEvidenceView("pages")}>Page Evidence</button>
-                  <button type="button" className={evidenceView === "issues" ? "active" : ""} onClick={() => setEvidenceView("issues")}>Issue Evidence</button>
-                  <button type="button" className={evidenceView === "agent" ? "active" : ""} onClick={() => setEvidenceView("agent")}>Agent Review Evidence</button>
-                  <button type="button" className={evidenceView === "raw" ? "active" : ""} onClick={() => setEvidenceView("raw")}>Raw Screenshots</button>
-                </div>
-                <div className="artifact-grid evidence-link-grid">
-                  {reviewPackLinks(selected).map((item) => (
-                    <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
-                  ))}
-                </div>
-              </div>
-
-              {evidenceView === "pages" ? (
-                <div className="report-grid">
-                  <section>
-                    <h3>Page Evidence</h3>
-                    <div className="page-list">
-                      {selected.pages.map((page) => (
-                        <article className="page-card" key={page.pageId}>
-                          <div className="finding-meta">
-                            <span>{page.pageType}</span>
-                            <span>{page.businessImportance}</span>
-                            <span>{Object.keys(page.screenshots).length} screenshots</span>
-                          </div>
-                          <h4><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></h4>
-                          <div className="evidence-sheet-links">
-                            <a href={pageFirstViewportSheetHref(selected, page.pageId)} target="_blank" rel="noreferrer">First viewport sheet</a>
-                            <a href={pageFlowSheetHref(selected, page.pageId)} target="_blank" rel="noreferrer">Page flow sheet</a>
-                          </div>
-                          <ScreenshotDrawer report={selected} refs={Object.keys(page.screenshots)} title="Raw page screenshots" />
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section>
-                    <h3>Evidence Files</h3>
-                    <div className="artifact-grid">
-                      {artifactLinks(selected).filter((item) => ["Evidence Index", "Evidence JSONL", "Visual System", "Route Templates", "Experience Timing", "Annotations"].includes(item.label)).map((item) => (
-                        <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
-                      ))}
-                    </div>
-
-                    {selected.competitorBenchmarks.length > 0 ? (
-                      <>
-                        <h3>Competitors</h3>
-                        <table>
-                          <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
-                          <tbody>
-                            {selected.competitorBenchmarks.map((competitor) => (
-                              <tr key={competitor.competitorUrl}>
-                                <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{new URL(competitor.competitorUrl).hostname}</a></td>
-                                <td>{competitor.scorecard.overallScore}</td>
-                                <td>{competitor.pagesReviewed}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </>
-                    ) : null}
-                  </section>
-                </div>
-              ) : null}
-
-              {evidenceView === "issues" ? (
-                <section>
-                  <h3>Issue Evidence</h3>
-                  <div className="findings">
-                    {sortedIssues.length > 0 ? sortedIssues.map((issue) => <IssueCard issue={issue} report={selected} key={issue.issueId} />) : <p className="muted">No grouped issues are available for this audit.</p>}
-                  </div>
-                </section>
-              ) : null}
-
-              {evidenceView === "agent" ? (
-                <section>
-                  <h3>Agent Review Evidence</h3>
-                  {selected.agentVisualReview ? (
-                    <div className="page-list">
-                      <article className="review-summary">
-                        <div className="finding-meta">
-                          <span>{selected.agentVisualReview.reviewer}</span>
-                          <span>{selected.agentVisualReview.confidence} confidence</span>
-                          <span>{selected.agentVisualReview.screenshotsReviewed.length} reviewed screenshots</span>
-                        </div>
-                        <ScreenshotDrawer report={selected} refs={selected.agentVisualReview.screenshotsReviewed} title="Agent reviewed screenshots" />
-                      </article>
-                      {selected.agentVisualReview.visualFindings.map((finding) => (
-                        <article className="finding" key={finding.reviewId}>
-                          <div className="finding-meta">
-                            <span>{finding.severity}</span>
-                            <span>{finding.category}</span>
-                            <span>{finding.confidence}</span>
-                          </div>
-                          <h4>{finding.title}</h4>
-                          <p>{finding.observation}</p>
-                          <p><strong>Recommendation:</strong> {finding.recommendation}</p>
-                          <ScreenshotDrawer report={selected} refs={finding.evidenceRefs} title="Agent finding screenshots" />
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted">Agent visual review has not been imported. Build the review pack, inspect the gallery and PNG sheets, then import a validated visual-review JSON.</p>
-                  )}
-                </section>
-              ) : null}
-
-              {evidenceView === "raw" ? (
-                <section>
-                  <h3>Raw Screenshots</h3>
-                  <div className="raw-shot-grid">
-                    {allScreenshots(selected).map((screenshot) => (
-                      <a className="shot" key={screenshot.id} href={screenshot.href} target="_blank" rel="noreferrer">
-                        <img src={screenshot.href} alt={screenshot.label} loading="lazy" />
-                        <span>{screenshot.label}</span>
-                      </a>
-                    ))}
-                  </div>
-
-                  {selected.screenshotAnnotations.length > 0 ? (
-                    <>
-                      <h3>Annotations</h3>
-                      <div className="annotation-list">
-                        {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
-                          <a key={annotation.annotationId} href={auditFileHref(selected, annotation.annotatedScreenshot.path)} target="_blank" rel="noreferrer">
-                            {annotation.label}
-                          </a>
-                        ))}
-                      </div>
-                    </>
-                  ) : null}
-                </section>
-              ) : null}
-            </div>
-          ) : null}
-
-          {activeTab === "agentReview" && selected.agentVisualReview ? (
-            <div className="report-grid">
-              <section>
-                <h3>Agent Review</h3>
-                <article className="review-summary">
-                  <div className="finding-meta">
-                    <span>{selected.agentVisualReview.reviewer}</span>
-                    <span>{selected.agentVisualReview.confidence} confidence</span>
-                    <span>{selected.agentVisualReview.screenshotsReviewed.length} screenshots</span>
-                  </div>
-                  <p>{selected.agentVisualReview.reviewedAt}</p>
-                  <ScreenshotDrawer report={selected} refs={selected.agentVisualReview.screenshotsReviewed} title="Reviewed screenshots" />
-                </article>
-                <div className="page-list">
-                  {selected.agentVisualReview.pageReviews.map((review) => (
-                    <article className="page-card" key={review.pageId}>
-                      <h4>{review.url}</h4>
-                      <p><strong>First viewport:</strong> {review.firstViewport}</p>
-                      <p><strong>Hierarchy:</strong> {review.hierarchy}</p>
-                      <p><strong>Navigation:</strong> {review.navigation}</p>
-                      <p><strong>Mobile:</strong> {review.mobile}</p>
-                      <p><strong>Trust and proof:</strong> {review.trustAndProof}</p>
-                      <ScreenshotDrawer report={selected} refs={review.screenshotsReviewed} title="Page review screenshots" />
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <h3>Visual Findings</h3>
-                <div className="findings">
-                  {selected.agentVisualReview.visualFindings.map((finding) => (
-                    <article className="finding" key={finding.reviewId}>
-                      <div className="finding-meta">
-                        <span>{finding.severity}</span>
-                        <span>{finding.category}</span>
-                        <span>{finding.confidence}</span>
-                      </div>
-                      <h4>{finding.title}</h4>
-                      <p>{finding.observation}</p>
-                      <p><strong>Recommendation:</strong> {finding.recommendation}</p>
-                      <ScreenshotDrawer report={selected} refs={finding.evidenceRefs} title="Agent evidence screenshots" />
-                    </article>
-                  ))}
-                </div>
-
-                <h3>Strengths And Risks</h3>
-                <div className="briefing">
-                  <section>
-                    <h4>Strengths</h4>
-                    <ul>{selected.agentVisualReview.strengths.map((item) => <li key={item}>{item}</li>)}</ul>
-                  </section>
-                  <section>
-                    <h4>Risks</h4>
-                    <ul>{selected.agentVisualReview.risks.map((item) => <li key={item}>{item}</li>)}</ul>
-                  </section>
-                  {selected.agentVisualReview.limitations.length > 0 ? (
-                    <section>
-                      <h4>Limitations</h4>
-                      <ul>{selected.agentVisualReview.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
-                    </section>
-                  ) : null}
-                </div>
-              </section>
-            </div>
-          ) : null}
-
-          {activeTab === "agent" ? (
-            <div className="report-grid">
-              <section>
-                <h3>Agent Bundle</h3>
-                <div className="artifact-grid">
-                  {artifactLinks(selected).map((item) => (
-                    <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
-                  ))}
-                </div>
-              </section>
-
-              <section>
-                <h3>Exports</h3>
-                {selected.ticketExports ? (
-                  <div className="artifact-grid">
-                    {Object.entries(selected.ticketExports).map(([key, value]) => (
-                      <a key={key} href={toProjectHref(value, selected)} target="_blank" rel="noreferrer">{label(key)}</a>
-                    ))}
-                  </div>
-                ) : <p>No ticket exports found.</p>}
-
-                <h3>Closeout Commands</h3>
-                <pre className="command-block">{`node apps/cli/dist/index.js report lint ${auditRootFor(selected)} --strict
-node apps/cli/dist/index.js review-pack build --report ${auditRootFor(selected)}
-node apps/cli/dist/index.js agent-review import --report ${auditRootFor(selected)} --file agent-runs/<agent>/visual-review.json
-node apps/cli/dist/index.js business-grade lint --report ${auditRootFor(selected)}
-node apps/cli/dist/index.js benchmark --report ${auditRootFor(selected)}
-node apps/cli/dist/index.js plan build --report ${auditRootFor(selected)}`}</pre>
-              </section>
-            </div>
+            </>
           ) : null}
         </section>
       ) : null}
-    </main>
+    </div>
+  );
+}
+
+function AgentReviewSection({ report }: { report: AuditReport }) {
+  if (!report.agentVisualReview) return null;
+  return (
+    <div className="content-grid">
+      <section>
+        <SectionTitle eyebrow="Imported review" title="Agent review" />
+        <article className="review-summary">
+          <div className="finding-meta">
+            <span>{report.agentVisualReview.reviewer}</span>
+            <span>{report.agentVisualReview.confidence} confidence</span>
+            <span>{report.agentVisualReview.screenshotsReviewed.length} screenshots</span>
+          </div>
+          <p>{formatDate(report.agentVisualReview.reviewedAt)}</p>
+          <ScreenshotDrawer report={report} refs={report.agentVisualReview.screenshotsReviewed} title="Reviewed screenshots" />
+        </article>
+        <div className="page-list">
+          {report.agentVisualReview.pageReviews.map((review) => (
+            <article className="page-card" key={review.pageId}>
+              <h4>{review.url}</h4>
+              <p><strong>First viewport:</strong> {review.firstViewport}</p>
+              <p><strong>Hierarchy:</strong> {review.hierarchy}</p>
+              <p><strong>Navigation:</strong> {review.navigation}</p>
+              <p><strong>Mobile:</strong> {review.mobile}</p>
+              <p><strong>Trust and proof:</strong> {review.trustAndProof}</p>
+              <ScreenshotDrawer report={report} refs={review.screenshotsReviewed} title="Page review screenshots" />
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle eyebrow="Visual calls" title="Visual findings" />
+        <div className="findings">
+          {report.agentVisualReview.visualFindings.map((finding) => (
+            <article className="finding finding-card" key={finding.reviewId}>
+              <div className="finding-meta">
+                <span>{finding.severity}</span>
+                <span>{finding.category}</span>
+                <span>{finding.confidence}</span>
+              </div>
+              <h4>{finding.title}</h4>
+              <p>{finding.observation}</p>
+              <p><strong>Recommendation:</strong> {finding.recommendation}</p>
+              <ScreenshotDrawer report={report} refs={finding.evidenceRefs} title="Agent evidence screenshots" />
+            </article>
+          ))}
+        </div>
+
+        <SectionTitle eyebrow="Judgment context" title="Strengths and risks" />
+        <div className="briefing">
+          <section>
+            <h4>Strengths</h4>
+            <ul>{report.agentVisualReview.strengths.map((item) => <li key={item}>{item}</li>)}</ul>
+          </section>
+          <section>
+            <h4>Risks</h4>
+            <ul>{report.agentVisualReview.risks.map((item) => <li key={item}>{item}</li>)}</ul>
+          </section>
+          {report.agentVisualReview.limitations.length > 0 ? (
+            <section>
+              <h4>Limitations</h4>
+              <ul>{report.agentVisualReview.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
+            </section>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AgentBundleSection({ report }: { report: AuditReport }) {
+  return (
+    <div className="content-grid">
+      <section>
+        <SectionTitle eyebrow="Machine handoff" title="Agent bundle" />
+        <div className="artifact-grid">
+          {artifactLinks(report).map((item) => (
+            <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionTitle eyebrow="Downstream" title="Exports" />
+        {report.ticketExports ? (
+          <div className="artifact-grid">
+            {Object.entries(report.ticketExports).map(([key, value]) => (
+              <a key={key} href={toProjectHref(value, report)} target="_blank" rel="noreferrer">{label(key)}</a>
+            ))}
+          </div>
+        ) : <p>No ticket exports found.</p>}
+
+        <SectionTitle eyebrow="Verification" title="Closeout commands" />
+        <pre className="command-block">{`node apps/cli/dist/index.js report lint ${auditRootFor(report)} --strict
+node apps/cli/dist/index.js review-pack build --report ${auditRootFor(report)}
+node apps/cli/dist/index.js agent-review import --report ${auditRootFor(report)} --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report ${auditRootFor(report)}
+node apps/cli/dist/index.js benchmark --report ${auditRootFor(report)}
+node apps/cli/dist/index.js plan build --report ${auditRootFor(report)}`}</pre>
+      </section>
+    </div>
   );
 }
 
 function IssueCard({ issue, report }: { issue: AuditReport["groupedIssues"][number]; report: AuditReport }) {
   return (
-    <article className="finding issue">
-      <div className="finding-meta">
-        <span>{issue.severity}</span>
-        <span>{issue.category}</span>
-        <span>{issue.source}</span>
-        <span>{issue.priorityScore}</span>
+    <article className={`finding issue finding-card severity-${issue.severity.toLowerCase()}`}>
+      <div className="card-topline">
+        <div className="finding-meta">
+          <span>{issue.severity}</span>
+          <span>{issue.category}</span>
+          <span>{issue.source}</span>
+        </div>
+        <strong className="priority-chip">{issue.priorityScore}</strong>
       </div>
       <h4>{issue.title}</h4>
       <p>{issue.observation}</p>
-      <p><strong>Recommendation:</strong> {issue.recommendation}</p>
-      <p><strong>Affected:</strong> {issue.affectedPages.map((page) => page.section ? `${page.url} (${page.section})` : page.url).join(", ")}</p>
+      <div className="recommendation-box">
+        <span>Recommendation</span>
+        <p>{issue.recommendation}</p>
+      </div>
+      <p className="affected"><strong>Affected:</strong> {issue.affectedPages.map((page) => page.section ? `${page.url} (${page.section})` : page.url).join(", ")}</p>
       <div className="evidence-sheet-links">
         <a href={issueSheetHref(report, issue.issueId)} target="_blank" rel="noreferrer">Issue evidence sheet</a>
       </div>
-      <ul>
+      <ul className="criteria-list">
         {issue.acceptanceCriteria.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
       </ul>
       <ScreenshotDrawer report={report} refs={issue.evidenceRefs} title="Issue evidence screenshots" />
@@ -657,16 +808,21 @@ function IssueCard({ issue, report }: { issue: AuditReport["groupedIssues"][numb
 
 function FindingCard({ finding, report }: { finding: AuditReport["findings"][number]; report: AuditReport }) {
   return (
-    <article className="finding">
-      <div className="finding-meta">
-        <span>{finding.severity}</span>
-        <span>{finding.category}</span>
-        <span>{finding.source ?? "deterministic"}</span>
-        <span>{finding.priorityScore}</span>
+    <article className={`finding finding-card severity-${finding.severity.toLowerCase()}`}>
+      <div className="card-topline">
+        <div className="finding-meta">
+          <span>{finding.severity}</span>
+          <span>{finding.category}</span>
+          <span>{finding.source ?? "deterministic"}</span>
+        </div>
+        <strong className="priority-chip">{finding.priorityScore}</strong>
       </div>
       <h4>{finding.title}</h4>
       <p>{finding.observation}</p>
-      <p><strong>Recommendation:</strong> {finding.recommendation}</p>
+      <div className="recommendation-box">
+        <span>Recommendation</span>
+        <p>{finding.recommendation}</p>
+      </div>
       <small>{finding.evidence.url} / {finding.evidence.viewport ?? "any viewport"} / {finding.evidence.section ?? "section unspecified"}</small>
       <ScreenshotDrawer report={report} refs={finding.evidence.screenshotRefs} title="Finding evidence screenshots" />
     </article>
@@ -678,7 +834,10 @@ function ScreenshotDrawer({ report, refs, title }: { report: AuditReport; refs: 
   const missingRefs = missingScreenshotRefsFor(report, refs);
   return (
     <details className="screenshot-drawer">
-      <summary>{title} ({screenshots.length || refs.length})</summary>
+      <summary>
+        <span>{title}</span>
+        <strong>{screenshots.length || refs.length}</strong>
+      </summary>
       {screenshots.length > 0 ? (
         <>
           <div className="shot-grid">
@@ -695,6 +854,186 @@ function ScreenshotDrawer({ report, refs, title }: { report: AuditReport; refs: 
         <p className="muted">{refs.length > 0 ? refs.join(", ") : "No screenshot reference was attached."}</p>
       )}
     </details>
+  );
+}
+
+function ScoreGauge({ score, status }: { score: number; status: AuditReport["businessGradeStatus"] }) {
+  const radius = 48;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.max(0, Math.min(score, 100)) / 100) * circumference;
+  return (
+    <div className="score-gauge" aria-label={`Overall score ${score} of 100`}>
+      <svg viewBox="0 0 120 120" role="img" aria-hidden="true">
+        <circle className="gauge-track" cx="60" cy="60" r={radius} />
+        <circle className={`gauge-value gauge-value--${status}`} cx="60" cy="60" r={radius} strokeDasharray={circumference} strokeDashoffset={offset} />
+      </svg>
+      <div>
+        <strong>{score}</strong>
+        <span>/ 100</span>
+      </div>
+    </div>
+  );
+}
+
+function ScoreBreakdownChart({ report }: { report: AuditReport }) {
+  const entries = Object.entries(report.scorecard.subscores).sort(([, a], [, b]) => b.score - a.score);
+  return (
+    <article className="viz-panel">
+      <SectionTitle eyebrow="Score shape" title="Subscores" />
+      <div className="bar-list">
+        {entries.map(([key, value]) => (
+          <div className="bar-row" key={key}>
+            <div>
+              <span>{label(key)}</span>
+              <small>{label(value.confidence)} confidence</small>
+            </div>
+            <div className="bar-track" aria-hidden="true">
+              <span style={{ width: `${Math.max(3, Math.min(value.score, 100))}%` }} />
+            </div>
+            <strong>{value.score}</strong>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function IssueDistribution({ report }: { report: AuditReport }) {
+  const issueSource = report.groupedIssues.length > 0 ? report.groupedIssues : report.findings;
+  const severity = ["critical", "high", "medium", "low"].map((key) => ({
+    key,
+    count: issueSource.filter((item) => item.severity.toLowerCase() === key).length
+  }));
+  const maxSeverity = Math.max(1, ...severity.map((item) => item.count));
+  const categories = topCounts(issueSource.map((item) => item.category), 5);
+  const maxCategory = Math.max(1, ...categories.map((item) => item.count));
+
+  return (
+    <article className="viz-panel">
+      <SectionTitle eyebrow="Issue load" title="Distribution" />
+      <div className="mini-bars">
+        {severity.map((item) => (
+          <div className="mini-bar" key={item.key}>
+            <span style={{ height: `${Math.max(8, (item.count / maxSeverity) * 100)}%` }} />
+            <strong>{item.count}</strong>
+            <small>{label(item.key)}</small>
+          </div>
+        ))}
+      </div>
+      <div className="category-bars">
+        {categories.length > 0 ? categories.map((item) => (
+          <div className="category-row" key={item.key}>
+            <span>{label(item.key)}</span>
+            <div><i style={{ width: `${Math.max(6, (item.count / maxCategory) * 100)}%` }} /></div>
+            <strong>{item.count}</strong>
+          </div>
+        )) : <p className="muted">No category distribution is available yet.</p>}
+      </div>
+    </article>
+  );
+}
+
+function WorkflowMap({ status }: { status: AuditReport["businessGradeStatus"] }) {
+  const steps = [
+    ["Capture", "Rendered pages"],
+    ["Review Pack", "Screenshots"],
+    ["Agent Review", status === "business_grade" ? "Imported" : "Pending"],
+    ["Business Gate", status === "business_grade" ? "Pass" : "Held"]
+  ];
+  return (
+    <article className="viz-panel workflow-panel">
+      <SectionTitle eyebrow="Gate path" title="Workflow state" />
+      <div className="workflow-map">
+        {steps.map(([title, body], index) => (
+          <React.Fragment key={title}>
+            <div className={`workflow-node ${index < 2 || status === "business_grade" ? "complete" : "pending"}`}>
+              <strong>{title}</strong>
+              <span>{body}</span>
+            </div>
+            {index < steps.length - 1 ? <span className="workflow-arrow" aria-hidden="true" /> : null}
+          </React.Fragment>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function HistoryScoreChart({ history }: { history: AuditSummary[] }) {
+  const visible = history.slice(0, 10);
+  if (visible.length === 0) {
+    return (
+      <div className="history-chart empty">
+        <span>No score trend yet</span>
+      </div>
+    );
+  }
+  return (
+    <div className="history-chart" aria-label="Recent audit scores">
+      {visible.map((item, index) => (
+        <span
+          key={`${item.site}-${item.audit}-${index}`}
+          title={`${item.site}: ${item.score ?? 0}`}
+          style={{ height: `${Math.max(8, Math.min(item.score ?? 0, 100))}%` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ historyStats }: { historyStats: ReturnType<typeof summarizeHistory> }) {
+  return (
+    <section className="empty-dashboard">
+      <div>
+        <span className="eyebrow">Ready state</span>
+        <h2>Run or open an audit to load the design cockpit.</h2>
+        <p>
+          The interface is optimized for evidence review: score shape, issue distribution, screenshot drawers, review-pack links,
+          and agent handoff files stay in one place.
+        </p>
+      </div>
+      <div className="empty-diagram" aria-hidden="true">
+        <span>Capture</span>
+        <i />
+        <span>Evidence</span>
+        <i />
+        <span>Review</span>
+        <i />
+        <span>Handoff</span>
+      </div>
+      <div className="empty-metrics">
+        <MetricTile label="Stored runs" value={`${historyStats.total}`} />
+        <MetricTile label="Tracked sites" value={`${historyStats.sites}`} />
+        <MetricTile label="Average score" value={historyStats.averageScore == null ? "-" : `${historyStats.averageScore}`} />
+      </div>
+    </section>
+  );
+}
+
+function MetricTile({ label: labelText, value, detail }: { label: string; value: string; detail?: string }) {
+  return (
+    <div className="metric-tile">
+      <span>{labelText}</span>
+      <strong>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
+    </div>
+  );
+}
+
+function SectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <div className="section-title">
+      <span className="eyebrow">{eyebrow}</span>
+      <h3>{title}</h3>
+    </div>
+  );
+}
+
+function EmptyPanel({ title, body }: { title: string; body: string }) {
+  return (
+    <article className="empty-panel">
+      <h4>{title}</h4>
+      <p>{body}</p>
+    </article>
   );
 }
 
@@ -743,8 +1082,8 @@ function reviewPackLinks(report: AuditReport) {
   ].map(([labelText, file]) => ({ label: labelText, href: reportFileHref(report, file) }));
 }
 
-function reportTabs(report: AuditReport): Array<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent"> {
-  const tabs: Array<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent"> = ["overview", "findings", "implementation", "evidence"];
+function reportTabs(report: AuditReport): ReportTab[] {
+  const tabs: ReportTab[] = ["overview", "findings", "implementation", "evidence"];
   if (report.agentVisualReview) tabs.push("agentReview");
   tabs.push("agent");
   return tabs;
@@ -836,12 +1175,64 @@ function auditBaseHref(report: AuditReport) {
   return report.publicBasePath ?? `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}`;
 }
 
+function summarizeHistory(history: AuditSummary[]) {
+  const scored = history.filter((item) => typeof item.score === "number");
+  const averageScore = scored.length > 0 ? Math.round(scored.reduce((sum, item) => sum + (item.score ?? 0), 0) / scored.length) : null;
+  return {
+    total: history.length,
+    sites: new Set(history.map((item) => item.site)).size,
+    totalFindings: history.reduce((sum, item) => sum + (item.findings ?? 0), 0),
+    averageScore
+  };
+}
+
+function topCounts(values: string[], limit: number) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+function formatRunLabel(item: AuditSummary) {
+  const date = item.generatedAt ? formatDate(item.generatedAt) : item.audit;
+  return item.auditId ? `${date} / ${item.auditId}` : date;
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function businessGradeLabel(status: AuditReport["businessGradeStatus"]) {
+  if (status === "business_grade") return "Business grade passed";
+  if (status === "agent_review_pending") return "Agent review pending";
+  return "Automated scan";
+}
+
 function label(value: string) {
-  return value.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+  return value
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function siteSlug(url: string) {
   return new URL(url).hostname.replace(/^www\./, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function safeHost(url: string) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
 function toProjectHref(value: string, report: AuditReport) {
