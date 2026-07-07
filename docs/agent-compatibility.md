@@ -13,7 +13,7 @@ Inputs:
 - Optional audit root via `--audit-root <dir>` or `DESIGN_REVIEW_AUDIT_ROOT`
 - Optional audit folder name via `--audit-name <name>`
 - Optional suppression file
-- Optional business-grade lane requiring imported agent visual review
+- Business-grade lane requiring imported agent visual review
 
 Output:
 
@@ -54,14 +54,17 @@ Every successful audit writes:
 
 ```bash
 bash scripts/agent-run.sh <url>
-node apps/cli/dist/index.js run <url>
-node apps/cli/dist/index.js run <url> --repo <target-website-source-repo>
-node apps/cli/dist/index.js run <url> --audit-root /path/to/design-review-workflow/audit-reports
+npm run agent -- <url>
+node apps/cli/dist/index.js run <url> --business-grade
+node apps/cli/dist/index.js run <url> --business-grade --repo <target-website-source-repo>
+node apps/cli/dist/index.js run <url> --business-grade --audit-root /path/to/design-review-workflow/audit-reports
+node apps/cli/dist/index.js run <url> # low-level automated-only smoke/CI path
 node apps/cli/dist/index.js workflow --format json
 node apps/cli/dist/index.js latest [site-or-url]
 node apps/cli/dist/index.js doctor
 node apps/cli/dist/index.js report lint <audit-dir> --strict
 node apps/cli/dist/index.js review-pack build --report <audit-dir>
+node apps/cli/dist/index.js agent-review generate --report <audit-dir> --provider auto
 node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
@@ -90,6 +93,7 @@ node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
 - `report/report-dashboard.json`
 - `report/actionability.json`
 - `report/evidence-index.json`
+- `report/evidence-brief.json`
 - `report/evidence.jsonl`
 - `report/implementation-plan.json`
 - `report/repo-analysis.json`
@@ -157,7 +161,7 @@ The workflow must not silently assume the current directory is the target websit
 
 `report lint --strict` validates the technical bundle. `business-grade lint` validates the business-grade claim.
 
-Without an imported strict `AgentVisualReview`, reports remain `automated_scan` or `agent_review_pending`. A repo-capable multimodal agent must inspect the optimized review pack, write a completed visual review JSON with design verdict, style/taste, page reviews, and redesign actions, then validate and import it:
+Without an imported strict `AgentVisualReview`, reports remain `automated_scan` or `agent_review_pending`. A repo-capable multimodal agent must inspect `report/evidence-brief.json` and the optimized review pack, write a completed visual review JSON with design verdict, style/taste, messaging/copy, page reviews, and redesign actions, then validate and import it:
 
 ```bash
 # Normal CLI runs already create the review pack. Use this only to refresh/backfill an existing audit.
@@ -167,7 +171,9 @@ node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agen
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 ```
 
-The strict review artifact must cover every captured page, reference only known screenshots, contain no TODO/template text, include strengths and risks, and provide at least 3 redesign actions unless the site verdict is `no_major_redesign_needed` with detailed rationale. Automated reports do not provide subjective style/taste verdicts.
+If a supported multimodal provider key is configured, `agent-review generate --report <audit-dir> --provider auto` can produce and import the same review artifact automatically. The generated artifact still has to pass the same validation and business-grade gates.
+
+The strict review artifact must cover every captured page, reference only known screenshots, contain no TODO/template text, include strengths and risks, include site-level and per-page copywriting/messaging judgment, and provide at least 3 redesign actions unless the site verdict is `no_major_redesign_needed` with detailed rationale. Automated reports do not provide subjective style/taste verdicts.
 
 The recommended review order is machine-readable in `report/agent-review-pack/review-pack-manifest.json`:
 

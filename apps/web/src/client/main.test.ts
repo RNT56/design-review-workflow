@@ -197,6 +197,7 @@ function reportFixture(auditId: string, withAgentReview: boolean) {
           designVerdict: {
             readiness: "targeted_redesign_recommended",
             styleAndTaste: "The fixture page feels clean and practical, but the CTA area needs more confidence and visual emphasis.",
+            messagingAndCopy: "The fixture copy explains the general offer, but it needs sharper CTA wording and more proof near the decision point.",
             audienceFit: "The visual language fits a professional audience that wants a quick read and clear next step.",
             brandFit: "The brand impression is coherent enough for the fixture but would benefit from stronger proof placement.",
             strongestDesignQualities: ["The first viewport keeps the offer readable and avoids unnecessary decoration."],
@@ -222,6 +223,7 @@ function reportFixture(auditId: string, withAgentReview: boolean) {
               visualSystemCoherence: "The fixture has a coherent type and spacing system with room to clarify action treatment.",
               accessibilityBasics: "The visible text hierarchy is readable in the fixture screenshot.",
               styleAndTaste: "The page feels restrained and modern enough, but it lacks a decisive action moment.",
+              messagingAndCopy: "The page copy is understandable, but the CTA label and supporting proof should be more specific to the user decision.",
               redesignAdvice: "Redesign the first viewport so message, proof, and CTA form one stronger decision unit.",
               notes: []
             }

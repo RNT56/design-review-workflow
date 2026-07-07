@@ -67,5 +67,6 @@ A finding is removed or downgraded when it:
 - Imported `report/agent-visual-review.json`
 - Reviewed screenshot references that exist in `report/screenshot-manifest.json`
 - Page-by-page visual notes
+- Site-level and page-level copywriting/messaging notes
 - Actionable grouped issues with evidence, recommendations, and acceptance criteria
 - No unsupported analytics, heatmap, revenue, user-behavior, competitor, or market claims

@@ -272,6 +272,59 @@ export const CssSignalsSchema = z.object({
 });
 export type CssSignals = z.infer<typeof CssSignalsSchema>;
 
+export const PageReviewSignalsSchema = z.object({
+  headline: z.object({
+    text: z.string().optional(),
+    specificity: z.enum(["missing", "generic", "specific"]),
+    wordCount: z.number().int().min(0),
+    reason: z.string().optional()
+  }),
+  ctas: z.object({
+    labels: z.array(z.string()).default([]),
+    primaryLabel: z.string().optional(),
+    actionOrientedCount: z.number().int().min(0).default(0),
+    vagueLabels: z.array(z.string()).default([])
+  }),
+  proof: z.object({
+    hasProofSignal: z.boolean().default(false),
+    proofTerms: z.array(z.string()).default([]),
+    hasRiskReversal: z.boolean().default(false),
+    riskReversalTerms: z.array(z.string()).default([])
+  }),
+  firstViewport: z.object({
+    hasH1: z.boolean().default(false),
+    hasAction: z.boolean().default(false),
+    hasProofSignal: z.boolean().default(false),
+    desktopWordCount: z.number().int().min(0).default(0),
+    desktopComponentCount: z.number().int().min(0).default(0),
+    mobileWordCount: z.number().int().min(0).optional(),
+    mobileComponentCount: z.number().int().min(0).optional()
+  }),
+  mobileDesktop: z.object({
+    desktopActionLabels: z.array(z.string()).default([]),
+    mobileActionLabels: z.array(z.string()).default([]),
+    missingPrimaryActionOnMobile: z.boolean().default(false),
+    desktopNavigationCount: z.number().int().min(0).default(0),
+    mobileNavigationCount: z.number().int().min(0).default(0),
+    mobileSmallTapTargets: z.number().int().min(0).default(0)
+  }),
+  contentDensity: z.object({
+    visibleWordCount: z.number().int().min(0).default(0),
+    sectionCount: z.number().int().min(0).default(0),
+    averageSectionWords: z.number().min(0).default(0)
+  }),
+  visualSystem: z.object({
+    fontFamilyCount: z.number().int().min(0).default(0),
+    fontSizeCount: z.number().int().min(0).default(0),
+    colorCount: z.number().int().min(0).default(0),
+    backgroundColorCount: z.number().int().min(0).default(0),
+    borderRadiusCount: z.number().int().min(0).default(0),
+    lowContrastPairs: z.number().int().min(0).default(0),
+    fragmentationSignals: z.array(z.string()).default([])
+  })
+});
+export type PageReviewSignals = z.infer<typeof PageReviewSignalsSchema>;
+
 export const PageEvidenceSchema = z.object({
   pageId: z.string(),
   url: z.string().url(),
@@ -299,6 +352,7 @@ export const PageEvidenceSchema = z.object({
     footerText: z.string().optional()
   }),
   cssSignals: CssSignalsSchema.optional(),
+  reviewSignals: PageReviewSignalsSchema.optional(),
   performance: PerformanceSummarySchema.optional(),
   accessibility: AccessibilitySummarySchema.optional()
 });
@@ -369,6 +423,7 @@ export const AgentPageReviewSchema = z.object({
   composition: z.string().min(20),
   navigation: z.string().min(20),
   ctaClarity: z.string().min(20),
+  messagingAndCopy: z.string().min(20),
   mobile: z.string().min(20),
   trustAndProof: z.string().min(20),
   visualSystemCoherence: z.string().min(20),
@@ -382,6 +437,7 @@ export type AgentPageReview = z.infer<typeof AgentPageReviewSchema>;
 export const AgentDesignVerdictSchema = z.object({
   readiness: DesignReadinessSchema,
   styleAndTaste: z.string().min(40),
+  messagingAndCopy: z.string().min(40),
   audienceFit: z.string().min(40),
   brandFit: z.string().min(40),
   strongestDesignQualities: z.array(z.string().min(20)).min(1),

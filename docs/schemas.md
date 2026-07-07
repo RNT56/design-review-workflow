@@ -35,8 +35,11 @@ Captured evidence includes:
 - `text`
 - `structure`
 - `cssSignals`
+- `reviewSignals`
 - `performance`
 - `accessibility`
+
+`reviewSignals` are deterministic, non-subjective inputs for the visual-review lane: headline specificity, CTA inventory, vague CTA labels, proof and risk-reversal terms, first-viewport H1/action/proof presence, desktop/mobile action deltas, tap-target counts, text density, and visual-system fragmentation counts.
 
 ## Finding
 
@@ -65,9 +68,9 @@ Business-grade reports require an imported visual review from the repo-capable m
 - `reviewer`
 - `reviewedAt`
 - `auditId`
-- `designVerdict`: readiness, style/taste, audience fit, brand fit, strongest qualities, weakest risks, redesign direction, rationale, confidence, limitations
+- `designVerdict`: readiness, style/taste, messaging/copy, audience fit, brand fit, strongest qualities, weakest risks, redesign direction, rationale, confidence, limitations
 - `screenshotsReviewed`
-- `pageReviews`: one completed review per captured page, covering first viewport, hierarchy, composition, navigation, CTA clarity, mobile, trust/proof, visual-system coherence, accessibility basics, style/taste, and redesign advice
+- `pageReviews`: one completed review per captured page, covering first viewport, hierarchy, composition, navigation, CTA clarity, messaging/copy, mobile, trust/proof, visual-system coherence, accessibility basics, style/taste, and redesign advice
 - `visualFindings`: defect-style visual findings when evidence supports them
 - `redesignActions`: prioritized evidence-linked redesign recommendations
 - `strengths`
@@ -107,6 +110,7 @@ Raw screenshots remain unchanged. Contact sheets and gallery files are derived s
 - `gallery.path`
 - `recommendedReviewOrder`
 - `sheets`
+- `evidenceBrief`
 - `statistics`
 
 Agents should follow `recommendedReviewOrder`: first viewports, grouped issue evidence, page-flow sheets, then raw screenshots. `contact-sheets/all-pages.png` is a compatibility overview, not the primary inspection artifact.

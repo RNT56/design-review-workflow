@@ -461,6 +461,10 @@ function renderDesignVerdict(report: AuditReport, options: DashboardRenderOption
           <p>${escapeHtml(verdict.styleAndTaste)}</p>
         </article>
         <article>
+          <h3>Messaging And Copy</h3>
+          <p>${escapeHtml(verdict.messagingAndCopy)}</p>
+        </article>
+        <article>
           <h3>Redesign Direction</h3>
           <p>${escapeHtml(verdict.redesignDirection)}</p>
         </article>
@@ -571,6 +575,7 @@ function renderAgentReview(report: AuditReport, options: DashboardRenderOptions)
             ${renderReviewNote("Hierarchy", review.hierarchy)}
             ${renderReviewNote("Composition", review.composition)}
             ${renderReviewNote("CTA clarity", review.ctaClarity)}
+            ${renderReviewNote("Messaging/copy", review.messagingAndCopy)}
             ${renderReviewNote("Mobile feel", review.mobile)}
             ${renderReviewNote("Trust/proof", review.trustAndProof)}
             ${renderReviewNote("Visual system", review.visualSystemCoherence)}
@@ -617,6 +622,7 @@ function renderArtifactLinks(options: DashboardRenderOptions): string {
     { href: `${options.reportBase}workflow-manifest.json`, text: "Workflow manifest" },
     { href: `${options.reportBase}handoff.json`, text: "Agent handoff JSON" },
     { href: `${options.reportBase}agent-execution-plan.md`, text: "Agent execution plan" },
+    { href: `${options.reportBase}evidence-brief.json`, text: "Evidence brief" },
     { href: `${options.reportBase}grouped-issues.json`, text: "Grouped issues JSON" },
     { href: `${options.reportBase}business-grade-gate.json`, text: "Business-grade gate" },
     { href: `${options.reportBase}validation.json`, text: "Validation JSON" },

@@ -19,6 +19,7 @@ import { groupFindings } from "./grouping.js";
 type FindingDraft = Omit<Finding, "findingId" | "source" | "priorityScore" | "relatedFindings">;
 
 const actionWords = /\b(start|get|try|buy|book|contact|request|schedule|download|subscribe|sign up|learn|compare|demo|call|order|shop|anfragen|kontakt|buchen|kaufen|testen|starten|demo)\b/i;
+const weakCtaLabels = /^(learn more|read more|more|click here|submit|go|continue|weiter|mehr|mehr erfahren|hier klicken)$/i;
 
 export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[], paths: AuditPaths): Promise<AuditReport> {
   const website = inferWebsiteType(pages, config.industry);
@@ -138,6 +139,26 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
     }));
   }
 
+  if (h1Text && page.reviewSignals?.firstViewport.desktopWordCount !== undefined && page.reviewSignals.firstViewport.desktopWordCount < 18 && ["homepage", "landing", "service", "product", "pricing"].includes(page.pageType)) {
+    drafts.push(draft(page, {
+      title: "Hero message lacks supporting copy",
+      category: "content_design",
+      severity: "medium",
+      impact: "medium",
+      effort: "low",
+      confidence: "medium",
+      section: "hero",
+      screenshotRefs: [primaryScreenshot],
+      textQuotes: [h1Text],
+      observation: `The first viewport contains about ${page.reviewSignals.firstViewport.desktopWordCount} words in captured section evidence, leaving little support around the primary headline.`,
+      whyItMatters: "A headline often needs short supporting copy to explain audience, outcome, proof, or next-step context before users act.",
+      recommendation: "Add concise supporting copy that explains the offer, who it is for, and why the primary action is worth taking.",
+      owner: ["copywriter", "marketing"],
+      acceptanceCriteria: ["Hero support copy clarifies the offer without becoming dense.", "The support copy adds specificity not already present in the headline.", "The primary CTA still remains visually dominant."],
+      designPrinciples: ["clarity", "message hierarchy"]
+    }));
+  }
+
   const actionControls = [...page.text.buttons, ...page.text.links].filter((node) => actionWords.test(node.text));
   if (["homepage", "landing", "pricing", "service", "product", "contact"].includes(page.pageType) && actionControls.length === 0) {
     drafts.push(draft(page, {
@@ -155,6 +176,27 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
       owner: ["designer", "copywriter", "product"],
       acceptanceCriteria: ["One primary CTA is visible above the fold where appropriate.", "CTA copy names the next action.", "Secondary actions are visually subordinate."],
       designPrinciples: ["hierarchy", "affordance"]
+    }));
+  }
+
+  const vagueCtas = page.reviewSignals?.ctas.vagueLabels.length ? page.reviewSignals.ctas.vagueLabels : [...page.text.buttons, ...page.text.links].map((node) => node.text).filter((label) => weakCtaLabels.test(label.trim()));
+  if (vagueCtas.length > 0 && ["homepage", "landing", "pricing", "service", "product", "contact"].includes(page.pageType)) {
+    drafts.push(draft(page, {
+      title: "CTA copy is too vague to explain the next step",
+      category: "conversion",
+      severity: "medium",
+      impact: "medium",
+      effort: "low",
+      confidence: "medium",
+      section: "primary actions",
+      screenshotRefs: [primaryScreenshot],
+      textQuotes: vagueCtas.slice(0, 3),
+      observation: `Captured action labels include vague text such as ${vagueCtas.slice(0, 3).map((label) => `"${label}"`).join(", ")}.`,
+      whyItMatters: "Generic action labels make users infer what will happen next, especially when several actions compete on the same page.",
+      recommendation: "Rewrite primary and repeated CTA labels so each one names the specific next action or destination.",
+      owner: ["copywriter", "designer", "product"],
+      acceptanceCriteria: ["Primary CTA copy names the next action.", "Repeated secondary links describe their destination.", "Generic labels are kept only where surrounding context makes them unambiguous."],
+      designPrinciples: ["information scent", "clarity"]
     }));
   }
 
@@ -237,7 +279,7 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
     }));
   }
 
-  if ((page.cssSignals?.fonts.length ?? 0) > 4 || (page.cssSignals?.fontSizes.length ?? 0) > 14) {
+  if ((page.reviewSignals?.visualSystem.fontFamilyCount ?? page.cssSignals?.fonts.length ?? 0) > 4 || (page.reviewSignals?.visualSystem.fontSizeCount ?? page.cssSignals?.fontSizes.length ?? 0) > 14) {
     drafts.push(draft(page, {
       title: "Typography system appears fragmented",
       category: "design_system",
@@ -247,7 +289,7 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
       confidence: "medium",
       section: "typography",
       screenshotRefs: [primaryScreenshot],
-      observation: `Captured CSS samples include ${page.cssSignals?.fonts.length ?? 0} font-family values and ${page.cssSignals?.fontSizes.length ?? 0} font-size values.`,
+      observation: `Captured CSS samples include ${page.reviewSignals?.visualSystem.fontFamilyCount ?? page.cssSignals?.fonts.length ?? 0} font-family values and ${page.reviewSignals?.visualSystem.fontSizeCount ?? page.cssSignals?.fontSizes.length ?? 0} font-size values.`,
       whyItMatters: "Fragmented typography makes pages feel less coherent and increases implementation debt.",
       recommendation: "Consolidate type usage into a small documented scale for headings, body copy, UI labels, and captions.",
       owner: ["designer", "developer"],
@@ -275,6 +317,44 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
     }));
   }
 
+  if (["homepage", "landing", "pricing", "service", "product"].includes(page.pageType) && page.reviewSignals?.firstViewport.hasAction && !page.reviewSignals.firstViewport.hasProofSignal) {
+    drafts.push(draft(page, {
+      title: "First decision point lacks nearby proof",
+      category: "trust",
+      severity: "medium",
+      impact: "medium",
+      effort: "medium",
+      confidence: "low",
+      section: "first viewport",
+      screenshotRefs: [primaryScreenshot],
+      observation: "The first viewport includes an action path, but captured first-viewport text does not include obvious proof or reassurance language.",
+      whyItMatters: "Users asked to act early need enough credibility or risk-reduction context to trust the next step.",
+      recommendation: "Place concise proof or reassurance near the primary CTA, such as a customer result, testimonial, certification, guarantee, or risk-reversal note.",
+      owner: ["marketing", "designer", "copywriter"],
+      acceptanceCriteria: ["A proof or reassurance element appears close to the primary action.", "The proof is specific and attributable where possible.", "The added proof does not crowd the primary message."],
+      designPrinciples: ["credibility", "decision support"]
+    }));
+  }
+
+  if ((page.reviewSignals?.firstViewport.desktopWordCount ?? 0) > 140 || (page.reviewSignals?.firstViewport.desktopComponentCount ?? 0) > 32) {
+    drafts.push(draft(page, {
+      title: "First viewport appears overloaded with content",
+      category: "ux",
+      severity: "medium",
+      impact: "medium",
+      effort: "medium",
+      confidence: "medium",
+      section: "first viewport",
+      screenshotRefs: [primaryScreenshot],
+      observation: `The first viewport contains about ${page.reviewSignals?.firstViewport.desktopWordCount ?? 0} words and ${page.reviewSignals?.firstViewport.desktopComponentCount ?? 0} sampled interactive or structural components.`,
+      whyItMatters: "Dense first screens make it harder for visitors to identify the page purpose, hierarchy, and primary action quickly.",
+      recommendation: "Reduce first-viewport density by prioritizing one message, one primary action, and only the proof needed for the immediate decision.",
+      owner: ["designer", "copywriter", "product"],
+      acceptanceCriteria: ["The first viewport has one dominant message and action.", "Secondary content moves below the first decision point.", "Desktop and mobile screenshots remain scannable after the change."],
+      designPrinciples: ["hierarchy", "progressive disclosure"]
+    }));
+  }
+
   if (page.performance?.status === "completed" && (page.performance.loadEventMs ?? 0) > 4_000) {
     drafts.push(draft(page, {
       title: "Captured load timing may hurt perceived performance",
@@ -294,8 +374,28 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
     }));
   }
 
+  if (page.reviewSignals?.mobileDesktop.missingPrimaryActionOnMobile) {
+    drafts.push(draft(page, {
+      title: "Primary action may be missing on mobile",
+      category: "mobile",
+      severity: "high",
+      impact: "high",
+      effort: "medium",
+      confidence: "medium",
+      section: "mobile first viewport",
+      screenshotRefs: [mobileScreenshot],
+      textQuotes: page.reviewSignals.mobileDesktop.desktopActionLabels.slice(0, 3),
+      observation: `Desktop evidence includes the primary action "${page.reviewSignals.mobileDesktop.desktopActionLabels[0]}", but the same action label was not detected in mobile evidence.`,
+      whyItMatters: "A page can look acceptable on desktop while the mobile journey loses the next step users need most.",
+      recommendation: "Ensure the primary action remains visible, specific, and reachable in the mobile first viewport or mobile navigation state.",
+      owner: ["designer", "developer", "product"],
+      acceptanceCriteria: ["The mobile first viewport or opened navigation exposes the primary action.", "Mobile CTA copy matches or clearly corresponds to the desktop primary action.", "A new mobile screenshot confirms the action is reachable."],
+      designPrinciples: ["mobile continuity", "conversion clarity"]
+    }));
+  }
+
   const smallTargets = page.structure.components.filter(
-    (component) => component.viewport === "desktop" && ["a", "button"].includes(component.type) && component.box && (component.box.width < 36 || component.box.height < 32)
+    (component) => component.viewport === "mobile" && ["a", "button"].includes(component.type) && component.box && (component.box.width < 36 || component.box.height < 32)
   );
   if (smallTargets.length > 8) {
     drafts.push(draft(page, {

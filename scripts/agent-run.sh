@@ -13,4 +13,4 @@ else
 fi
 npx playwright install chromium
 npm run build
-node apps/cli/dist/index.js run "$@"
+node apps/cli/dist/index.js run --business-grade "$@"

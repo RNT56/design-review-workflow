@@ -9,7 +9,7 @@ Clone or open this workflow repo, then run a design review for:
 
 <URL>
 
-Use the repo instructions. Run the primary agentic workflow. Do not enter login, checkout completion, account, admin, or payment areas. Produce the final audit bundle path, quality-gate status, and top evidence-backed findings.
+Use the repo instructions. Run the primary business-grade agentic workflow. Do not enter login, checkout completion, account, admin, or payment areas. Produce the final audit bundle path, quality-gate status, business-grade gate status, and top evidence-backed findings.
 ```
 
 For source-backed implementation planning:
@@ -33,7 +33,7 @@ Clone or open this workflow repo, then run a business-grade design review for:
 
 <URL>
 
-Run the business-grade lane. Inspect the generated contact sheets, gallery, and raw screenshots yourself, write a strict AgentVisualReview JSON with design verdict, style/taste, page reviews, and redesign actions, validate it, import it, run both report lint and business-grade lint, then report the final bundle path and business-grade gate status. Do not claim business-grade quality until the visual review import passes.
+Run the business-grade lane. Inspect the generated evidence brief, contact sheets, gallery, and raw screenshots yourself, write a strict AgentVisualReview JSON with design verdict, style/taste, messaging/copy, page reviews, and redesign actions, validate it, import it, run both report lint and business-grade lint, then report the final bundle path and business-grade gate status. Do not claim business-grade quality until the visual review import passes.
 ```
 
 ## One Command
@@ -50,19 +50,26 @@ Equivalent manual sequence:
 npm ci
 npx playwright install chromium
 npm run build
+npm run agent -- https://example.com
+```
+
+Low-level automated-only scan for smoke tests and CI:
+
+```bash
 node apps/cli/dist/index.js run https://example.com
 ```
 
 With read-only source mapping:
 
 ```bash
-node apps/cli/dist/index.js run https://example.com --repo /path/to/target-website-repo
+npm run agent -- https://example.com --repo /path/to/target-website-repo
 ```
 
 When an agent launches the workflow while its shell is inside another website repository, point output back to this workflow repo:
 
 ```bash
 node /path/to/design-review-workflow/apps/cli/dist/index.js run https://example.com \
+  --business-grade \
   --audit-root /path/to/design-review-workflow/audit-reports
 ```
 
@@ -74,6 +81,13 @@ node apps/cli/dist/index.js run https://example.com --business-grade
 # inspects the gallery and optimized PNG sheets, then writes agent-runs/<agent>/visual-review.json.
 node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report <audit-dir>
+```
+
+Optional provider-backed visual review, after `.env` contains a supported multimodal provider key:
+
+```bash
+node apps/cli/dist/index.js agent-review generate --report <audit-dir> --provider auto
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 ```
 
@@ -106,6 +120,7 @@ node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file desig
 node apps/cli/dist/index.js export --report <audit-dir> --profile review
 node apps/cli/dist/index.js export --report <audit-dir> --profile full
 node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import
+node apps/cli/dist/index.js agent-review generate --report <audit-dir> --provider auto
 ```
 
 ## Required Closeout
@@ -129,6 +144,7 @@ Agents must report:
 - `report/agent-execution-plan.md`
 - `report/implementation-plan.json`
 - `report/evidence-index.json`
+- `report/evidence-brief.json`
 - `report/evidence.jsonl`
 - `report/repo-analysis.json`
 - `report/source-candidates.json`
@@ -160,6 +176,7 @@ The stable human-readable entrypoint is `index.html` at the audit root. It is ge
 - `report/findings.json`
 - `report/actionability.json`
 - `report/evidence-index.json`
+- `report/evidence-brief.json`
 - `report/screenshot-manifest.json`
 - `report/agent-review-pack/review-pack-manifest.json`
 - `report/grouped-issues.json`
@@ -202,6 +219,8 @@ The workflow does not upload to cloud storage. If upload is needed, use a separa
 ## Visual Review Order
 
 For business-grade work, use `report/agent-review-pack/review-pack-manifest.json` as the review source of truth:
+
+Read `report/evidence-brief.json` before the screenshot pass for structured copy, CTA, proof, mobile and visual-system context.
 
 1. First viewports: `report/contact-sheets/first-viewports.png` and per-page `*-first-viewports.png` sheets.
 2. Grouped issue evidence: `report/contact-sheets/issues/*.png`.

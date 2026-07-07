@@ -47,6 +47,7 @@ export function renderHtmlReport(report: AuditReport): string {
             <p><strong>Hierarchy:</strong> ${escapeHtml(review.hierarchy)}</p>
             <p><strong>Composition:</strong> ${escapeHtml(review.composition)}</p>
             <p><strong>CTA clarity:</strong> ${escapeHtml(review.ctaClarity)}</p>
+            <p><strong>Messaging/copy:</strong> ${escapeHtml(review.messagingAndCopy)}</p>
             <p><strong>Mobile:</strong> ${escapeHtml(review.mobile)}</p>
             <p><strong>Trust/proof:</strong> ${escapeHtml(review.trustAndProof)}</p>
             <p><strong>Visual system:</strong> ${escapeHtml(review.visualSystemCoherence)}</p>
@@ -362,6 +363,7 @@ function renderDesignVerdict(report: AuditReport): string {
     <div class="verdict-grid">
       <article class="verdict-card"><h3>Readiness</h3><p>${escapeHtml(label(verdict.readiness))}</p><p>${escapeHtml(verdict.rationale)}</p></article>
       <article class="verdict-card"><h3>Style And Taste</h3><p>${escapeHtml(verdict.styleAndTaste)}</p></article>
+      <article class="verdict-card"><h3>Messaging And Copy</h3><p>${escapeHtml(verdict.messagingAndCopy)}</p></article>
       <article class="verdict-card"><h3>Audience Fit</h3><p>${escapeHtml(verdict.audienceFit)}</p></article>
       <article class="verdict-card"><h3>Brand Fit</h3><p>${escapeHtml(verdict.brandFit)}</p></article>
       <article class="verdict-card"><h3>Redesign Direction</h3><p>${escapeHtml(verdict.redesignDirection)}</p></article>

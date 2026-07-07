@@ -13,6 +13,14 @@ export type LlmRequest = {
   system: string;
   input: unknown;
   schemaName?: string;
+  images?: LlmImageInput[];
+};
+
+export type LlmImageInput = {
+  name: string;
+  mediaType: "image/png" | "image/jpeg" | "image/webp";
+  data: string;
+  detail?: "low" | "high" | "auto";
 };
 
 export type LlmResponse = {

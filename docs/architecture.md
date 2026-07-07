@@ -27,7 +27,7 @@ Interprets config, creates the audit folder, coordinates capture, stores interme
 
 ### Evidence Capture
 
-Uses Playwright to render public pages. It stores screenshots, page inventory, extracted text, DOM summaries, CSS signals, accessibility basics, and performance basics.
+Uses Playwright to render public pages. It stores screenshots, page inventory, extracted text, DOM summaries, CSS signals, deterministic copy/layout review signals, accessibility basics, and performance basics.
 
 ### Structured Understanding
 
@@ -37,7 +37,7 @@ Classifies pages by URL and visible evidence. Unknown pages remain `unknown` wit
 
 The MVP ships deterministic reviewers that emit structured `Finding` objects. These reviewers triage evidence and produce useful automated findings, but they do not unlock business-grade visual judgment by themselves.
 
-High-fidelity design judgment is handled through an explicit multimodal agent lane: the workflow generates a review pack, the repo-capable agent running the workflow visually inspects the gallery, optimized PNG sheets, and raw screenshots, and `agent-review import` validates the completed `AgentVisualReview` artifact before merging it.
+High-fidelity design judgment is handled through an explicit multimodal agent lane: the workflow generates a review pack and evidence brief, the repo-capable agent running the workflow visually inspects the gallery, optimized PNG sheets, raw screenshots, and structured copy/layout signals, and `agent-review import` validates the completed `AgentVisualReview` artifact before merging it.
 
 ### Synthesis And QA
 
@@ -72,6 +72,7 @@ Each export includes `export-manifest.json`, `checksums.sha256`, and `LICENSE-NO
 The design-review bundle adds stable operational artifacts:
 
 - `report/evidence.jsonl`
+- `report/evidence-brief.json`
 - `report/route-templates.json`
 - `report/visual-system.json`
 - `report/experience-timing.json`
@@ -107,15 +108,17 @@ These are design-review equivalents of a robust agentic workflow bundle. They do
 
 The workflow must not silently assume the current directory is the website source repository.
 
-### Optional Multimodal Agent Visual Review
+### Multimodal Agent Visual Review
 
-Business-grade mode is local and keyless. `review-pack build` writes screenshot manifests, optimized contact sheets, a static filterable gallery, per-page prompts, a JSON schema, and a template. The running agent must inspect those screenshots and write `agent-runs/<agent>/visual-review.json`.
+The default agent path is business-grade and local-first. `scripts/agent-run.sh` and `npm run agent -- <url>` call `run --business-grade`, which writes screenshot manifests, optimized contact sheets, a static filterable gallery, `report/evidence-brief.json`, per-page prompts, a JSON schema, and a template. The running agent must inspect those screenshots and structured signals, then write `agent-runs/<agent>/visual-review.json`.
 
 The review-pack order is first viewports, grouped issue evidence, page-flow sheets split into readable chunks, then raw screenshots. `contact-sheets/all-pages.png` is retained as a compatibility overview. Raw screenshots remain unchanged; sheets and gallery files are derived inspection surfaces.
 
-`agent-review import` validates the review against the captured screenshot inventory, rejects TODO/template text, shallow generic verdicts, unknown screenshots, and unsupported analytics/user/competitor claims. A passing artifact must include site-level design verdict, style/taste assessment, page-level visual judgment for every captured page, and prioritized redesign actions or a detailed no-major-redesign rationale. The import converts visual findings into the normal finding pipeline, turns redesign actions into ticket-ready recommendations, refreshes grouped issues, scoring, tickets, report surfaces, and writes `report/agent-visual-review.json`.
+`agent-review import` validates the review against the captured screenshot inventory, rejects TODO/template text, shallow generic verdicts, unknown screenshots, and unsupported analytics/user/competitor claims. A passing artifact must include site-level design verdict, style/taste assessment, messaging/copy assessment, page-level visual and copy judgment for every captured page, and prioritized redesign actions or a detailed no-major-redesign rationale. The import converts visual findings into the normal finding pipeline, turns redesign actions into ticket-ready recommendations, refreshes grouped issues, scoring, tickets, report surfaces, and writes `report/agent-visual-review.json`.
 
 `business-grade lint` passes only after that import succeeds.
+
+`agent-review generate --report <audit-dir> --provider auto` is an optional provider-backed lane. It uses configured multimodal provider adapters, saves raw provider output under `agent-runs/`, writes the same `AgentVisualReview` schema, and must pass the same validate/import/business-grade gates.
 
 ### Validation And Handoff
 

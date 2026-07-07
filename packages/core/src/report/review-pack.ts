@@ -7,6 +7,7 @@ import { AgentVisualReview, AuditReport } from "../schemas/audit.js";
 import { readReportFromAuditDir } from "../storage/index.js";
 import { AuditPaths, createNestedAuditPaths } from "../storage/project.js";
 import { ensureDir, writeJson, writeText } from "../utils/fs.js";
+import { buildEvidenceBrief } from "./evidence-brief.js";
 import { buildScreenshotManifest, ScreenshotManifest, writeScreenshotManifest } from "./screenshot-manifest.js";
 
 export type ReviewPackResult = {
@@ -17,6 +18,7 @@ export type ReviewPackResult = {
   template: string;
   schema: string;
   instructions: string;
+  evidenceBrief: string;
   contactSheets: string[];
   pagePrompts: string[];
 };
@@ -37,6 +39,10 @@ type ReviewPackManifest = {
   auditId: string;
   generatedAt: string;
   gallery: {
+    path: string;
+    absolutePath: string;
+  };
+  evidenceBrief: {
     path: string;
     absolutePath: string;
   };
@@ -66,6 +72,10 @@ export async function buildReviewPack(auditDir: string): Promise<ReviewPackResul
   await ensureDir(contactSheetRoot);
 
   const manifest = await writeScreenshotManifest(report, paths);
+  const evidenceBrief = buildEvidenceBrief(report);
+  const evidenceBriefPath = path.join(paths.report, "evidence-brief.json");
+  await writeJson(evidenceBriefPath, evidenceBrief);
+  await writeJson(path.join(packRoot, "evidence-brief.json"), evidenceBrief);
   await writeJson(path.join(packRoot, "agent-review-template.json"), reviewTemplate(report, manifest));
   await writeJson(path.join(packRoot, "agent-review.schema.json"), agentReviewJsonSchema());
   await writeText(path.join(packRoot, "README.md"), renderReviewPackReadme(report, paths));
@@ -92,6 +102,7 @@ export async function buildReviewPack(auditDir: string): Promise<ReviewPackResul
     template: path.join(packRoot, "agent-review-template.json"),
     schema: path.join(packRoot, "agent-review.schema.json"),
     instructions: path.join(packRoot, "README.md"),
+    evidenceBrief: evidenceBriefPath,
     contactSheets: sheets.map((sheet) => sheet.absolutePath),
     pagePrompts
   };
@@ -106,6 +117,7 @@ function reviewTemplate(report: AuditReport, manifest: ScreenshotManifest): Agen
     designVerdict: {
       readiness: "targeted_redesign_recommended",
       styleAndTaste: "TODO: describe the visual style, taste level, freshness, restraint, and whether the page feels modern and appropriate for the audience.",
+      messagingAndCopy: "TODO: assess the site-level messaging and copy: clarity, specificity, tone, audience fit, proof, persuasion, and whether CTA wording supports the intended decision.",
       audienceFit: "TODO: explain whether the design language matches the likely target audience, their expectations, and the decision they need to make.",
       brandFit: "TODO: explain whether the visible brand impression feels credible, distinct, coherent, and aligned with the offer.",
       strongestDesignQualities: ["TODO: name a concrete visual strength supported by screenshot evidence."],
@@ -125,6 +137,7 @@ function reviewTemplate(report: AuditReport, manifest: ScreenshotManifest): Agen
       composition: "TODO: inspect layout balance, spatial rhythm, density, cropping, section transitions, and whether the composition feels intentional.",
       navigation: "TODO: inspect navigation clarity, orientation, information scent, and whether page-to-page movement is obvious.",
       ctaClarity: "TODO: inspect whether the primary next action is visually dominant, specific, and placed at the right decision moment.",
+      messagingAndCopy: "TODO: inspect page copy for clarity, tone, specificity, audience fit, CTA wording, proof, and persuasion based on screenshots and evidence-brief signals.",
       mobile: "TODO: inspect mobile composition, cropping, density, CTA placement, and whether important content survives the small viewport.",
       trustAndProof: "TODO: inspect trust signals, proof, portfolio/service credibility, reassurance, and whether claims are visually supported.",
       visualSystemCoherence: "TODO: inspect whether type, color, spacing, card styles, borders, radii, and imagery form a coherent visual system.",
@@ -170,11 +183,12 @@ function agentReviewJsonSchema() {
       auditId: { type: "string", minLength: 1 },
       designVerdict: {
         type: "object",
-        required: ["readiness", "styleAndTaste", "audienceFit", "brandFit", "strongestDesignQualities", "weakestDesignRisks", "redesignDirection", "rationale", "confidence", "limitations"],
+        required: ["readiness", "styleAndTaste", "messagingAndCopy", "audienceFit", "brandFit", "strongestDesignQualities", "weakestDesignRisks", "redesignDirection", "rationale", "confidence", "limitations"],
         additionalProperties: false,
         properties: {
           readiness: { enum: ["no_major_redesign_needed", "minor_refinement_needed", "targeted_redesign_recommended", "major_redesign_recommended"] },
           styleAndTaste: { type: "string", minLength: 40 },
+          messagingAndCopy: { type: "string", minLength: 40 },
           audienceFit: { type: "string", minLength: 40 },
           brandFit: { type: "string", minLength: 40 },
           strongestDesignQualities: { type: "array", minItems: 1, items: { type: "string", minLength: 20 } },
@@ -200,6 +214,7 @@ function agentReviewJsonSchema() {
             "composition",
             "navigation",
             "ctaClarity",
+            "messagingAndCopy",
             "mobile",
             "trustAndProof",
             "visualSystemCoherence",
@@ -218,6 +233,7 @@ function agentReviewJsonSchema() {
             composition: { type: "string", minLength: 20 },
             navigation: { type: "string", minLength: 20 },
             ctaClarity: { type: "string", minLength: 20 },
+            messagingAndCopy: { type: "string", minLength: 20 },
             mobile: { type: "string", minLength: 20 },
             trustAndProof: { type: "string", minLength: 20 },
             visualSystemCoherence: { type: "string", minLength: 20 },
@@ -323,16 +339,17 @@ This pack is for the repo-capable multimodal agent running the workflow. It inte
 ## Required Steps
 
 1. Open \`review-pack-manifest.json\`.
-2. Follow the recommended order: first viewports, issue evidence, page flows, then raw screenshots.
-3. Use \`gallery/index.html\` for filtering by page, viewport, issue, screenshot kind, and source.
-4. Inspect the optimized PNG sheets under \`../contact-sheets/\`.
-5. Use \`agent-review-template.json\` as the starting shape.
-6. Replace every TODO with concrete visual observations based on screenshots.
-7. Complete \`designVerdict\` with readiness, style/taste, audience fit, brand fit, redesign direction, strengths, risks, rationale, confidence, and limitations.
-8. Complete every \`pageReviews[]\` entry, including composition, CTA clarity, visual-system coherence, accessibility basics, style/taste notes, and redesign advice.
-9. Add at least 3 concrete \`redesignActions[]\`, or use \`designVerdict.readiness = "no_major_redesign_needed"\` with a detailed evidence-backed rationale.
-10. Save your completed artifact at \`agent-runs/<agent>/visual-review.json\` or another local path.
-11. Validate and import it:
+2. Read \`evidence-brief.json\` for structured copy, CTA, proof, mobile, and visual-system signals.
+3. Follow the recommended order: first viewports, issue evidence, page flows, then raw screenshots.
+4. Use \`gallery/index.html\` for filtering by page, viewport, issue, screenshot kind, and source.
+5. Inspect the optimized PNG sheets under \`../contact-sheets/\`.
+6. Use \`agent-review-template.json\` as the starting shape.
+7. Replace every TODO with concrete visual observations based on screenshots and evidence-brief signals.
+8. Complete \`designVerdict\` with readiness, style/taste, messaging/copy, audience fit, brand fit, redesign direction, strengths, risks, rationale, confidence, and limitations.
+9. Complete every \`pageReviews[]\` entry, including composition, CTA clarity, messaging/copy, visual-system coherence, accessibility basics, style/taste notes, and redesign advice.
+10. Add at least 3 concrete \`redesignActions[]\`, or use \`designVerdict.readiness = "no_major_redesign_needed"\` with a detailed evidence-backed rationale.
+11. Save your completed artifact at \`agent-runs/<agent>/visual-review.json\` or another local path.
+12. Validate and import it:
 
 \`\`\`bash
 node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
@@ -346,7 +363,7 @@ node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}
 - Do not leave TODO/template text anywhere in the review artifact.
 - Do not claim analytics, heatmaps, users, revenue, competitor performance, or brand rules unless they are explicitly supplied as evidence.
 - Prefer grouped, root-cause issues over repeated page-level symptoms.
-- Cover style/taste, hierarchy, composition, first viewport, CTA clarity, trust/proof, portfolio narrative or service persuasion, bilingual consistency when visible, mobile feel, visual-system coherence, accessibility basics, and concrete redesign direction.
+- Cover style/taste, hierarchy, composition, first viewport, CTA clarity, messaging/copy, trust/proof, portfolio narrative or service persuasion, bilingual consistency when visible, mobile feel, visual-system coherence, accessibility basics, and concrete redesign direction.
 - Automated scans must not be treated as style/taste verdicts; business-grade style judgment comes from this completed artifact.
 - If confidence is low, say why in \`limitations\`.
 `;
@@ -377,6 +394,7 @@ async function writePagePrompts(report: AuditReport, manifest: ScreenshotManifes
         "- Hierarchy: do typography, spacing, contrast, and layout make the important content dominant?",
         "- Composition: does the page feel intentionally arranged, balanced, and scannable?",
         "- CTA clarity: is the primary next action visually and verbally clear?",
+        "- Messaging and copy: is the headline, support copy, tone, proof, and CTA wording specific, audience-fit, and persuasive?",
         "- Trust/proof: are credibility signals present, specific, and close to decision points?",
         "- Mobile composition: does the small viewport preserve the intent without awkward cropping or excessive density?",
         "- Visual-system coherence: do colors, type, spacing, components, imagery, and interaction states feel consistent?",
@@ -384,7 +402,7 @@ async function writePagePrompts(report: AuditReport, manifest: ScreenshotManifes
         "- Style and taste: does the page feel current, credible, appropriate, overdesigned, underdesigned, generic, or distinctive?",
         "- Redesign advice: what specifically should be preserved, quieted, emphasized, removed, or redesigned?",
         "",
-        "Write findings only when screenshot evidence supports a defect claim. Always complete page review fields and redesign advice.",
+        "Use evidence-brief.json for objective copy, CTA, proof, mobile, and visual-system signals. Write findings only when screenshot evidence supports a defect claim. Always complete page review fields and redesign advice.",
         ""
       ].join("\n")
     );
@@ -783,6 +801,10 @@ function buildReviewPackManifest(
     gallery: {
       path: toPosix(path.relative(paths.report, galleryPath)),
       absolutePath: galleryPath
+    },
+    evidenceBrief: {
+      path: "evidence-brief.json",
+      absolutePath: path.join(paths.report, "evidence-brief.json")
     },
     recommendedReviewOrder: [
       { step: "first_viewports", title: "Review first viewports before detailed flows.", paths: byType("first_viewports") },

@@ -71,6 +71,10 @@ export function applyAgentVisualReview(report: AuditReport, review: AgentVisualR
         body: review.designVerdict.styleAndTaste
       },
       {
+        title: "Messaging and copy",
+        body: review.designVerdict.messagingAndCopy
+      },
+      {
         title: "Brand and audience fit",
         body: `${review.designVerdict.audienceFit} ${review.designVerdict.brandFit}`
       },

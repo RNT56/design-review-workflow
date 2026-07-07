@@ -9,6 +9,7 @@ import { writeTicketExports } from "./ticket-exports.js";
 import { writeAgentBundle } from "./agent-bundle.js";
 import { writeBusinessGradeArtifacts } from "./business-grade-artifacts.js";
 import { groupFindings } from "../review/grouping.js";
+import { writeEvidenceBrief } from "./evidence-brief.js";
 
 export type ReportOutputs = {
   json?: string;
@@ -28,6 +29,7 @@ export async function writeReports(config: AuditConfig, report: AuditReport, pat
   report.businessGradeStatus = report.businessGradeStatus ?? "automated_scan";
   report.groupedIssues = report.groupedIssues.length > 0 ? report.groupedIssues : groupFindings(report.findings, report.agentVisualReview);
   report.ticketExports = await writeTicketExports(report, paths);
+  await writeEvidenceBrief(report, paths);
 
   outputs.json = path.join(paths.report, "report.json");
   await writeJson(outputs.json, report);

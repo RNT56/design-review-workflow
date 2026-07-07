@@ -34,6 +34,8 @@ export function renderMarkdownReport(report: AuditReport): string {
     lines.push("");
     lines.push(`Style and taste: ${verdict.styleAndTaste}`);
     lines.push("");
+    lines.push(`Messaging and copy: ${verdict.messagingAndCopy}`);
+    lines.push("");
     lines.push(`Audience fit: ${verdict.audienceFit}`);
     lines.push("");
     lines.push(`Brand fit: ${verdict.brandFit}`);
@@ -110,6 +112,7 @@ export function renderMarkdownReport(report: AuditReport): string {
       lines.push(`Hierarchy: ${review.hierarchy}`);
       lines.push(`Composition: ${review.composition}`);
       lines.push(`CTA clarity: ${review.ctaClarity}`);
+      lines.push(`Messaging/copy: ${review.messagingAndCopy}`);
       lines.push(`Mobile: ${review.mobile}`);
       lines.push(`Trust/proof: ${review.trustAndProof}`);
       lines.push(`Visual system: ${review.visualSystemCoherence}`);

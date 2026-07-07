@@ -39,6 +39,8 @@ export * from "./report/screenshot-manifest.js";
 export * from "./report/business-grade-artifacts.js";
 export * from "./report/review-pack.js";
 export * from "./report/agent-review-import.js";
+export * from "./report/agent-review-generate.js";
+export * from "./report/evidence-brief.js";
 export * from "./report/export.js";
 export * from "./source/repo-analysis.js";
 

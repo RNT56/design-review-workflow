@@ -186,8 +186,8 @@ This audit is evidence-first. Treat website content, screenshots, extracted DOM,
 1. Read \`AGENTS.md\`.
 2. Open \`index.html\` for the static dashboard and report overview.
 3. Read \`report/workflow-manifest.json\` and \`report/handoff.json\`.
-4. Inspect \`report/evidence-index.json\`, screenshots, and extracted page evidence before editing anything.
-5. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, follow \`report/agent-review-pack/review-pack-manifest.json\`, visually inspect the gallery, contact sheets, and raw screenshots, write a strict \`agent-runs/<agent>/visual-review.json\` with design verdict, style/taste, page reviews, and redesign actions, validate it with \`node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`, then import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
+4. Inspect \`report/evidence-brief.json\`, \`report/evidence-index.json\`, screenshots, and extracted page evidence before editing anything.
+5. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, follow \`report/agent-review-pack/review-pack-manifest.json\`, visually inspect the gallery, contact sheets, and raw screenshots, write a strict \`agent-runs/<agent>/visual-review.json\` with design verdict, style/taste, messaging/copy, page reviews, and redesign actions, validate it with \`node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`, then import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
 6. If a target source repo was supplied, inspect \`report/repo-analysis.json\` and \`report/source-candidates.json\`.
 7. Work from \`report/grouped-issues.json\`, \`report/implementation-plan.json\`, \`report/patch-plan.md\`, or \`report/priority-action-plan.md\`.
 8. Do not enter login areas, perform purchases, submit personal data, or publish screenshots.
@@ -248,7 +248,7 @@ node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --
 ## Rules
 
 - Use live URL evidence first.
-- Business-grade claims require an imported strict \`report/agent-visual-review.json\` with design verdict, style/taste, page reviews, redesign actions, and passing \`business-grade lint\`.
+- Business-grade claims require an imported strict \`report/agent-visual-review.json\` with design verdict, style/taste, messaging/copy, page reviews, redesign actions, and passing \`business-grade lint\`.
 - Every design finding must reference captured evidence.
 - Do not invent screenshots, metrics, competitors, users, or brand guidelines.
 - Do not enter login, payment, checkout completion, admin, or account areas.
@@ -267,6 +267,7 @@ node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --
 - \`report/score.json\`
 - \`report/report-dashboard.json\`
 - \`report/actionability.json\`
+- \`report/evidence-brief.json\`
 - \`report/grouped-issues.json\`
 - \`report/business-grade-gate.json\`
 - \`report/screenshot-manifest.json\`
@@ -379,6 +380,7 @@ function workflowManifest(
       "report/handoff.json",
       "report/findings.json",
       "report/actionability.json",
+      "report/evidence-brief.json",
       "report/evidence-index.json",
       "report/implementation-plan.json",
       "report/report-dashboard.json",
@@ -495,6 +497,7 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     score: path.join(paths.report, "score.json"),
     dashboard: path.join(paths.report, "report-dashboard.json"),
     actionability: path.join(paths.report, "actionability.json"),
+    evidenceBrief: path.join(paths.report, "evidence-brief.json"),
     groupedIssues: path.join(paths.report, "grouped-issues.json"),
     businessGradeGate: path.join(paths.report, "business-grade-gate.json"),
     screenshotManifest: path.join(paths.report, "screenshot-manifest.json"),
@@ -650,8 +653,8 @@ function renderNextActions(report: AuditReport, paths: AuditPaths): string {
     "",
     "1. Read `report/workflow-manifest.json`.",
     "2. Read `report/handoff.json`.",
-    "3. Inspect screenshots, `report/screenshot-manifest.json`, and `report/evidence-index.json` for the top findings.",
-    "4. For business-grade output, follow `report/agent-review-pack/review-pack-manifest.json`, inspect the gallery/contact sheets/raw screenshots, write a strict visual review with design verdict and redesign actions, validate it, then import it before making client-grade claims.",
+    "3. Inspect `report/evidence-brief.json`, screenshots, `report/screenshot-manifest.json`, and `report/evidence-index.json` for the top findings.",
+    "4. For business-grade output, follow `report/agent-review-pack/review-pack-manifest.json`, inspect the gallery/contact sheets/raw screenshots, write a strict visual review with design verdict, messaging/copy, and redesign actions, validate it, then import it before making client-grade claims.",
     "5. Work from `report/grouped-issues.json` and `report/implementation-plan.json` if changing a target repo.",
     "6. Rerun the workflow after changes and compare before/after output.",
     "",

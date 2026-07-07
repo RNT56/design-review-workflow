@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { PNG } from "pngjs";
-import { AuditConfig, PageEvidence, ProgressEvent, ScreenshotRef, ViewportConfig } from "../schemas/audit.js";
+import { AuditConfig, PageEvidence, ProgressEvent, ScreenshotRef, ViewportConfig, ViewportName } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
 import { writeJson } from "../utils/fs.js";
 import { stableId } from "../utils/id.js";
@@ -12,6 +12,7 @@ import { discoverPages } from "./discovery.js";
 import { extractPage } from "./extraction.js";
 import { capturePerformanceSummary } from "./performance.js";
 import { classifyPage } from "../review/classification.js";
+import { buildPageReviewSignals } from "./review-signals.js";
 
 export type CaptureResult = {
   pages: PageEvidence[];
@@ -67,7 +68,7 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
   const pageId = stableId("page", normalizedUrl, index);
   const slug = slugFromUrl(normalizedUrl);
   const screenshots: Record<string, ScreenshotRef> = {};
-  let desktopExtraction: Awaited<ReturnType<typeof extractPage>> | null = null;
+  const extractions: Partial<Record<ViewportName, Awaited<ReturnType<typeof extractPage>>>> = {};
   let accessibility: PageEvidence["accessibility"];
   let performance: PageEvidence["performance"];
 
@@ -81,8 +82,10 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
       screenshots[aboveFold.id] = aboveFold;
       screenshots[fullPage.id] = fullPage;
 
+      const extraction = await extractPage(page, viewport.name);
+      extractions[viewport.name] = extraction;
+
       if (viewport.name === "desktop") {
-        desktopExtraction = await extractPage(page, "desktop");
         accessibility = await captureAccessibilitySummary(page);
         performance = await capturePerformanceSummary(page, normalizedUrl, paths.auditRoot, pageId);
       }
@@ -98,9 +101,11 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
     }
   }
 
+  const desktopExtraction = extractions.desktop;
   if (!desktopExtraction) {
     throw new Error(`Failed to extract desktop evidence for ${normalizedUrl}`);
   }
+  const mobileExtraction = extractions.mobile;
 
   const classification = classifyPage(normalizedUrl, desktopExtraction);
 
@@ -125,12 +130,13 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
       visibleTextSample: desktopExtraction.visibleTextSample
     },
     structure: {
-      sections: desktopExtraction.sections,
-      components: desktopExtraction.components,
+      sections: [...desktopExtraction.sections, ...(mobileExtraction?.sections ?? [])],
+      components: [...desktopExtraction.components, ...(mobileExtraction?.components ?? [])],
       navigation: desktopExtraction.navigation,
       footerText: desktopExtraction.footerText
     },
     cssSignals: desktopExtraction.cssSignals,
+    reviewSignals: buildPageReviewSignals(desktopExtraction, mobileExtraction),
     performance,
     accessibility
   };

@@ -28,6 +28,14 @@ export class OpenAiResponsesProvider implements LlmProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
+    const content = [
+      { type: "input_text", text: JSON.stringify(input.input) },
+      ...(input.images ?? []).map((image) => ({
+        type: "input_image",
+        image_url: imageDataUrl(image),
+        detail: image.detail ?? "auto"
+      }))
+    ];
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -38,7 +46,7 @@ export class OpenAiResponsesProvider implements LlmProvider {
         model: this.model,
         input: [
           { role: "system", content: input.system },
-          { role: "user", content: JSON.stringify(input.input) }
+          { role: "user", content }
         ]
       })
     });
@@ -61,6 +69,13 @@ export class OpenRouterProvider implements LlmProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
+    const content = [
+      { type: "text", text: JSON.stringify(input.input) },
+      ...(input.images ?? []).map((image) => ({
+        type: "image_url",
+        image_url: { url: imageDataUrl(image) }
+      }))
+    ];
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -71,7 +86,7 @@ export class OpenRouterProvider implements LlmProvider {
         model: this.model,
         messages: [
           { role: "system", content: input.system },
-          { role: "user", content: JSON.stringify(input.input) }
+          { role: "user", content }
         ]
       })
     });
@@ -94,6 +109,17 @@ export class AnthropicProvider implements LlmProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
+    const content = [
+      { type: "text", text: JSON.stringify(input.input) },
+      ...(input.images ?? []).map((image) => ({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: image.mediaType,
+          data: image.data
+        }
+      }))
+    ];
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -105,7 +131,7 @@ export class AnthropicProvider implements LlmProvider {
         model: this.model,
         max_tokens: 4096,
         system: input.system,
-        messages: [{ role: "user", content: JSON.stringify(input.input) }]
+        messages: [{ role: "user", content }]
       })
     });
     const raw = await parseProviderResponse(response);
@@ -127,6 +153,15 @@ export class GeminiProvider implements LlmProvider {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
+    const parts = [
+      { text: JSON.stringify(input.input) },
+      ...(input.images ?? []).map((image) => ({
+        inlineData: {
+          mimeType: image.mediaType,
+          data: image.data
+        }
+      }))
+    ];
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(this.model)}:generateContent?key=${encodeURIComponent(this.apiKey)}`, {
       method: "POST",
       headers: {
@@ -134,7 +169,7 @@ export class GeminiProvider implements LlmProvider {
       },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: input.system }] },
-        contents: [{ role: "user", parts: [{ text: JSON.stringify(input.input) }] }]
+        contents: [{ role: "user", parts }]
       })
     });
     const raw = await parseProviderResponse(response);
@@ -145,6 +180,10 @@ export class GeminiProvider implements LlmProvider {
       raw
     };
   }
+}
+
+function imageDataUrl(image: NonNullable<LlmRequest["images"]>[number]): string {
+  return `data:${image.mediaType};base64,${image.data}`;
 }
 
 async function parseProviderResponse(response: Response): Promise<Record<string, any>> {

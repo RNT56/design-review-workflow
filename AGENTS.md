@@ -43,6 +43,7 @@ Required outputs for the MVP:
 - Grouped issue inventory
 - Prioritized findings
 - Screenshot references
+- Evidence brief
 - Screenshot manifest and optimized review-pack contact sheets
 - Static review-pack gallery
 - Evidence JSONL
@@ -161,8 +162,8 @@ High-fidelity design judgment must come from the repo-capable multimodal agent r
 
 Strict business-grade visual review requires:
 
-- A site-level `designVerdict` with readiness, style/taste, audience fit, brand fit, strongest qualities, weakest risks, redesign direction, rationale, confidence, and limitations.
-- A completed review for every captured page, including first viewport, hierarchy, composition, CTA clarity, trust/proof, mobile feel, visual-system coherence, accessibility basics, style/taste, and redesign advice.
+- A site-level `designVerdict` with readiness, style/taste, messaging/copy, audience fit, brand fit, strongest qualities, weakest risks, redesign direction, rationale, confidence, and limitations.
+- A completed review for every captured page, including first viewport, hierarchy, composition, CTA clarity, messaging/copy, trust/proof, mobile feel, visual-system coherence, accessibility basics, style/taste, and redesign advice.
 - At least 3 evidence-linked redesign actions, unless `designVerdict.readiness` is `no_major_redesign_needed` with a detailed evidence-backed rationale.
 - No TODO/template text, no unknown screenshot references, and no unsupported analytics/user/revenue/competitor claims.
 
@@ -177,10 +178,10 @@ bash scripts/agent-run.sh <public-url>
 Primary built CLI command:
 
 ```bash
-node apps/cli/dist/index.js run <public-url>
-node apps/cli/dist/index.js run <public-url> --repo <target-website-source-repo>
-node apps/cli/dist/index.js run <public-url> --audit-root /path/to/design-review-workflow/audit-reports
 node apps/cli/dist/index.js run <public-url> --business-grade
+node apps/cli/dist/index.js run <public-url> --business-grade --repo <target-website-source-repo>
+node apps/cli/dist/index.js run <public-url> --business-grade --audit-root /path/to/design-review-workflow/audit-reports
+node apps/cli/dist/index.js run <public-url>  # low-level automated-only smoke/CI path
 ```
 
 Default audit storage:
@@ -222,6 +223,7 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `agent-execution-plan.md`
 - `implementation-plan.json`
 - `evidence-index.json`
+- `evidence-brief.json`
 - `evidence.jsonl`
 - `repo-analysis.json`
 - `source-candidates.json`
@@ -265,6 +267,7 @@ Stable closeout commands:
 ```bash
 node apps/cli/dist/index.js report lint <audit-dir> --strict
 node apps/cli/dist/index.js review-pack build --report <audit-dir>   # refresh/backfill review-pack assets
+node apps/cli/dist/index.js agent-review generate --report <audit-dir> --provider auto
 node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>

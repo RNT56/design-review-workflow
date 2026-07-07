@@ -90,6 +90,7 @@ type AuditReport = {
     designVerdict: {
       readiness: string;
       styleAndTaste: string;
+      messagingAndCopy: string;
       audienceFit: string;
       brandFit: string;
       strongestDesignQualities: string[];
@@ -109,6 +110,7 @@ type AuditReport = {
       composition: string;
       navigation: string;
       ctaClarity: string;
+      messagingAndCopy: string;
       mobile: string;
       trustAndProof: string;
       visualSystemCoherence: string;
@@ -584,6 +586,10 @@ function DesignVerdictPanel({ report }: { report: AuditReport }) {
           <p>{verdict.styleAndTaste}</p>
         </article>
         <article>
+          <h4>Messaging and copy</h4>
+          <p>{verdict.messagingAndCopy}</p>
+        </article>
+        <article>
           <h4>Brand and audience fit</h4>
           <p>{verdict.audienceFit}</p>
           <p>{verdict.brandFit}</p>
@@ -786,6 +792,7 @@ function AgentReviewSection({ report }: { report: AuditReport }) {
           <p>{formatDate(report.agentVisualReview.reviewedAt)}</p>
           <p><strong>Design verdict:</strong> {label(report.agentVisualReview.designVerdict.readiness)}</p>
           <p><strong>Style and taste:</strong> {report.agentVisualReview.designVerdict.styleAndTaste}</p>
+          <p><strong>Messaging and copy:</strong> {report.agentVisualReview.designVerdict.messagingAndCopy}</p>
           <p><strong>Redesign direction:</strong> {report.agentVisualReview.designVerdict.redesignDirection}</p>
           <ScreenshotDrawer report={report} refs={report.agentVisualReview.screenshotsReviewed} title="Reviewed screenshots" />
         </article>
@@ -798,6 +805,7 @@ function AgentReviewSection({ report }: { report: AuditReport }) {
               <p><strong>Composition:</strong> {review.composition}</p>
               <p><strong>Navigation:</strong> {review.navigation}</p>
               <p><strong>CTA clarity:</strong> {review.ctaClarity}</p>
+              <p><strong>Messaging and copy:</strong> {review.messagingAndCopy}</p>
               <p><strong>Mobile:</strong> {review.mobile}</p>
               <p><strong>Trust and proof:</strong> {review.trustAndProof}</p>
               <p><strong>Visual system:</strong> {review.visualSystemCoherence}</p>

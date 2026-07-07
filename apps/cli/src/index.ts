@@ -14,6 +14,7 @@ import {
   evaluateBusinessGradeGate,
   exportAudit,
   fetchFigmaEvidence,
+  generateAgentVisualReview,
   importAgentVisualReview,
   applyAgentVisualReview,
   lintAuditReport,
@@ -244,6 +245,44 @@ agentReview
     console.log(`Hosted static report: ${path.join(String(options.report), "report", "hosted", "index.html")}`);
     if (result.gate.status !== "pass") {
       for (const error of result.gate.errors) console.log(`error: ${error}`);
+      process.exitCode = 1;
+    }
+  });
+agentReview
+  .command("generate")
+  .description("Generate, validate, and import an AgentVisualReview with a configured multimodal provider")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .option("--provider <provider>", "Provider selector; currently only auto", "auto")
+  .option("--max-images <number>", "Maximum review-pack images to send", parseIntValue)
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (options) => {
+    const result = await generateAgentVisualReview(String(options.report), {
+      provider: String(options.provider),
+      maxImages: typeof options.maxImages === "number" ? options.maxImages : undefined
+    });
+    if (options.format === "json") {
+      console.log(JSON.stringify({
+        auditId: result.auditId,
+        auditRoot: result.auditRoot,
+        provider: result.provider,
+        model: result.model,
+        generatedReviewPath: result.generatedReviewPath,
+        rawProviderOutputPath: result.rawProviderOutputPath,
+        canonicalReviewPath: result.canonicalReviewPath,
+        gate: result.gate,
+        hostedReport: path.join(String(options.report), "report", "hosted", "index.html")
+      }, null, 2));
+    } else {
+      console.log(`Generated visual review: ${result.generatedReviewPath}`);
+      console.log(`Raw provider output: ${result.rawProviderOutputPath}`);
+      console.log(`Provider: ${result.provider} / ${result.model}`);
+      console.log(`Imported visual review: ${result.canonicalReviewPath}`);
+      console.log(`Business-grade gate: ${result.gate.status}`);
+      console.log(`Hosted static report: ${path.join(String(options.report), "report", "hosted", "index.html")}`);
+      for (const warning of result.gate.warnings) console.log(`warning: ${warning}`);
+      for (const error of result.gate.errors) console.log(`error: ${error}`);
+    }
+    if (result.gate.status !== "pass") {
       process.exitCode = 1;
     }
   });
@@ -562,7 +601,7 @@ program.parseAsync(process.argv).catch((error) => {
 
 type AgentCloseout = {
   schemaVersion: "design-review-workflow.cli-closeout.v1";
-  status: "ready" | "failed" | "agent_review_required";
+  status: "ready" | "failed" | "agent_review_pending";
   auditId: string;
   url: string;
   mode: string;
@@ -585,6 +624,7 @@ type AgentCloseout = {
     reportPdf?: string;
     agentExecutionPlan: string;
     implementationPlan: string;
+    evidenceBrief: string;
     evidenceIndex: string;
     evidenceJsonl: string;
     sourceCandidates: string;
@@ -676,7 +716,7 @@ function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult, b
   const reportRoot = path.join(result.auditRoot, "report");
   return {
     schemaVersion: "design-review-workflow.cli-closeout.v1",
-    status: lint.status !== "pass" ? "failed" : (businessGate as { status?: string } | undefined)?.status === "fail" ? "agent_review_required" : "ready",
+    status: lint.status !== "pass" ? "failed" : (businessGate as { status?: string } | undefined)?.status === "fail" ? "agent_review_pending" : "ready",
     auditId: result.report.auditId,
     url: result.report.config.url,
     mode: result.report.config.mode,
@@ -703,7 +743,7 @@ async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCl
   const report = (await readOptionalJson(entry.reportJson)) as { businessGradeStatus?: string; scorecard?: { overallScore?: number }; findings?: unknown[] } | undefined;
   const businessGradeStatus = report?.businessGradeStatus ?? "unknown";
   const technicalPass = qualityGate && (qualityGate as { status?: string }).status === "pass";
-  const status = technicalPass ? (businessGradeStatus === "agent_review_pending" ? "agent_review_required" : "ready") : "failed";
+  const status = technicalPass ? (businessGradeStatus === "agent_review_pending" ? "agent_review_pending" : "ready") : "failed";
   return {
     schemaVersion: "design-review-workflow.cli-closeout.v1",
     status,
@@ -734,6 +774,7 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     reportPdf: pdfPath,
     agentExecutionPlan: path.join(reportRoot, "agent-execution-plan.md"),
     implementationPlan: path.join(reportRoot, "implementation-plan.json"),
+    evidenceBrief: path.join(reportRoot, "evidence-brief.json"),
     evidenceIndex: path.join(reportRoot, "evidence-index.json"),
     evidenceJsonl: path.join(reportRoot, "evidence.jsonl"),
     sourceCandidates: path.join(reportRoot, "source-candidates.json"),
@@ -769,8 +810,8 @@ function printCloseout(closeout: AgentCloseout): void {
   console.log(`Validation: ${closeout.files.validation}`);
   console.log(`Quality gate: ${(closeout.qualityGate as { status?: string }).status ?? "unknown"}`);
   console.log(`Business-grade status: ${closeout.businessGradeStatus}`);
-  if (closeout.status === "agent_review_required") {
-    console.log(`Business-grade gate: agent review required`);
+  if (closeout.status === "agent_review_pending") {
+    console.log(`Business-grade gate: agent review pending`);
     console.log(`Review pack: ${closeout.files.reviewPack}`);
     console.log(`Review pack manifest: ${closeout.files.reviewPackManifest}`);
     console.log(`Review gallery: ${closeout.files.reviewPackGallery}`);
@@ -778,6 +819,7 @@ function printCloseout(closeout: AgentCloseout): void {
   console.log(`Score: ${closeout.score}`);
   console.log(`Findings: ${closeout.findings}`);
   console.log(`Read: ${closeout.files.agentExecutionPlan}`);
+  console.log(`Evidence brief: ${closeout.files.evidenceBrief}`);
   console.log(`Source candidates: ${closeout.files.sourceCandidates}`);
   console.log(`Design benchmark: ${closeout.files.designBenchmark}`);
 }

@@ -5,6 +5,7 @@ import { readReportFromAuditDir } from "../storage/index.js";
 import { createNestedAuditPaths } from "../storage/project.js";
 import { writeAgentBundle } from "../report/agent-bundle.js";
 import { writeBusinessGradeArtifacts } from "../report/business-grade-artifacts.js";
+import { writeEvidenceBrief } from "../report/evidence-brief.js";
 import { writeJson } from "../utils/fs.js";
 
 export type ReportLintResult = {
@@ -80,6 +81,7 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
     "report/score.json",
     "report/report-dashboard.json",
     "report/actionability.json",
+    "report/evidence-brief.json",
     "report/evidence-index.json",
     "report/screenshot-manifest.json",
     "report/grouped-issues.json",
@@ -137,6 +139,7 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
   await checkJsonShape(auditDir, "report/report.json", "businessGradeStatus", errors);
   await checkJsonShape(auditDir, "report/report.json", "groupedIssues", errors);
   await checkJsonShape(auditDir, "report/handoff.json", "schemaVersion", errors);
+  await checkJsonShape(auditDir, "report/evidence-brief.json", "pages", errors);
   await checkJsonShape(auditDir, "report/evidence-index.json", "pages", errors);
   await checkJsonShape(auditDir, "report/screenshot-manifest.json", "screenshots", errors);
   await checkJsonShape(auditDir, "report/grouped-issues.json", "length", errors, true);
@@ -255,6 +258,7 @@ async function checkJsonShape(auditDir: string, file: string, requiredKey: strin
 async function refreshAgentBundle(report: AuditReport, auditDir: string, result?: ReportLintResult): Promise<void> {
   const paths = await createNestedAuditPaths(auditDir);
   const hasReviewPack = await exists(path.join(paths.report, "agent-review-pack", "review-pack-manifest.json"));
+  await writeEvidenceBrief(report, paths);
   await writeBusinessGradeArtifacts(report, paths, {
     preserveReviewPackManifest: hasReviewPack
   });

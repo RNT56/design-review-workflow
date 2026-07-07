@@ -73,6 +73,7 @@ function visualReview(
     designVerdict: {
       readiness,
       styleAndTaste: "The visual style is restrained and credible, but the action area needs a sharper editorial hierarchy to feel fully intentional.",
+      messagingAndCopy: "The messaging is understandable and calm, but the hero copy should make the audience, proof, and next action more specific.",
       audienceFit: "The design language fits a professional service audience that needs clarity, confidence, and a fast read of the offer.",
       brandFit: "The brand impression is competent and calm, though stronger proof placement would make the positioning feel more distinctive.",
       strongestDesignQualities: ["The first viewport has a clear message and enough structure to review visually."],
@@ -93,6 +94,7 @@ function visualReview(
         composition: "The composition is balanced enough to scan, but spacing around the main action should create a stronger focal point.",
         navigation: "Navigation is understandable and does not dominate the primary page message.",
         ctaClarity: "The CTA is visible, but it needs stronger contrast and placement to read as the primary next step.",
+        messagingAndCopy: "The page copy communicates the general offer, but the headline support and CTA wording need more specificity and decision support.",
         mobile: "The mobile composition keeps the core message visible but should give the action more breathing room.",
         trustAndProof: "Trust proof is present but not close enough to the primary decision point.",
         visualSystemCoherence: "Typography, spacing, and component treatment feel mostly coherent, with room to tighten action and proof modules.",

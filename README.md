@@ -18,7 +18,7 @@ It is built for repeatable design critique instead of loose screenshot notes: th
 | ----------------- | ------------------------------------------------------------------------ |
 | Current version   | `0.1.0`                                                                  |
 | Stability         | Pre-1.0; report lint and business-grade gates enforce the bundle shape   |
-| Primary interface | `node apps/cli/dist/index.js run <url>`                                  |
+| Primary interface | `bash scripts/agent-run.sh <url>` or `npm run agent -- <url>`            |
 | Agent handoff     | Works with repo-capable agents such as Codex, Claude Code and opencode   |
 | Storage           | Local-first under `audit-reports/<site>/<run-id>/`                       |
 | License           | PolyForm Noncommercial 1.0.0                                             |
@@ -52,7 +52,7 @@ flowchart LR
   H --> I["Business-grade report and export bundle"]
 ```
 
-The scanner collects deterministic evidence first. The agent running the workflow then uses that evidence for the high-fidelity visual judgment. Without an imported `AgentVisualReview`, the output remains an `automated_scan` or `agent_review_pending`; it must not be described as business-grade.
+The scanner collects deterministic evidence first. The agent running the workflow then uses that evidence for the high-fidelity visual judgment, including copywriting, style/taste, audience fit, brand fit, and redesign advice. Without an imported `AgentVisualReview`, the output remains an `automated_scan` or `agent_review_pending`; it must not be described as business-grade.
 
 ## Quickstart
 
@@ -70,13 +70,19 @@ Manual setup:
 npm ci
 npx playwright install chromium
 npm run build
+npm run agent -- https://example.com
+```
+
+Low-level automated-only scan for smoke tests and CI:
+
+```bash
 node apps/cli/dist/index.js run https://example.com
 ```
 
 Run a fuller audit:
 
 ```bash
-node apps/cli/dist/index.js run https://example.com \
+npm run agent -- https://example.com \
   --mode full \
   --max-pages 15 \
   --audit-name "Example" \
@@ -87,7 +93,7 @@ node apps/cli/dist/index.js run https://example.com \
 Run with read-only source mapping:
 
 ```bash
-node apps/cli/dist/index.js run https://example.com \
+npm run agent -- https://example.com \
   --repo /path/to/target-website-repo \
   --audit-name "Example"
 ```
@@ -125,6 +131,7 @@ If the agent runs the CLI while its shell is inside another website repository, 
 
 ```bash
 node /path/to/design-review-workflow/apps/cli/dist/index.js run https://example.com \
+  --business-grade \
   --audit-root /path/to/design-review-workflow/audit-reports \
   --audit-name "Example"
 ```
@@ -138,6 +145,7 @@ node apps/cli/dist/index.js run https://example.com --business-grade --audit-nam
 
 # The running multimodal agent inspects:
 # - report/agent-review-pack/review-pack-manifest.json
+# - report/evidence-brief.json
 # - report/agent-review-pack/gallery/index.html
 # - report/contact-sheets/first-viewports.png
 # - report/contact-sheets/issues/*.png
@@ -145,8 +153,8 @@ node apps/cli/dist/index.js run https://example.com --business-grade --audit-nam
 # - raw screenshots in report/screenshot-manifest.json
 
 # The completed visual review must include:
-# - site-level design verdict with style/taste, audience fit, brand fit and redesign direction
-# - page-by-page visual judgment for every captured page
+# - site-level design verdict with style/taste, messaging/copy, audience fit, brand fit and redesign direction
+# - page-by-page visual and messaging/copy judgment for every captured page
 # - evidence-linked redesign actions, or a no-major-redesign verdict with rationale
 
 node apps/cli/dist/index.js agent-review validate \
@@ -160,7 +168,15 @@ node apps/cli/dist/index.js agent-review import \
 node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example/<run-id>
 ```
 
-Every completed CLI run generates the review pack: optimized PNG sheets, a static gallery, screenshot manifests, prompts, a strict JSON schema and an import template. Raw screenshots remain unchanged. Use `review-pack build --report <audit-dir>` only to refresh or backfill those assets on an existing audit folder. Automated scans do not include subjective style/taste verdicts; they show that visual review is required.
+Every completed CLI run generates the review pack: optimized PNG sheets, a static gallery, screenshot manifests, `report/evidence-brief.json`, prompts, a strict JSON schema and an import template. Raw screenshots remain unchanged. Use `review-pack build --report <audit-dir>` only to refresh or backfill those assets on an existing audit folder. Automated scans do not include subjective style/taste verdicts; they show that visual review is required.
+
+Optional provider-backed generation can be used when a multimodal provider is configured in `.env`:
+
+```bash
+node apps/cli/dist/index.js agent-review generate --report ./audit-reports/example/<run-id> --provider auto
+```
+
+This command saves raw model output under `agent-runs/`, writes a normal `AgentVisualReview`, and must pass the same validate/import/business-grade gates.
 
 ## Audit Storage
 
@@ -230,6 +246,7 @@ High-signal report files:
 | `report/findings.json` | Prioritized evidence-backed findings |
 | `report/grouped-issues.json` | Root-cause issue groups with affected pages and recommendations |
 | `report/score.json` | Scorecard and confidence summary |
+| `report/evidence-brief.json` | Concise structured context for multimodal review, including copy, CTA, proof, mobile and visual-system signals |
 | `report/screenshot-manifest.json` | Screenshot inventory with PNG dimensions and sheet references |
 | `report/contact-sheets/` | First-viewport, page-flow and issue evidence sheets |
 | `report/agent-review-pack/gallery/index.html` | Static screenshot gallery for visual review |

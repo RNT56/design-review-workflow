@@ -29,9 +29,12 @@ describe("buildReviewPack", () => {
     const reviewPackManifest = JSON.parse(await readFile(path.join(result.packRoot, "review-pack-manifest.json"), "utf8")) as {
       recommendedReviewOrder: Array<{ step: string; paths: string[] }>;
       sheets: Array<{ type: string; path: string; issueId?: string }>;
+      evidenceBrief: { path: string; absolutePath: string };
       gallery: { path: string };
     };
     const template = JSON.parse(await readFile(result.template, "utf8")) as { schemaVersion: string; pageReviews: unknown[] };
+    const reportEvidenceBrief = JSON.parse(await readFile(path.join(auditRoot, "report", "evidence-brief.json"), "utf8")) as { generatedAt: string };
+    const packEvidenceBrief = JSON.parse(await readFile(path.join(result.packRoot, "evidence-brief.json"), "utf8")) as { generatedAt: string };
     const galleryHtml = await readFile(path.join(result.packRoot, "gallery", "index.html"), "utf8");
     const contactSheetIndexHtml = await readFile(path.join(auditRoot, "report", "contact-sheets", "index.html"), "utf8");
 
@@ -43,6 +46,9 @@ describe("buildReviewPack", () => {
     expect(manifest.screenshots.find((screenshot) => screenshot.id === "page_1_desktop_above_fold")?.sheetRefs).toContain("contact-sheets/first-viewports.png");
     expect(manifest.screenshots.find((screenshot) => screenshot.id === "page_1_desktop_above_fold")?.groups).toContain("issue:issue_1");
     expect(reviewPackManifest.gallery.path).toBe("agent-review-pack/gallery/index.html");
+    expect(reviewPackManifest.evidenceBrief.path).toBe("evidence-brief.json");
+    expect(reviewPackManifest.evidenceBrief.absolutePath).toBe(path.join(auditRoot, "report", "evidence-brief.json"));
+    expect(packEvidenceBrief.generatedAt).toBe(reportEvidenceBrief.generatedAt);
     expect(reviewPackManifest.recommendedReviewOrder.map((step) => step.step)).toEqual(["first_viewports", "issue_evidence", "page_flows", "raw_screenshots"]);
     expect(reviewPackManifest.sheets.some((sheet) => sheet.type === "page_flow" && sheet.path === "contact-sheets/pages/page_1-flow.png")).toBe(true);
     expect(reviewPackManifest.sheets.some((sheet) => sheet.type === "issue_evidence" && sheet.path === "contact-sheets/issues/issue_1.png")).toBe(true);
@@ -60,6 +66,8 @@ describe("buildReviewPack", () => {
     await expectExists(path.join(auditRoot, "report", "contact-sheets", "first-viewports.png"));
     await expectExists(path.join(auditRoot, "report", "contact-sheets", "pages", "page_1-flow.png"));
     await expectExists(path.join(auditRoot, "report", "contact-sheets", "issues", "issue_1.png"));
+    await expectExists(path.join(auditRoot, "report", "evidence-brief.json"));
+    await expectExists(path.join(result.packRoot, "evidence-brief.json"));
     await expectExists(path.join(result.packRoot, "gallery", "index.html"));
   });
 
