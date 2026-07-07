@@ -14,8 +14,9 @@ import { stableId } from "../utils/id.js";
 import { inferWebsiteType } from "./classification.js";
 import { createScorecard, priorityScore } from "./scoring.js";
 import { createScreenshotAnnotations } from "../report/annotations.js";
+import { groupFindings } from "./grouping.js";
 
-type FindingDraft = Omit<Finding, "findingId" | "priorityScore" | "relatedFindings">;
+type FindingDraft = Omit<Finding, "findingId" | "source" | "priorityScore" | "relatedFindings">;
 
 const actionWords = /\b(start|get|try|buy|book|contact|request|schedule|download|subscribe|sign up|learn|compare|demo|call|order|shop|anfragen|kontakt|buchen|kaufen|testen|starten|demo)\b/i;
 
@@ -31,7 +32,8 @@ export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[],
   await writeJson(path.join(paths.synthesis, "findings.raw.json"), rawFindings);
   await writeJson(path.join(paths.synthesis, "findings.validated.json"), findings);
 
-  const scorecard = createScorecard(findings, pages, website.websiteType);
+  const businessGradeStatus = "automated_scan" as const;
+  const scorecard = createScorecard(findings, pages, website.websiteType, businessGradeStatus);
   await writeJson(path.join(paths.synthesis, "scorecard.json"), scorecard);
 
   const quickWins = findings.filter((finding) => finding.effort === "low" && finding.impact !== "low" && finding.confidence !== "low").slice(0, 10);
@@ -43,10 +45,12 @@ export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[],
     auditId: config.auditId,
     generatedAt: new Date().toISOString(),
     config,
+    businessGradeStatus,
     websiteType: website.websiteType,
     websiteTypeConfidence: website.confidence,
     pages,
     findings,
+    groupedIssues: groupFindings(findings),
     quickWins,
     scorecard,
     screenshotAnnotations,
@@ -367,6 +371,7 @@ function finalizeDraft(draftItem: FindingDraft, pageImportance: "high" | "medium
   return {
     ...draftItem,
     findingId: stableId("raw_finding", `${draftItem.title}:${draftItem.evidence.url}`, index + 1),
+    source: "deterministic",
     priorityScore: priorityScore({
       severity: draftItem.severity,
       impact: draftItem.impact,
@@ -422,7 +427,7 @@ async function writeAgentRuns(findings: Finding[], paths: AuditPaths): Promise<v
   }
 }
 
-function createTickets(findings: Finding[]): TicketRecommendation[] {
+export function createTickets(findings: Finding[]): TicketRecommendation[] {
   return findings.slice(0, 12).map((finding) => ({
     title: finding.title,
     role: finding.implementation.owner,
@@ -438,7 +443,7 @@ function createTickets(findings: Finding[]): TicketRecommendation[] {
   }));
 }
 
-function createRedesignBriefing(config: AuditConfig, pages: PageEvidence[], findings: Finding[], websiteType: WebsiteType) {
+export function createRedesignBriefing(config: AuditConfig, pages: PageEvidence[], findings: Finding[], websiteType: WebsiteType) {
   const top = findings.slice(0, 5);
   const homepage = pages.find((page) => page.pageType === "homepage") ?? pages[0];
   return [

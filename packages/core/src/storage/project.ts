@@ -50,6 +50,7 @@ export async function createAuditPaths(config: AuditConfig, workspaceRoot = proc
 }
 
 export async function createNestedAuditPaths(auditRoot: string): Promise<AuditPaths> {
+  auditRoot = path.resolve(auditRoot);
   const root = path.dirname(path.dirname(auditRoot));
   const paths: AuditPaths = {
     root,

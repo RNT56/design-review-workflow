@@ -12,7 +12,9 @@ CLI / Local Web UI
   -> QA Gate
   -> Report Export
   -> Report Lint
+  -> Business-Grade Gate
   -> Design Workflow Artifacts
+  -> Optional Multimodal Agent Visual Review
   -> Optional Source Repo Mapping
   -> Agent Handoff Bundle
 ```
@@ -33,11 +35,13 @@ Classifies pages by URL and visible evidence. Unknown pages remain `unknown` wit
 
 ### Reviewer Agents
 
-The MVP ships deterministic reviewers that emit the same structured `Finding` shape future LLM agents must emit. This lets the product work locally now while preserving the model-router seam.
+The MVP ships deterministic reviewers that emit structured `Finding` objects. These reviewers triage evidence and produce useful automated findings, but they do not unlock business-grade visual judgment by themselves.
+
+High-fidelity design judgment is handled through an explicit multimodal agent lane: the workflow generates a review pack, the repo-capable agent running the workflow visually inspects screenshots/contact sheets, and `agent-review import` validates the completed `AgentVisualReview` artifact before merging it.
 
 ### Synthesis And QA
 
-Findings are deduplicated, scored, validated against evidence, and downgraded or removed if unsupported or generic.
+Findings are deduplicated, grouped into root-cause issues, scored, validated against evidence, and downgraded or removed if unsupported or generic. Business-grade scoring remains capped until a validated visual review is imported.
 
 ### Reports
 
@@ -48,6 +52,9 @@ The report layer writes:
 - `report/report.html`
 - `report/report.pdf`
 - `report/executive-summary.md`
+- `report/hosted/index.html`
+
+The hosted report is a standalone static export with copied local screenshot assets, so it can be served without the Express UI.
 
 ### Design Workflow Artifacts
 
@@ -61,6 +68,11 @@ The design-review bundle adds stable operational artifacts:
 - `report/suppression-report.json`
 - `report/design-benchmark.json`
 - `report/design-benchmark.md`
+- `report/grouped-issues.json`
+- `report/business-grade-gate.json`
+- `report/screenshot-manifest.json`
+- `report/agent-review-pack/`
+- `report/contact-sheets/*.png` when built
 - `report/patch-plan.md`
 - `report/changed-files.json`
 - `report/manual-actions.md`
@@ -79,6 +91,14 @@ These are design-review equivalents of a robust agentic workflow bundle. They do
 
 The workflow must not silently assume the current directory is the website source repository.
 
+### Optional Multimodal Agent Visual Review
+
+Business-grade mode is local and keyless. `review-pack build` writes screenshot manifests, contact sheets, per-page prompts, a JSON schema, and a template. The running agent must inspect those screenshots and write `agent-runs/<agent>/visual-review.json`.
+
+`agent-review import` validates the review against the captured screenshot inventory, rejects unsupported analytics/user/competitor claims, converts visual findings into the normal finding pipeline, refreshes grouped issues, scoring, tickets, report surfaces, and writes `report/agent-visual-review.json`.
+
+`business-grade lint` passes only after that import succeeds.
+
 ### Validation And Handoff
 
 Every completed audit runs report lint and writes a stable agent bundle:
@@ -87,6 +107,9 @@ Every completed audit runs report lint and writes a stable agent bundle:
 - `report/handoff.json`
 - `report/validation.json`
 - `report/quality-gate.json`
+- `report/business-grade-gate.json`
+- `report/grouped-issues.json`
+- `report/screenshot-manifest.json`
 - `report/evidence-index.json`
 - `report/evidence.jsonl`
 - `report/implementation-plan.json`
@@ -100,6 +123,7 @@ Every completed audit runs report lint and writes a stable agent bundle:
 - `report/design-benchmark.json`
 - `report/standards-registry.json`
 - `report/suppression-report.json`
+- `report/hosted/index.html`
 - `report/agent-execution-plan.md`
 - `report/agent-instructions/*.md`
 

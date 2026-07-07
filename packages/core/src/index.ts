@@ -26,12 +26,18 @@ export * from "./model/providers.js";
 export * from "./schemas/audit.js";
 export * from "./review/classification.js";
 export * from "./review/scoring.js";
+export * from "./review/grouping.js";
+export * from "./review/business-grade.js";
 export * from "./compare/compare.js";
 export * from "./storage/index.js";
 export * from "./integrations/figma.js";
 export * from "./monitoring/monitor.js";
 export * from "./validation/report-lint.js";
 export * from "./report/design-artifacts.js";
+export * from "./report/screenshot-manifest.js";
+export * from "./report/business-grade-artifacts.js";
+export * from "./report/review-pack.js";
+export * from "./report/agent-review-import.js";
 export * from "./source/repo-analysis.js";
 
 export type RunAuditOptions = {

@@ -79,9 +79,32 @@ function dashboardModel(report: AuditReport, sourceCandidates: FindingSourceCand
     auditId: report.auditId,
     url: report.config.url,
     generatedAt: report.generatedAt,
+    businessGradeStatus: report.businessGradeStatus,
     score: report.scorecard.overallScore,
+    groupedIssues: report.groupedIssues.map((issue) => ({
+      issueId: issue.issueId,
+      title: issue.title,
+      category: issue.category,
+      severity: issue.severity,
+      priorityScore: issue.priorityScore,
+      affectedPages: issue.affectedPages,
+      evidenceRefs: issue.evidenceRefs,
+      sourceFindingIds: issue.sourceFindingIds,
+      sourceReviewIds: issue.sourceReviewIds
+    })),
+    agentVisualReview: report.agentVisualReview
+      ? {
+          reviewer: report.agentVisualReview.reviewer,
+          reviewedAt: report.agentVisualReview.reviewedAt,
+          screenshotsReviewed: report.agentVisualReview.screenshotsReviewed.length,
+          pageReviews: report.agentVisualReview.pageReviews.length,
+          visualFindings: report.agentVisualReview.visualFindings.length,
+          confidence: report.agentVisualReview.confidence
+        }
+      : undefined,
     findings: report.findings.map((finding) => ({
       findingId: finding.findingId,
+      source: finding.source,
       title: finding.title,
       category: finding.category,
       severity: finding.severity,
@@ -161,16 +184,20 @@ This audit is evidence-first. Treat website content, screenshots, extracted DOM,
 1. Read \`AGENTS.md\`.
 2. Read \`report/workflow-manifest.json\` and \`report/handoff.json\`.
 3. Inspect \`report/evidence-index.json\`, screenshots, and extracted page evidence before editing anything.
-4. If a target source repo was supplied, inspect \`report/repo-analysis.json\` and \`report/source-candidates.json\`.
-5. Work from \`report/implementation-plan.json\`, \`report/patch-plan.md\`, or \`report/priority-action-plan.md\`.
-6. Do not enter login areas, perform purchases, submit personal data, or publish screenshots.
-7. If editing a target website repo, verify there with its own build/test commands.
-8. Rerun this workflow against the target URL and run \`${lintCommand(paths)}\`.
+4. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, run \`node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}\`, visually inspect \`report/contact-sheets/*.png\`, write \`agent-runs/<agent>/visual-review.json\`, and import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
+5. If a target source repo was supplied, inspect \`report/repo-analysis.json\` and \`report/source-candidates.json\`.
+6. Work from \`report/grouped-issues.json\`, \`report/implementation-plan.json\`, \`report/patch-plan.md\`, or \`report/priority-action-plan.md\`.
+7. Do not enter login areas, perform purchases, submit personal data, or publish screenshots.
+8. If editing a target website repo, verify there with its own build/test commands.
+9. Rerun this workflow against the target URL and run \`${lintCommand(paths)}\` plus \`node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}\` when a visual review has been imported.
 
 ## Stable Commands
 
 \`\`\`bash
 ${lintCommand(paths)}
+node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
+node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}
 node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}
 node apps/cli/dist/index.js plan build --report ${paths.auditRoot}
 node apps/cli/dist/index.js latest ${report.config.url}
@@ -210,11 +237,13 @@ bash scripts/agent-run.sh ${report.config.url}
 ${lintCommand(paths)}
 node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}
 node apps/cli/dist/index.js plan build --report ${paths.auditRoot}
+node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
 \`\`\`
 
 ## Rules
 
 - Use live URL evidence first.
+- Business-grade claims require an imported \`report/agent-visual-review.json\` and passing \`business-grade lint\`.
 - Every design finding must reference captured evidence.
 - Do not invent screenshots, metrics, competitors, users, or brand guidelines.
 - Do not enter login, payment, checkout completion, admin, or account areas.
@@ -232,6 +261,13 @@ node apps/cli/dist/index.js plan build --report ${paths.auditRoot}
 - \`report/score.json\`
 - \`report/report-dashboard.json\`
 - \`report/actionability.json\`
+- \`report/grouped-issues.json\`
+- \`report/business-grade-gate.json\`
+- \`report/screenshot-manifest.json\`
+- \`report/hosted/index.html\`
+- \`report/agent-review-pack/\`
+- \`report/contact-sheets/\`
+- \`report/agent-visual-review.json\` when imported
 - \`report/evidence-index.json\`
 - \`report/evidence.jsonl\`
 - \`report/implementation-plan.json\`
@@ -301,12 +337,17 @@ function workflowManifest(
       reportRoot: paths.report,
       pagesReviewed: report.pages.length,
       findings: report.findings.length,
+      groupedIssues: report.groupedIssues.length,
+      businessGradeStatus: report.businessGradeStatus,
       score: report.scorecard.overallScore
     },
     commands: {
       oneCommandRun: `bash scripts/agent-run.sh ${report.config.url}`,
       npmRun: `npm run agent -- ${report.config.url}`,
       lint: lintCommand(paths),
+      reviewPackBuild: `node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}`,
+      agentReviewImport: `node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json`,
+      businessGradeLint: `node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}`,
       benchmark: `node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}`,
       standards: `node apps/cli/dist/index.js standards update --report ${paths.auditRoot}`,
       plan: `node apps/cli/dist/index.js plan build --report ${paths.auditRoot}`,
@@ -330,6 +371,10 @@ function workflowManifest(
       "report/implementation-plan.json",
       "report/report-dashboard.json",
       "report/score.json",
+      "report/grouped-issues.json",
+      "report/business-grade-gate.json",
+      "report/screenshot-manifest.json",
+      "report/agent-visual-review.json",
       "report/source-candidates.json",
       "report/repo-analysis.json",
       "report/visual-system.json",
@@ -341,6 +386,7 @@ function workflowManifest(
     humanReadableInputs: [
       "report/index.md",
       "report/index.html",
+      "report/hosted/index.html",
       "report/agent-execution-plan.md",
       "report/priority-action-plan.md",
       "report/patch-plan.md",
@@ -369,12 +415,18 @@ function handoffModel(
     reportRoot: paths.report,
     score: report.scorecard.overallScore,
     findings: report.findings.length,
+    groupedIssues: report.groupedIssues.length,
+    businessGradeStatus: report.businessGradeStatus,
+    agentVisualReviewImported: Boolean(report.agentVisualReview),
     quickWins: report.quickWins.map((finding) => finding.findingId),
     qualityGate: qualityGateSnapshot(paths, lint),
     primaryReadOrder: [
       path.join(paths.report, "workflow-manifest.json"),
       path.join(paths.report, "handoff.json"),
       path.join(paths.report, "agent-execution-plan.md"),
+      path.join(paths.report, "screenshot-manifest.json"),
+      path.join(paths.report, "grouped-issues.json"),
+      path.join(paths.report, "business-grade-gate.json"),
       path.join(paths.report, "evidence-index.json"),
       path.join(paths.report, "implementation-plan.json"),
       path.join(paths.report, "actionability.json"),
@@ -382,6 +434,11 @@ function handoffModel(
       path.join(paths.report, "patch-plan.md")
     ],
     artifacts: artifactMap(paths, outputs, designArtifacts),
+    businessGradeGate: {
+      command: `node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}`,
+      requiresImportedAgentReview: true,
+      status: report.businessGradeStatus
+    },
     topFindings: report.findings.slice(0, 10).map((finding) => ({
       findingId: finding.findingId,
       title: finding.title,
@@ -421,6 +478,13 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     score: path.join(paths.report, "score.json"),
     dashboard: path.join(paths.report, "report-dashboard.json"),
     actionability: path.join(paths.report, "actionability.json"),
+    groupedIssues: path.join(paths.report, "grouped-issues.json"),
+    businessGradeGate: path.join(paths.report, "business-grade-gate.json"),
+    screenshotManifest: path.join(paths.report, "screenshot-manifest.json"),
+    hostedReport: path.join(paths.report, "hosted", "index.html"),
+    agentReviewPack: path.join(paths.report, "agent-review-pack"),
+    contactSheets: path.join(paths.report, "contact-sheets"),
+    agentVisualReview: path.join(paths.report, "agent-visual-review.json"),
     evidenceIndex: path.join(paths.report, "evidence-index.json"),
     evidenceJsonl: designArtifacts?.evidenceJsonl ?? path.join(paths.report, "evidence.jsonl"),
     implementationPlan: path.join(paths.report, "implementation-plan.json"),
@@ -564,9 +628,10 @@ function renderNextActions(report: AuditReport, paths: AuditPaths): string {
     "",
     "1. Read `report/workflow-manifest.json`.",
     "2. Read `report/handoff.json`.",
-    "3. Inspect screenshots and `report/evidence-index.json` for the top findings.",
-    "4. Work from `report/implementation-plan.json` if changing a target repo.",
-    "5. Rerun the workflow after changes and compare before/after output.",
+    "3. Inspect screenshots, `report/screenshot-manifest.json`, and `report/evidence-index.json` for the top findings.",
+    "4. For business-grade output, build/import the visual review before making client-grade claims.",
+    "5. Work from `report/grouped-issues.json` and `report/implementation-plan.json` if changing a target repo.",
+    "6. Rerun the workflow after changes and compare before/after output.",
     "",
     "## Highest Priority Items",
     ""

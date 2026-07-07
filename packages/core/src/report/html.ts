@@ -1,11 +1,26 @@
 import { AuditReport } from "../schemas/audit.js";
 
 export function renderHtmlReport(report: AuditReport): string {
+  const groupedIssues = report.groupedIssues
+    .slice(0, 12)
+    .map(
+      (issue) => `
+      <article class="finding finding--issue">
+        <div class="finding__meta">${escapeHtml(issue.severity)} / ${escapeHtml(issue.category)} / ${escapeHtml(issue.source)} / priority ${issue.priorityScore}</div>
+        <h3>${escapeHtml(issue.title)}</h3>
+        <p><strong>Affected pages:</strong> ${escapeHtml(issue.affectedPages.map((page) => page.section ? `${page.url} (${page.section})` : page.url).join(", "))}</p>
+        <p><strong>Observation:</strong> ${escapeHtml(issue.observation)}</p>
+        <p><strong>Recommendation:</strong> ${escapeHtml(issue.recommendation)}</p>
+        <ul>${issue.acceptanceCriteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </article>
+    `
+    )
+    .join("");
   const findings = report.findings
     .map(
       (finding) => `
       <article class="finding">
-        <div class="finding__meta">${escapeHtml(finding.severity)} / ${escapeHtml(finding.category)} / priority ${finding.priorityScore}</div>
+        <div class="finding__meta">${escapeHtml(finding.severity)} / ${escapeHtml(finding.category)} / ${escapeHtml(finding.source)} / priority ${finding.priorityScore}</div>
         <h3>${escapeHtml(finding.title)}</h3>
         <dl>
           <dt>Page</dt><dd><a href="${escapeAttribute(finding.evidence.url)}">${escapeHtml(finding.evidence.url)}</a></dd>
@@ -20,7 +35,22 @@ export function renderHtmlReport(report: AuditReport): string {
       </article>
     `
     )
-    .join("");
+      .join("");
+  const agentReview = report.agentVisualReview
+    ? `<h2>Agent Visual Review</h2>
+      <p>Reviewer: ${escapeHtml(report.agentVisualReview.reviewer)}. Confidence: ${escapeHtml(report.agentVisualReview.confidence)}. Screenshots reviewed: ${report.agentVisualReview.screenshotsReviewed.length}.</p>
+      ${report.agentVisualReview.pageReviews
+        .map(
+          (review) => `<article class="finding">
+            <h3>${escapeHtml(review.url)}</h3>
+            <p><strong>First viewport:</strong> ${escapeHtml(review.firstViewport)}</p>
+            <p><strong>Hierarchy:</strong> ${escapeHtml(review.hierarchy)}</p>
+            <p><strong>Mobile:</strong> ${escapeHtml(review.mobile)}</p>
+            <p><strong>Trust/proof:</strong> ${escapeHtml(review.trustAndProof)}</p>
+          </article>`
+        )
+        .join("")}`
+    : "";
   const competitorRows = report.competitorBenchmarks
     .map(
       (competitor) =>
@@ -110,6 +140,10 @@ export function renderHtmlReport(report: AuditReport): string {
         border-top: 1px solid var(--line);
         padding: 22px 0;
       }
+      .finding--issue {
+        border-left: 4px solid var(--accent);
+        padding-left: 16px;
+      }
       .finding__meta {
         color: var(--risk);
         font-size: 13px;
@@ -149,14 +183,21 @@ export function renderHtmlReport(report: AuditReport): string {
         <h1>Website Design Review</h1>
         <p>${escapeHtml(report.config.url)}</p>
         <p>Generated ${escapeHtml(report.generatedAt)}. Website type: ${escapeHtml(report.websiteType)} (${escapeHtml(report.websiteTypeConfidence)} confidence).</p>
+        <p>Business-grade status: <strong>${escapeHtml(report.businessGradeStatus)}</strong>${report.businessGradeStatus === "business_grade" ? "" : " - automated output is not business-grade until a validated agent visual review is imported."}</p>
       </header>
 
       <section class="summary">
         <div class="metric"><span>Overall score</span><strong>${report.scorecard.overallScore}</strong></div>
         <div class="metric"><span>Validated findings</span><strong>${report.findings.length}</strong></div>
+        <div class="metric"><span>Grouped issues</span><strong>${report.groupedIssues.length}</strong></div>
         <div class="metric"><span>Pages reviewed</span><strong>${report.pages.length}</strong></div>
         <div class="metric"><span>Quick wins</span><strong>${report.quickWins.length}</strong></div>
       </section>
+
+      <h2>Grouped Issues</h2>
+      ${groupedIssues || "<p>No grouped issues were generated.</p>"}
+
+      ${agentReview}
 
       <h2>Scorecard</h2>
       <table>

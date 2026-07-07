@@ -9,8 +9,12 @@ import {
   createAuditConfig,
   createModelRouterFromEnv,
   defaultDesignStandardsRegistry,
+  buildReviewPack,
+  evaluateBusinessGradeGate,
   fetchFigmaEvidence,
+  importAgentVisualReview,
   lintAuditReport,
+  markAgentReviewPending,
   readReportFromAuditDir,
   readProjectIndex,
   runAudit,
@@ -164,6 +168,66 @@ plan
     console.log(`Priority action plan: ${path.join(auditDir, "report", "priority-action-plan.md")}`);
     console.log(`Agent instructions: ${path.join(auditDir, "report", "agent-instructions")}`);
     console.log(`Quality gate: ${lint.status}`);
+  });
+
+const reviewPack = program.command("review-pack").description("Build multimodal agent visual-review packs");
+reviewPack
+  .command("build")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .action(async (options) => {
+    const result = await buildReviewPack(String(options.report));
+    console.log(`Review pack: ${result.packRoot}`);
+    console.log(`Screenshot manifest: ${result.screenshotManifest}`);
+    console.log(`Template: ${result.template}`);
+    console.log(`Schema: ${result.schema}`);
+    console.log(`Instructions: ${result.instructions}`);
+    console.log(`Contact sheets: ${result.contactSheets.length}`);
+    for (const sheet of result.contactSheets) console.log(`- ${sheet}`);
+  });
+
+const agentReview = program.command("agent-review").description("Import multimodal agent visual-review artifacts");
+agentReview
+  .command("import")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .requiredOption("--file <path>", "Completed AgentVisualReview JSON")
+  .action(async (options) => {
+    const result = await importAgentVisualReview(String(options.report), String(options.file));
+    console.log(`Imported visual review: ${result.canonicalReviewPath}`);
+    console.log(`Reviewer run copy: ${result.reviewerRunPath}`);
+    console.log(`Business-grade gate: ${result.gate.status}`);
+    console.log(`Business-grade gate JSON: ${path.join(String(options.report), "report", "business-grade-gate.json")}`);
+    console.log(`Hosted static report: ${path.join(String(options.report), "report", "hosted", "index.html")}`);
+    if (result.gate.status !== "pass") {
+      for (const error of result.gate.errors) console.log(`error: ${error}`);
+      process.exitCode = 1;
+    }
+  });
+
+const businessGrade = program.command("business-grade").description("Business-grade design-review gate utilities");
+businessGrade
+  .command("lint")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (options) => {
+    const auditDir = String(options.report);
+    const report = await readReportFromAuditDir(auditDir);
+    const gate = evaluateBusinessGradeGate(report);
+    await writeJsonFile(path.join(auditDir, "report", "business-grade-gate.json"), gate);
+    if (options.format === "json") {
+      console.log(JSON.stringify(gate, null, 2));
+    } else {
+      console.log(`Business-grade gate: ${gate.status}`);
+      console.log(`Status: ${gate.businessGradeStatus}`);
+      console.log(`Screenshots reviewed: ${gate.summary.screenshotsReviewed}`);
+      console.log(`Page reviews: ${gate.summary.pageReviews}`);
+      console.log(`Visual findings: ${gate.summary.visualFindings}`);
+      console.log(`Grouped issues: ${gate.summary.groupedIssues}`);
+      for (const warning of gate.warnings) console.log(`warning: ${warning}`);
+      for (const error of gate.errors) console.log(`error: ${error}`);
+    }
+    if (gate.status !== "pass") {
+      process.exitCode = 1;
+    }
   });
 
 program
@@ -421,7 +485,7 @@ program.parseAsync(process.argv).catch((error) => {
 
 type AgentCloseout = {
   schemaVersion: "design-review-workflow.cli-closeout.v1";
-  status: "ready" | "failed";
+  status: "ready" | "failed" | "agent_review_required";
   auditId: string;
   url: string;
   mode: string;
@@ -429,6 +493,8 @@ type AgentCloseout = {
   reportRoot: string;
   score: number;
   findings: number;
+  businessGradeStatus: string;
+  businessGradeGate?: unknown;
   qualityGate: unknown;
   files: {
     workflowManifest: string;
@@ -450,6 +516,13 @@ type AgentCloseout = {
     designBenchmark: string;
     standardsRegistry: string;
     suppressionReport: string;
+    businessGradeGate: string;
+    groupedIssues: string;
+    screenshotManifest: string;
+    reviewPack: string;
+    agentVisualReview: string;
+    hostedReport: string;
+    contactSheets: string;
     agentInstructions: string;
   };
 };
@@ -470,29 +543,47 @@ function configureAgentRunCommand(command: Command): void {
     .option("--no-html", "Disable full HTML report output")
     .option("--no-markdown", "Disable full Markdown report output")
     .option("--no-strict", "Do not fail the command on lint warnings")
+    .option("--business-grade", "Build the visual review pack and require agent visual review import before business-grade pass")
     .option("--format <format>", "summary or json", "summary")
     .action(async (url, options) => {
       const format = options.format === "json" ? "json" : "summary";
       const result = await runFromOptions(url, { ...options, quiet: format === "json" });
+      let businessGate: unknown | undefined;
+      if (options.businessGrade) {
+        const pending = await markAgentReviewPending(result.auditRoot);
+        result.report = pending.report;
+        result.outputs = pending.outputs;
+        const pack = await buildReviewPack(result.auditRoot);
+        businessGate = pending.gate;
+        if (format !== "json") {
+          console.log("");
+          console.log("Business-grade review pack created.");
+          console.log(`Review pack: ${pack.packRoot}`);
+          console.log(`Contact sheets: ${path.join(result.auditRoot, "report", "contact-sheets")}`);
+          console.log(`Import required: node apps/cli/dist/index.js agent-review import --report ${result.auditRoot} --file agent-runs/<agent>/visual-review.json`);
+        }
+      }
       const lint = await lintAuditReport(result.auditRoot, options.strict !== false);
-      const closeout = closeoutFromRunResult(result, lint);
+      const closeout = closeoutFromRunResult(result, lint, businessGate);
       if (format === "json") {
         console.log(JSON.stringify(closeout, null, 2));
       } else {
         console.log("");
         printCloseout(closeout);
       }
-      if (lint.status !== "pass") {
+      if (options.businessGrade && (businessGate as { status?: string } | undefined)?.status !== "pass") {
+        process.exitCode = 2;
+      } else if (lint.status !== "pass") {
         process.exitCode = 1;
       }
     });
 }
 
-function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult): AgentCloseout {
+function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult, businessGate?: unknown): AgentCloseout {
   const reportRoot = path.join(result.auditRoot, "report");
   return {
     schemaVersion: "design-review-workflow.cli-closeout.v1",
-    status: lint.status === "pass" ? "ready" : "failed",
+    status: lint.status !== "pass" ? "failed" : (businessGate as { status?: string } | undefined)?.status === "fail" ? "agent_review_required" : "ready",
     auditId: result.report.auditId,
     url: result.report.config.url,
     mode: result.report.config.mode,
@@ -500,6 +591,8 @@ function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult): 
     reportRoot,
     score: result.report.scorecard.overallScore,
     findings: result.report.findings.length,
+    businessGradeStatus: result.report.businessGradeStatus,
+    businessGradeGate: businessGate,
     qualityGate: {
       status: lint.status,
       strict: lint.strict,
@@ -524,6 +617,7 @@ async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCl
     reportRoot: path.join(entry.auditRoot, "report"),
     score: entry.overallScore,
     findings: entry.findings,
+    businessGradeStatus: "unknown",
     qualityGate: qualityGate ?? { status: "unknown", path: qualityGatePath },
     files: closeoutFiles(entry.auditRoot, entry.reportPdf)
   };
@@ -551,6 +645,13 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     designBenchmark: path.join(reportRoot, "design-benchmark.json"),
     standardsRegistry: path.join(reportRoot, "standards-registry.json"),
     suppressionReport: path.join(reportRoot, "suppression-report.json"),
+    businessGradeGate: path.join(reportRoot, "business-grade-gate.json"),
+    groupedIssues: path.join(reportRoot, "grouped-issues.json"),
+    screenshotManifest: path.join(reportRoot, "screenshot-manifest.json"),
+    reviewPack: path.join(reportRoot, "agent-review-pack"),
+    agentVisualReview: path.join(reportRoot, "agent-visual-review.json"),
+    hostedReport: path.join(reportRoot, "hosted", "index.html"),
+    contactSheets: path.join(reportRoot, "contact-sheets"),
     agentInstructions: path.join(reportRoot, "agent-instructions")
   };
 }
@@ -563,6 +664,11 @@ function printCloseout(closeout: AgentCloseout): void {
   console.log(`Handoff: ${closeout.files.handoff}`);
   console.log(`Validation: ${closeout.files.validation}`);
   console.log(`Quality gate: ${(closeout.qualityGate as { status?: string }).status ?? "unknown"}`);
+  console.log(`Business-grade status: ${closeout.businessGradeStatus}`);
+  if (closeout.status === "agent_review_required") {
+    console.log(`Business-grade gate: agent review required`);
+    console.log(`Review pack: ${closeout.files.reviewPack}`);
+  }
   console.log(`Score: ${closeout.score}`);
   console.log(`Findings: ${closeout.findings}`);
   console.log(`Read: ${closeout.files.agentExecutionPlan}`);
@@ -588,6 +694,9 @@ function repositoryWorkflowContract() {
       npmRun: "npm run agent -- <url> --repo <target-source-repo>",
       lint: "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       plan: "node apps/cli/dist/index.js plan build --report <audit-dir>",
+      reviewPack: "node apps/cli/dist/index.js review-pack build --report <audit-dir>",
+      agentReviewImport: "node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>",
+      businessGradeLint: "node apps/cli/dist/index.js business-grade lint --report <audit-dir>",
       benchmark: "node apps/cli/dist/index.js benchmark --report <audit-dir>",
       standards: "node apps/cli/dist/index.js standards update --report <audit-dir>",
       suppressions: "node apps/cli/dist/index.js suppressions init [file] && node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file <file>",
@@ -598,6 +707,9 @@ function repositoryWorkflowContract() {
       "report/handoff.json",
       "report/validation.json",
       "report/quality-gate.json",
+      "report/business-grade-gate.json",
+      "report/grouped-issues.json",
+      "report/screenshot-manifest.json",
       "report/agent-execution-plan.md",
       "report/implementation-plan.json",
       "report/evidence-index.json",
@@ -612,6 +724,8 @@ function repositoryWorkflowContract() {
       "report/route-templates.json",
       "report/visual-system.json",
       "report/experience-timing.json",
+      "report/hosted/index.html",
+      "report/agent-review-pack/",
       "report/agent-instructions/"
     ],
     safetyRules: [

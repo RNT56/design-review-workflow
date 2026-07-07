@@ -43,6 +43,7 @@ Captured evidence includes:
 Every final finding must include:
 
 - `findingId`
+- `source`: `deterministic`, `agent_visual`, or `merged`
 - `title`
 - `category`
 - `severity`
@@ -55,6 +56,42 @@ Every final finding must include:
 - `whyItMatters`
 - `recommendation`
 - `implementation`
+
+## AgentVisualReview
+
+Business-grade reports require an imported visual review from the repo-capable multimodal agent running the workflow:
+
+- `schemaVersion`: `design-review-workflow.agent-visual-review.v1`
+- `reviewer`
+- `reviewedAt`
+- `auditId`
+- `screenshotsReviewed`
+- `pageReviews`
+- `visualFindings`
+- `strengths`
+- `risks`
+- `confidence`
+- `limitations`
+
+All screenshot references must match IDs or paths in `report/screenshot-manifest.json`. The import step rejects unknown screenshot references and unsupported analytics, user-behavior, revenue, heatmap, or competitor claims.
+
+## GroupedIssue
+
+Grouped issues merge duplicate deterministic and agent visual findings into root-cause recommendations:
+
+- `issueId`
+- `title`
+- `category`
+- `severity`
+- `priorityScore`
+- `source`
+- `affectedPages`
+- `sourceFindingIds`
+- `sourceReviewIds`
+- `evidenceRefs`
+- `observation`
+- `recommendation`
+- `acceptanceCriteria`
 
 ## TicketRecommendation
 
@@ -95,6 +132,11 @@ Every completed audit writes machine-readable agent contracts under `report/`:
 - `design-benchmark.md`: human-readable handoff readiness benchmark
 - `validation.json`: report-lint result
 - `quality-gate.json`: compact pass/warn/fail gate
+- `business-grade-gate.json`: pass/fail gate for business-grade claims
+- `grouped-issues.json`: root-cause issue inventory
+- `screenshot-manifest.json`: page screenshot IDs, paths, dimensions, and absolute local paths for agent review
+- `agent-visual-review.json`: imported multimodal agent review when present
+- `hosted/index.html`: standalone static report with copied screenshot assets
 
 ## Source Candidate
 

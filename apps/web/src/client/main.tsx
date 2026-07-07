@@ -32,15 +32,26 @@ type Job = {
   error?: string;
 };
 
+type ScreenshotRef = {
+  id: string;
+  viewport: string;
+  kind: string;
+  path: string;
+  width: number;
+  height: number;
+};
+
 type AuditReport = {
   auditId: string;
   generatedAt: string;
   config: { url: string; mode: string; outputs?: { pdf?: boolean; html?: boolean; markdown?: boolean; json?: boolean } };
+  businessGradeStatus: "automated_scan" | "agent_review_pending" | "business_grade";
   websiteType: string;
   websiteTypeConfidence: string;
-  pages: Array<{ pageId: string; url: string; pageType: string; businessImportance: string; title?: string }>;
+  pages: Array<{ pageId: string; url: string; pageType: string; businessImportance: string; title?: string; screenshots: Record<string, ScreenshotRef> }>;
   findings: Array<{
     findingId: string;
+    source?: "deterministic" | "agent_visual" | "merged";
     title: string;
     category: string;
     severity: string;
@@ -50,8 +61,56 @@ type AuditReport = {
     confidence: string;
     observation: string;
     recommendation: string;
-    evidence: { url: string; section?: string; screenshotRefs: string[] };
+    evidence: { url: string; viewport?: string; section?: string; screenshotRefs: string[] };
   }>;
+  groupedIssues: Array<{
+    issueId: string;
+    title: string;
+    category: string;
+    severity: string;
+    priorityScore: number;
+    source: string;
+    affectedPages: Array<{ pageId: string; url: string; section?: string }>;
+    sourceFindingIds: string[];
+    sourceReviewIds: string[];
+    evidenceRefs: string[];
+    observation: string;
+    recommendation: string;
+    acceptanceCriteria: string[];
+  }>;
+  agentVisualReview?: {
+    reviewer: string;
+    reviewedAt: string;
+    auditId: string;
+    screenshotsReviewed: string[];
+    pageReviews: Array<{
+      pageId: string;
+      url: string;
+      screenshotsReviewed: string[];
+      firstViewport: string;
+      hierarchy: string;
+      navigation: string;
+      mobile: string;
+      trustAndProof: string;
+      notes: string[];
+    }>;
+    visualFindings: Array<{
+      reviewId: string;
+      title: string;
+      category: string;
+      severity: string;
+      confidence: string;
+      pageId: string;
+      url: string;
+      evidenceRefs: string[];
+      observation: string;
+      recommendation: string;
+    }>;
+    strengths: string[];
+    risks: string[];
+    confidence: string;
+    limitations: string[];
+  };
   quickWins: Array<{ findingId: string; title: string; recommendation: string }>;
   tickets: Array<{
     title: string;
@@ -66,7 +125,7 @@ type AuditReport = {
     definitionOfDone: string[];
     evidenceRefs: string[];
   }>;
-  screenshotAnnotations: Array<{ annotationId: string; label: string; annotatedScreenshot: { path: string } }>;
+  screenshotAnnotations: Array<{ annotationId: string; label: string; sourceScreenshotId: string; annotatedScreenshot: { id?: string; path: string } }>;
   competitorBenchmarks: Array<{ competitorUrl: string; pagesReviewed: number; scorecard: { overallScore: number }; relativeWeaknesses: string[]; differentiationOpportunities: string[] }>;
   ticketExports?: Record<string, string>;
   scorecard: {
@@ -85,7 +144,7 @@ function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [history, setHistory] = useState<AuditSummary[]>([]);
   const [selected, setSelected] = useState<AuditReport | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "findings" | "implementation" | "evidence" | "agent">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent">("overview");
   const latestProgress = job?.progress[job.progress.length - 1];
 
   useEffect(() => {
@@ -113,6 +172,7 @@ function App() {
   }, [jobId]);
 
   const sortedFindings = useMemo(() => selected?.findings.slice().sort((a, b) => b.priorityScore - a.priorityScore) ?? [], [selected]);
+  const sortedIssues = useMemo(() => selected?.groupedIssues.slice().sort((a, b) => b.priorityScore - a.priorityScore) ?? [], [selected]);
 
   async function refreshHistory() {
     const response = await fetch("/api/audits");
@@ -208,6 +268,7 @@ function App() {
             <div>
               <h2>{selected.config.url}</h2>
               <p>{selected.websiteType} / {selected.websiteTypeConfidence} confidence / {selected.generatedAt}</p>
+              <span className={`status-badge status-badge--${selected.businessGradeStatus}`}>{label(selected.businessGradeStatus)}</span>
             </div>
             <div className="exports">
               <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.html`} target="_blank" rel="noreferrer">HTML</a>
@@ -221,13 +282,14 @@ function App() {
 
           <div className="score-strip">
             <div className="score-main"><span>Overall</span><strong>{selected.scorecard.overallScore}</strong></div>
+            <div className="score-cell"><span>Business Grade</span><strong>{selected.businessGradeStatus === "business_grade" ? "Pass" : "No"}</strong></div>
             {Object.entries(selected.scorecard.subscores).map(([key, value]) => (
               <div className="score-cell" key={key}><span>{label(key)}</span><strong>{value.score}</strong></div>
             ))}
           </div>
 
           <nav className="tabs" aria-label="Report sections">
-            {(["overview", "findings", "implementation", "evidence", "agent"] as const).map((tab) => (
+            {reportTabs(selected).map((tab) => (
               <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
                 {label(tab)}
               </button>
@@ -237,11 +299,11 @@ function App() {
           {activeTab === "overview" ? (
             <div className="report-grid">
               <section>
-                <h3>Priority Findings</h3>
+                <h3>Priority Issues</h3>
                 <div className="findings">
-                  {sortedFindings.slice(0, 5).map((finding) => (
-                    <FindingCard finding={finding} key={finding.findingId} />
-                  ))}
+                  {sortedIssues.length > 0
+                    ? sortedIssues.slice(0, 5).map((issue) => <IssueCard issue={issue} report={selected} key={issue.issueId} />)
+                    : sortedFindings.slice(0, 5).map((finding) => <FindingCard report={selected} finding={finding} key={finding.findingId} />)}
                 </div>
               </section>
 
@@ -271,7 +333,7 @@ function App() {
               <h3>Findings</h3>
               <div className="findings">
                 {sortedFindings.map((finding) => (
-                  <FindingCard finding={finding} key={finding.findingId} />
+                  <FindingCard report={selected} finding={finding} key={finding.findingId} />
                 ))}
               </div>
             </section>
@@ -315,18 +377,19 @@ function App() {
             <div className="report-grid">
               <section>
                 <h3>Pages</h3>
-                <table>
-                  <thead><tr><th>Type</th><th>Page</th><th>Importance</th></tr></thead>
-                  <tbody>
-                    {selected.pages.map((page) => (
-                      <tr key={page.pageId}>
-                        <td>{page.pageType}</td>
-                        <td><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></td>
-                        <td>{page.businessImportance}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="page-list">
+                  {selected.pages.map((page) => (
+                    <article className="page-card" key={page.pageId}>
+                      <div className="finding-meta">
+                        <span>{page.pageType}</span>
+                        <span>{page.businessImportance}</span>
+                        <span>{Object.keys(page.screenshots).length} screenshots</span>
+                      </div>
+                      <h4><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></h4>
+                      <ScreenshotDrawer report={selected} refs={Object.keys(page.screenshots)} title="Page screenshots" />
+                    </article>
+                  ))}
+                </div>
 
                 {selected.competitorBenchmarks.length > 0 ? (
                   <>
@@ -371,6 +434,73 @@ function App() {
             </div>
           ) : null}
 
+          {activeTab === "agentReview" && selected.agentVisualReview ? (
+            <div className="report-grid">
+              <section>
+                <h3>Agent Review</h3>
+                <article className="review-summary">
+                  <div className="finding-meta">
+                    <span>{selected.agentVisualReview.reviewer}</span>
+                    <span>{selected.agentVisualReview.confidence} confidence</span>
+                    <span>{selected.agentVisualReview.screenshotsReviewed.length} screenshots</span>
+                  </div>
+                  <p>{selected.agentVisualReview.reviewedAt}</p>
+                  <ScreenshotDrawer report={selected} refs={selected.agentVisualReview.screenshotsReviewed} title="Reviewed screenshots" />
+                </article>
+                <div className="page-list">
+                  {selected.agentVisualReview.pageReviews.map((review) => (
+                    <article className="page-card" key={review.pageId}>
+                      <h4>{review.url}</h4>
+                      <p><strong>First viewport:</strong> {review.firstViewport}</p>
+                      <p><strong>Hierarchy:</strong> {review.hierarchy}</p>
+                      <p><strong>Navigation:</strong> {review.navigation}</p>
+                      <p><strong>Mobile:</strong> {review.mobile}</p>
+                      <p><strong>Trust and proof:</strong> {review.trustAndProof}</p>
+                      <ScreenshotDrawer report={selected} refs={review.screenshotsReviewed} title="Page review screenshots" />
+                    </article>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3>Visual Findings</h3>
+                <div className="findings">
+                  {selected.agentVisualReview.visualFindings.map((finding) => (
+                    <article className="finding" key={finding.reviewId}>
+                      <div className="finding-meta">
+                        <span>{finding.severity}</span>
+                        <span>{finding.category}</span>
+                        <span>{finding.confidence}</span>
+                      </div>
+                      <h4>{finding.title}</h4>
+                      <p>{finding.observation}</p>
+                      <p><strong>Recommendation:</strong> {finding.recommendation}</p>
+                      <ScreenshotDrawer report={selected} refs={finding.evidenceRefs} title="Agent evidence screenshots" />
+                    </article>
+                  ))}
+                </div>
+
+                <h3>Strengths And Risks</h3>
+                <div className="briefing">
+                  <section>
+                    <h4>Strengths</h4>
+                    <ul>{selected.agentVisualReview.strengths.map((item) => <li key={item}>{item}</li>)}</ul>
+                  </section>
+                  <section>
+                    <h4>Risks</h4>
+                    <ul>{selected.agentVisualReview.risks.map((item) => <li key={item}>{item}</li>)}</ul>
+                  </section>
+                  {selected.agentVisualReview.limitations.length > 0 ? (
+                    <section>
+                      <h4>Limitations</h4>
+                      <ul>{selected.agentVisualReview.limitations.map((item) => <li key={item}>{item}</li>)}</ul>
+                    </section>
+                  ) : null}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
           {activeTab === "agent" ? (
             <div className="report-grid">
               <section>
@@ -394,6 +524,9 @@ function App() {
 
                 <h3>Closeout Commands</h3>
                 <pre className="command-block">{`node apps/cli/dist/index.js report lint ${auditRootFor(selected)} --strict
+node apps/cli/dist/index.js review-pack build --report ${auditRootFor(selected)}
+node apps/cli/dist/index.js agent-review import --report ${auditRootFor(selected)} --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report ${auditRootFor(selected)}
 node apps/cli/dist/index.js benchmark --report ${auditRootFor(selected)}
 node apps/cli/dist/index.js plan build --report ${auditRootFor(selected)}`}</pre>
               </section>
@@ -405,19 +538,63 @@ node apps/cli/dist/index.js plan build --report ${auditRootFor(selected)}`}</pre
   );
 }
 
-function FindingCard({ finding }: { finding: AuditReport["findings"][number] }) {
+function IssueCard({ issue, report }: { issue: AuditReport["groupedIssues"][number]; report: AuditReport }) {
+  return (
+    <article className="finding issue">
+      <div className="finding-meta">
+        <span>{issue.severity}</span>
+        <span>{issue.category}</span>
+        <span>{issue.source}</span>
+        <span>{issue.priorityScore}</span>
+      </div>
+      <h4>{issue.title}</h4>
+      <p>{issue.observation}</p>
+      <p><strong>Recommendation:</strong> {issue.recommendation}</p>
+      <p><strong>Affected:</strong> {issue.affectedPages.map((page) => page.section ? `${page.url} (${page.section})` : page.url).join(", ")}</p>
+      <ul>
+        {issue.acceptanceCriteria.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+      </ul>
+      <ScreenshotDrawer report={report} refs={issue.evidenceRefs} title="Issue evidence screenshots" />
+    </article>
+  );
+}
+
+function FindingCard({ finding, report }: { finding: AuditReport["findings"][number]; report: AuditReport }) {
   return (
     <article className="finding">
       <div className="finding-meta">
         <span>{finding.severity}</span>
         <span>{finding.category}</span>
+        <span>{finding.source ?? "deterministic"}</span>
         <span>{finding.priorityScore}</span>
       </div>
       <h4>{finding.title}</h4>
       <p>{finding.observation}</p>
       <p><strong>Recommendation:</strong> {finding.recommendation}</p>
-      <small>{finding.evidence.url} / {finding.evidence.section ?? "section unspecified"}</small>
+      <small>{finding.evidence.url} / {finding.evidence.viewport ?? "any viewport"} / {finding.evidence.section ?? "section unspecified"}</small>
+      <ScreenshotDrawer report={report} refs={finding.evidence.screenshotRefs} title="Finding evidence screenshots" />
     </article>
+  );
+}
+
+function ScreenshotDrawer({ report, refs, title }: { report: AuditReport; refs: string[]; title: string }) {
+  const screenshots = screenshotRefsFor(report, refs);
+  return (
+    <details className="screenshot-drawer">
+      <summary>{title} ({screenshots.length || refs.length})</summary>
+      {screenshots.length > 0 ? (
+        <div className="shot-grid">
+          {screenshots.map((screenshot) => (
+            <a className="shot" key={`${screenshot.id}-${screenshot.href}`} href={screenshot.href} target="_blank" rel="noreferrer">
+              <img src={screenshot.href} alt={screenshot.label} loading="lazy" />
+              <span>{screenshot.label}</span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">{refs.length > 0 ? refs.join(", ") : "No screenshot reference was attached."}</p>
+      )}
+    </details>
   );
 }
 
@@ -427,6 +604,12 @@ function artifactLinks(report: AuditReport) {
     ["Handoff", "handoff.json"],
     ["Validation", "validation.json"],
     ["Quality Gate", "quality-gate.json"],
+    ["Business Gate", "business-grade-gate.json"],
+    ["Grouped Issues", "grouped-issues.json"],
+    ["Screenshot Manifest", "screenshot-manifest.json"],
+    ["Hosted Report", "hosted/index.html"],
+    ["Review Pack", "agent-review-pack/README.md"],
+    ["Agent Visual Review", "agent-visual-review.json"],
     ["HTML Report", "report.html"],
     ["Markdown Report", "report.md"],
     ["JSON Report", "report.json"],
@@ -447,8 +630,49 @@ function artifactLinks(report: AuditReport) {
   ].map(([labelText, file]) => ({ label: labelText, href: reportFileHref(report, file) }));
 }
 
+function reportTabs(report: AuditReport): Array<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent"> {
+  const tabs: Array<"overview" | "findings" | "implementation" | "evidence" | "agentReview" | "agent"> = ["overview", "findings", "implementation", "evidence"];
+  if (report.agentVisualReview) tabs.push("agentReview");
+  tabs.push("agent");
+  return tabs;
+}
+
+function screenshotRefsFor(report: AuditReport, refs: string[]) {
+  const index = screenshotIndex(report);
+  const seen = new Set<string>();
+  return refs.flatMap((ref) => {
+    const screenshot = index.get(ref);
+    if (!screenshot || seen.has(`${screenshot.id}:${screenshot.href}`)) return [];
+    seen.add(`${screenshot.id}:${screenshot.href}`);
+    return [screenshot];
+  });
+}
+
+function screenshotIndex(report: AuditReport) {
+  const index = new Map<string, { id: string; href: string; label: string }>();
+  for (const page of report.pages) {
+    for (const screenshot of Object.values(page.screenshots)) {
+      const href = auditFileHref(report, screenshot.path);
+      const labelText = `${page.title ?? page.url} / ${screenshot.viewport} / ${screenshot.kind}`;
+      index.set(screenshot.id, { id: screenshot.id, href, label: labelText });
+      index.set(screenshot.path, { id: screenshot.id, href, label: labelText });
+    }
+  }
+  for (const annotation of report.screenshotAnnotations) {
+    const href = auditFileHref(report, annotation.annotatedScreenshot.path);
+    const id = annotation.annotatedScreenshot.id ?? annotation.annotationId;
+    index.set(id, { id, href, label: annotation.label });
+    index.set(annotation.annotatedScreenshot.path, { id, href, label: annotation.label });
+  }
+  return index;
+}
+
 function reportFileHref(report: AuditReport, file: string) {
   return `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/report/${file}`;
+}
+
+function auditFileHref(report: AuditReport, file: string) {
+  return `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/${file}`;
 }
 
 function auditRootFor(report: AuditReport) {

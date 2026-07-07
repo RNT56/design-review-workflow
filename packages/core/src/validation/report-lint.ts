@@ -4,6 +4,7 @@ import { AuditReport, AuditReportSchema } from "../schemas/audit.js";
 import { readReportFromAuditDir } from "../storage/index.js";
 import { createNestedAuditPaths } from "../storage/project.js";
 import { writeAgentBundle } from "../report/agent-bundle.js";
+import { writeBusinessGradeArtifacts } from "../report/business-grade-artifacts.js";
 import { writeJson } from "../utils/fs.js";
 
 export type ReportLintResult = {
@@ -79,6 +80,9 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
     "report/report-dashboard.json",
     "report/actionability.json",
     "report/evidence-index.json",
+    "report/screenshot-manifest.json",
+    "report/grouped-issues.json",
+    "report/business-grade-gate.json",
     "report/evidence.jsonl",
     "report/implementation-plan.json",
     "report/repo-analysis.json",
@@ -96,6 +100,7 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
     "report/remaining-user-decisions.md",
     "report/agent-execution-plan.md",
     "report/next-actions.md",
+    "report/hosted/index.html",
     "report/agent-instructions/README.md",
     "report/agent-instructions/codex.md",
     "report/agent-instructions/claude-code.md",
@@ -128,8 +133,13 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
   }
 
   await checkJsonShape(auditDir, "report/workflow-manifest.json", "schemaVersion", errors);
+  await checkJsonShape(auditDir, "report/report.json", "businessGradeStatus", errors);
+  await checkJsonShape(auditDir, "report/report.json", "groupedIssues", errors);
   await checkJsonShape(auditDir, "report/handoff.json", "schemaVersion", errors);
   await checkJsonShape(auditDir, "report/evidence-index.json", "pages", errors);
+  await checkJsonShape(auditDir, "report/screenshot-manifest.json", "screenshots", errors);
+  await checkJsonShape(auditDir, "report/grouped-issues.json", "length", errors, true);
+  await checkJsonShape(auditDir, "report/business-grade-gate.json", "schemaVersion", errors);
   await checkJsonShape(auditDir, "report/implementation-plan.json", "items", errors);
   await checkJsonShape(auditDir, "report/repo-analysis.json", "schemaVersion", errors);
   await checkJsonShape(auditDir, "report/source-candidates.json", "byFinding", errors);
@@ -144,6 +154,11 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
 
 async function checkEvidence(report: AuditReport, auditDir: string, errors: string[], warnings: string[]) {
   const pageById = new Map(report.pages.map((page) => [page.pageId, page]));
+  const annotationRefs = new Set<string>();
+  for (const annotation of report.screenshotAnnotations) {
+    annotationRefs.add(annotation.annotatedScreenshot.id);
+    annotationRefs.add(annotation.annotatedScreenshot.path);
+  }
   for (const page of report.pages) {
     for (const screenshot of Object.values(page.screenshots)) {
       if (!(await exists(path.join(auditDir, screenshot.path)))) {
@@ -165,7 +180,8 @@ async function checkEvidence(report: AuditReport, auditDir: string, errors: stri
       warnings.push(`Finding has no screenshot reference: ${finding.findingId}`);
     }
     for (const ref of finding.evidence.screenshotRefs) {
-      if (!page.screenshots[ref]) {
+      const knownPageRef = page.screenshots[ref] || Object.values(page.screenshots).some((screenshot) => screenshot.path === ref);
+      if (!knownPageRef && !annotationRefs.has(ref)) {
         errors.push(`Finding references missing screenshot id ${ref}: ${finding.findingId}`);
       }
     }
@@ -220,10 +236,13 @@ async function exists(filePath: string): Promise<boolean> {
   );
 }
 
-async function checkJsonShape(auditDir: string, file: string, requiredKey: string, errors: string[]): Promise<void> {
+async function checkJsonShape(auditDir: string, file: string, requiredKey: string, errors: string[], allowArray = false): Promise<void> {
   try {
     const json = await readFile(path.join(auditDir, file), "utf8");
     const parsed = JSON.parse(json) as Record<string, unknown>;
+    if (allowArray && Array.isArray(parsed)) {
+      return;
+    }
     if (!(requiredKey in parsed)) {
       errors.push(`Invalid bundle JSON shape in ${file}: missing ${requiredKey}`);
     }
@@ -234,6 +253,7 @@ async function checkJsonShape(auditDir: string, file: string, requiredKey: strin
 
 async function refreshAgentBundle(report: AuditReport, auditDir: string, result?: ReportLintResult): Promise<void> {
   const paths = await createNestedAuditPaths(auditDir);
+  await writeBusinessGradeArtifacts(report, paths);
   await writeAgentBundle(
     report,
     paths,

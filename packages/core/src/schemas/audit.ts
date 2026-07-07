@@ -65,6 +65,12 @@ export const FindingCategorySchema = z.enum([
 ]);
 export type FindingCategory = z.infer<typeof FindingCategorySchema>;
 
+export const FindingSourceSchema = z.enum(["deterministic", "agent_visual", "merged"]);
+export type FindingSource = z.infer<typeof FindingSourceSchema>;
+
+export const BusinessGradeStatusSchema = z.enum(["automated_scan", "agent_review_pending", "business_grade"]);
+export type BusinessGradeStatus = z.infer<typeof BusinessGradeStatusSchema>;
+
 export const ViewportConfigSchema = z.object({
   name: ViewportNameSchema,
   width: z.number().int().positive(),
@@ -287,6 +293,7 @@ export type PageEvidence = z.infer<typeof PageEvidenceSchema>;
 
 export const FindingSchema = z.object({
   findingId: z.string(),
+  source: FindingSourceSchema.default("deterministic"),
   title: z.string(),
   category: FindingCategorySchema,
   severity: SeveritySchema,
@@ -319,6 +326,71 @@ export const FindingSchema = z.object({
   relatedFindings: z.array(z.string()).default([])
 });
 export type Finding = z.infer<typeof FindingSchema>;
+
+export const AgentVisualFindingSchema = z.object({
+  reviewId: z.string(),
+  title: z.string(),
+  category: FindingCategorySchema,
+  severity: SeveritySchema,
+  impact: ImpactSchema,
+  effort: EffortSchema,
+  confidence: ConfidenceSchema,
+  pageId: z.string(),
+  url: z.string().url(),
+  section: z.string().optional(),
+  evidenceRefs: z.array(z.string()).min(1),
+  observation: z.string().min(20),
+  whyItMatters: z.string().min(20),
+  recommendation: z.string().min(20),
+  acceptanceCriteria: z.array(z.string().min(8)).min(1),
+  sourceFindingIds: z.array(z.string()).default([])
+});
+export type AgentVisualFinding = z.infer<typeof AgentVisualFindingSchema>;
+
+export const AgentPageReviewSchema = z.object({
+  pageId: z.string(),
+  url: z.string().url(),
+  screenshotsReviewed: z.array(z.string()).min(1),
+  firstViewport: z.string().min(20),
+  hierarchy: z.string().min(20),
+  navigation: z.string().min(20),
+  mobile: z.string().min(20),
+  trustAndProof: z.string().min(20),
+  notes: z.array(z.string()).default([])
+});
+export type AgentPageReview = z.infer<typeof AgentPageReviewSchema>;
+
+export const AgentVisualReviewSchema = z.object({
+  schemaVersion: z.literal("design-review-workflow.agent-visual-review.v1"),
+  reviewer: z.string().min(1),
+  reviewedAt: z.string().min(1),
+  auditId: z.string(),
+  screenshotsReviewed: z.array(z.string()).min(1),
+  pageReviews: z.array(AgentPageReviewSchema).min(1),
+  visualFindings: z.array(AgentVisualFindingSchema).default([]),
+  strengths: z.array(z.string()).default([]),
+  risks: z.array(z.string()).default([]),
+  confidence: ConfidenceSchema,
+  limitations: z.array(z.string()).default([])
+});
+export type AgentVisualReview = z.infer<typeof AgentVisualReviewSchema>;
+
+export const GroupedIssueSchema = z.object({
+  issueId: z.string(),
+  title: z.string(),
+  category: FindingCategorySchema,
+  severity: SeveritySchema,
+  priorityScore: z.number().min(0).max(100),
+  source: FindingSourceSchema.default("deterministic"),
+  affectedPages: z.array(z.object({ pageId: z.string(), url: z.string().url(), section: z.string().optional() })).min(1),
+  sourceFindingIds: z.array(z.string()).default([]),
+  sourceReviewIds: z.array(z.string()).default([]),
+  evidenceRefs: z.array(z.string()).default([]),
+  observation: z.string(),
+  recommendation: z.string(),
+  acceptanceCriteria: z.array(z.string()).default([])
+});
+export type GroupedIssue = z.infer<typeof GroupedIssueSchema>;
 
 export const ScoreItemSchema = z.object({
   score: z.number().min(0).max(100),
@@ -403,10 +475,13 @@ export const AuditReportSchema = z.object({
   auditId: z.string(),
   generatedAt: z.string(),
   config: AuditConfigSchema,
+  businessGradeStatus: BusinessGradeStatusSchema.default("automated_scan"),
   websiteType: WebsiteTypeSchema,
   websiteTypeConfidence: ConfidenceSchema,
   pages: z.array(PageEvidenceSchema),
   findings: z.array(FindingSchema),
+  groupedIssues: z.array(GroupedIssueSchema).default([]),
+  agentVisualReview: AgentVisualReviewSchema.optional(),
   quickWins: z.array(FindingSchema),
   scorecard: ScorecardSchema,
   screenshotAnnotations: z.array(ScreenshotAnnotationSchema).default([]),

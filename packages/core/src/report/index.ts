@@ -7,6 +7,8 @@ import { renderMarkdownReport } from "./markdown.js";
 import { renderPdfFromHtml } from "./pdf.js";
 import { writeTicketExports } from "./ticket-exports.js";
 import { writeAgentBundle } from "./agent-bundle.js";
+import { writeBusinessGradeArtifacts } from "./business-grade-artifacts.js";
+import { groupFindings } from "../review/grouping.js";
 
 export type ReportOutputs = {
   json?: string;
@@ -18,6 +20,8 @@ export type ReportOutputs = {
 
 export async function writeReports(config: AuditConfig, report: AuditReport, paths: AuditPaths): Promise<ReportOutputs> {
   const outputs: ReportOutputs = {};
+  report.businessGradeStatus = report.businessGradeStatus ?? "automated_scan";
+  report.groupedIssues = report.groupedIssues.length > 0 ? report.groupedIssues : groupFindings(report.findings, report.agentVisualReview);
   report.ticketExports = await writeTicketExports(report, paths);
 
   outputs.json = path.join(paths.report, "report.json");
@@ -53,6 +57,7 @@ export async function writeReports(config: AuditConfig, report: AuditReport, pat
     await renderPdfFromHtml(outputs.html, outputs.pdf);
   }
 
+  await writeBusinessGradeArtifacts(report, paths);
   await writeAgentBundle(report, paths, outputs);
 
   return outputs;

@@ -7,7 +7,8 @@ import {
   Effort,
   Impact,
   Severity,
-  WebsiteType
+  WebsiteType,
+  BusinessGradeStatus
 } from "../schemas/audit.js";
 
 export const scoreWeights = {
@@ -44,7 +45,13 @@ export function priorityScore(input: {
   );
 }
 
-export function createScorecard(findings: Finding[], pages: PageEvidence[], websiteType: WebsiteType): Scorecard {
+export function createScorecard(
+  findings: Finding[],
+  pages: PageEvidence[],
+  websiteType: WebsiteType,
+  businessGradeStatus: BusinessGradeStatus = "automated_scan"
+): Scorecard {
+  const statusCap = businessGradeStatus === "business_grade" ? 98 : businessGradeStatus === "agent_review_pending" ? 82 : 86;
   const scoreFor = (categories: FindingCategory[]) => {
     const relevant = findings.filter((finding) => categories.includes(finding.category));
     const penalty = relevant.reduce((sum, finding) => {
@@ -52,27 +59,28 @@ export function createScorecard(findings: Finding[], pages: PageEvidence[], webs
       const confidenceFactor = { high: 1, medium: 0.75, low: 0.45 }[finding.confidence];
       return sum + severityPenalty * confidenceFactor;
     }, 0);
-    return Math.max(35, Math.round(100 - penalty));
+    const base = businessGradeStatus === "business_grade" ? 96 : 86;
+    return Math.max(35, Math.min(statusCap, Math.round(base - penalty)));
   };
 
   const subscores = {
-    visualDesignQuality: item(scoreFor(["visual_design"]), findings, "visual design"),
-    uxClarityNavigation: item(scoreFor(["ux"]), findings, "UX clarity and navigation"),
-    conversionReadiness: item(scoreFor(["conversion", "trust"]), findings, "conversion readiness"),
-    mobileExperience: item(scoreFor(["mobile"]), findings, "mobile experience"),
-    brandFitTrust: item(scoreFor(["brand", "trust"]), findings, "brand fit and trust"),
-    contentDesignUxWriting: item(scoreFor(["content_design"]), findings, "content design"),
-    accessibilityBasics: item(scoreFor(["accessibility_basic"]), findings, "accessibility basics"),
-    performancePerception: item(scoreFor(["performance_perception"]), findings, "performance perception"),
-    designSystemConsistency: item(scoreFor(["design_system"]), findings, "design-system consistency")
+    visualDesignQuality: item(scoreFor(["visual_design"]), findings, "visual design", businessGradeStatus),
+    uxClarityNavigation: item(scoreFor(["ux"]), findings, "UX clarity and navigation", businessGradeStatus),
+    conversionReadiness: item(scoreFor(["conversion", "trust"]), findings, "conversion readiness", businessGradeStatus),
+    mobileExperience: item(scoreFor(["mobile"]), findings, "mobile experience", businessGradeStatus),
+    brandFitTrust: item(scoreFor(["brand", "trust"]), findings, "brand fit and trust", businessGradeStatus),
+    contentDesignUxWriting: item(scoreFor(["content_design"]), findings, "content design", businessGradeStatus),
+    accessibilityBasics: item(scoreFor(["accessibility_basic"]), findings, "accessibility basics", businessGradeStatus),
+    performancePerception: item(scoreFor(["performance_perception"]), findings, "performance perception", businessGradeStatus),
+    designSystemConsistency: item(scoreFor(["design_system"]), findings, "design-system consistency", businessGradeStatus)
   };
 
-  const overallScore = Math.round(
+  const overallScore = Math.min(statusCap, Math.round(
     Object.entries(scoreWeights).reduce((sum, [key, weight]) => {
       const score = subscores[key as keyof typeof subscores].score;
       return sum + score * weight;
     }, 0)
-  );
+  ));
 
   const topRisks = findings
     .slice()
@@ -84,21 +92,34 @@ export function createScorecard(findings: Finding[], pages: PageEvidence[], webs
 
   return {
     overallScore,
-    confidence: pages.length > 1 ? "medium" : "low",
+    confidence: businessGradeStatus === "business_grade" ? (pages.length > 1 ? "high" : "medium") : pages.length > 1 ? "medium" : "low",
     subscores,
     weights: scoreWeights,
-    websiteTypeAdjustment: websiteType === "unknown" ? "No website-type-specific scoring adjustment was applied." : `Scoring used ${websiteType} as inferred context.`,
+    websiteTypeAdjustment:
+      `${websiteType === "unknown" ? "No website-type-specific scoring adjustment was applied." : `Scoring used ${websiteType} as inferred context.`} ` +
+      (businessGradeStatus === "business_grade"
+        ? "Multimodal agent review was imported, so score confidence may include visual judgment."
+        : "Scores are capped because no validated multimodal agent review has been imported."),
     topStrengths,
     topRisks
   };
 }
 
-function item(score: number, findings: Finding[], label: string) {
-  const confidence: Confidence = findings.some((finding) => finding.confidence === "low") ? "medium" : "high";
+function item(score: number, findings: Finding[], label: string, businessGradeStatus: BusinessGradeStatus) {
+  const confidence: Confidence =
+    businessGradeStatus === "business_grade" && !findings.some((finding) => finding.confidence === "low")
+      ? "high"
+      : businessGradeStatus === "agent_review_pending"
+        ? "low"
+        : "medium";
   return {
     score,
     confidence,
-    rationale: `${label} score derived from validated findings and captured evidence.`
+    rationale:
+      `${label} score derived from validated findings and captured evidence. ` +
+      (businessGradeStatus === "business_grade"
+        ? "Imported multimodal agent review is included."
+        : "The score is capped because no validated multimodal agent review has been imported.")
   };
 }
 

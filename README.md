@@ -4,6 +4,8 @@ Local-first, agent-native website design review workflow for evidence-backed UX,
 
 The intended handoff is simple: give any repo-capable agent this repository plus a public URL. The workflow captures evidence, validates the report bundle, and emits both human-readable reports and machine-readable handoff files.
 
+Business-grade design-review claims are gated. A normal run is an `automated_scan`; a business-grade report requires the running multimodal agent to inspect the generated screenshots/contact sheets, write an `AgentVisualReview` JSON artifact, import it, and pass `business-grade lint`. No additional API keys are required for that lane.
+
 ## Quick Start
 
 For agents or fresh clones:
@@ -27,6 +29,16 @@ With read-only source mapping for an implementation agent:
 node apps/cli/dist/index.js run https://example.com --repo /path/to/target-website-repo
 ```
 
+Business-grade lane:
+
+```bash
+node apps/cli/dist/index.js run https://example.com --business-grade
+node apps/cli/dist/index.js review-pack build --report projects/<site>/audits/<audit-id>
+# The repo-capable multimodal agent inspects report/contact-sheets/*.png and writes a completed visual-review JSON.
+node apps/cli/dist/index.js agent-review import --report projects/<site>/audits/<audit-id> --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report projects/<site>/audits/<audit-id>
+```
+
 Audit outputs are written to `projects/<site>/audits/<timestamp>-<mode>/`.
 
 Each completed audit writes:
@@ -35,6 +47,9 @@ Each completed audit writes:
 - `report/handoff.json`
 - `report/validation.json`
 - `report/quality-gate.json`
+- `report/business-grade-gate.json`
+- `report/grouped-issues.json`
+- `report/screenshot-manifest.json`
 - `report/agent-execution-plan.md`
 - `report/implementation-plan.json`
 - `report/evidence-index.json`
@@ -49,6 +64,10 @@ Each completed audit writes:
 - `report/design-benchmark.json`
 - `report/standards-registry.json`
 - `report/suppression-report.json`
+- `report/hosted/index.html`
+- `report/agent-review-pack/` when built
+- `report/contact-sheets/*.png` when built
+- `report/agent-visual-review.json` when imported
 - `report/agent-instructions/*.md`
 - `report/index.md` and `report/index.html`
 
@@ -75,6 +94,9 @@ node apps/cli/dist/index.js monitor run monitor.yaml
 node apps/cli/dist/index.js providers status
 node apps/cli/dist/index.js workflow --format json
 node apps/cli/dist/index.js report lint ./projects/example-com/audits/<audit-id> --strict
+node apps/cli/dist/index.js review-pack build --report ./projects/example-com/audits/<audit-id>
+node apps/cli/dist/index.js agent-review import --report ./projects/example-com/audits/<audit-id> --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report ./projects/example-com/audits/<audit-id>
 node apps/cli/dist/index.js plan build --report ./projects/example-com/audits/<audit-id>
 node apps/cli/dist/index.js benchmark --report ./projects/example-com/audits/<audit-id>
 node apps/cli/dist/index.js standards update --report ./projects/example-com/audits/<audit-id>
@@ -97,6 +119,9 @@ npm run doctor
 - Deterministic synthesis, QA gate, scorecard, quick wins, redesign briefing, and ticket-ready recommendations
 - Markdown, HTML, PDF, and JSON report exports
 - Basic annotated screenshots for validated findings
+- Screenshot manifest, contact sheets, and static hosted report with local screenshot assets
+- Business-grade visual-review pack for repo-capable multimodal agents
+- Visual-review import that merges agent observations, grouped issues, refreshed score confidence, and report/UI output
 - Competitor benchmark output when competitor URLs are supplied
 - Local ticket export files for GitHub Issues, Linear, Jira, and JSON backlog
 - Audit compare artifacts with subscore deltas and screenshot diffs where dimensions match
@@ -118,6 +143,7 @@ npm run doctor
 - No purchases or personal-data submission
 - No full WCAG, SEO, analytics, privacy, bundle, or server-performance audit
 - No production LLM provider calls yet
+- No business-grade claim without imported agent visual review
 - No true Lighthouse report yet
 - No Figma or external ticketing integrations yet
 - No automatic target-repo edits from `--repo`; it is read-only source mapping

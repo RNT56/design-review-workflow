@@ -39,6 +39,7 @@ function sampleReport(): AuditReport {
   };
   const finding = {
     findingId: "finding_1",
+    source: "deterministic" as const,
     title: "Primary action needs clearer hierarchy",
     category: "conversion" as const,
     severity: "high" as const,
@@ -86,6 +87,7 @@ function sampleReport(): AuditReport {
     },
     websiteType: "unknown",
     websiteTypeConfidence: "low",
+    businessGradeStatus: "automated_scan",
     pages: [
       {
         pageId: "page_1",
@@ -111,6 +113,7 @@ function sampleReport(): AuditReport {
       }
     ],
     findings: [finding],
+    groupedIssues: [],
     quickWins: [],
     scorecard: scorecard(),
     screenshotAnnotations: [],

@@ -36,8 +36,11 @@ Required outputs for the MVP:
 - PDF report
 - JSON automation export
 - Scorecard
+- Business-grade gate JSON
+- Grouped issue inventory
 - Prioritized findings
 - Screenshot references
+- Screenshot manifest and contact sheets
 - Evidence JSONL
 - Route template inventory
 - Visual system inventory
@@ -73,6 +76,13 @@ The implemented MVP is deterministic and local-first:
 - Local monitor runs from YAML/JSON configuration
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
 - Primary `run` command for audit, validation, and agent handoff
+- Strict business-grade gate with `automated_scan`, `agent_review_pending`, and `business_grade` statuses
+- Multimodal agent visual-review pack generation via `review-pack build`
+- Visual-review import via `agent-review import`, with validation against captured screenshot IDs and unsupported-claim checks
+- `business-grade lint` for the business-grade gate separate from technical `report lint`
+- Grouped root-cause issues under `grouped-issues.json`
+- Standalone static hosted report under `report/hosted/index.html` with copied screenshot assets
+- Screenshot manifest and contact sheets for agent visual review
 - Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
 - Design-native parity mechanics: `benchmark`, `standards update`, non-destructive `suppressions`, `--repo` source mapping, patch-plan proposals, changed-file proposals, evidence JSONL, route templates, visual-system inventory, and experience-timing artifacts
 - Latest-audit pointers under `projects/latest-audit.json` and `projects/<site>/latest-audit.json`
@@ -83,6 +93,7 @@ The following are planned seams, not completed product claims unless code and te
 
 - External LLM-backed review agents
 - Provider-specific model quality claims
+- Business-grade report claims without imported multimodal agent visual review
 - Continuous scheduled monitoring
 - Figma analysis beyond read-only evidence fetch
 - Login-area audits
@@ -133,6 +144,8 @@ Every final finding must include:
 
 Agents must not invent pages, competitors, metrics, screenshots, user behavior, or brand guidelines. If brand fit, audience, or business goal is inferred, label it as inferred.
 
+High-fidelity design judgment must come from the repo-capable multimodal agent running the workflow. The workflow may package screenshots and prompts, but it must not imply an AI model viewed the design until `agent-review import` has validated a completed `AgentVisualReview` artifact.
+
 ## Agentic Workflow Contract
 
 Primary fresh-clone command:
@@ -146,6 +159,7 @@ Primary built CLI command:
 ```bash
 node apps/cli/dist/index.js run <public-url>
 node apps/cli/dist/index.js run <public-url> --repo <target-website-source-repo>
+node apps/cli/dist/index.js run <public-url> --business-grade
 ```
 
 Every completed audit must produce a self-contained agent bundle under `report/`:
@@ -154,6 +168,9 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `handoff.json`
 - `validation.json`
 - `quality-gate.json`
+- `business-grade-gate.json`
+- `grouped-issues.json`
+- `screenshot-manifest.json`
 - `agent-execution-plan.md`
 - `implementation-plan.json`
 - `evidence-index.json`
@@ -173,6 +190,10 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `findings.json`
 - `score.json`
 - `report-dashboard.json`
+- `hosted/index.html`
+- `agent-review-pack/`
+- `contact-sheets/*.png` when a review pack has been built
+- `agent-visual-review.json` when an agent visual review has been imported
 - `agent-instructions/README.md`
 - `agent-instructions/codex.md`
 - `agent-instructions/claude-code.md`
@@ -186,6 +207,9 @@ Stable closeout commands:
 
 ```bash
 node apps/cli/dist/index.js report lint <audit-dir> --strict
+node apps/cli/dist/index.js review-pack build --report <audit-dir>
+node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>
+node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 node apps/cli/dist/index.js benchmark --report <audit-dir>
 node apps/cli/dist/index.js plan build --report <audit-dir>
 node apps/cli/dist/index.js standards update --report <audit-dir>
@@ -220,8 +244,12 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - Suppressions are non-destructive. They must be recorded in `suppression-report.json` and must not remove entries from `findings.json`.
 - Every normal audit must write `validation.json` and `quality-gate.json`.
 - `report lint --strict` must fail unsupported report bundles.
+- `business-grade lint` must fail unless a validated `AgentVisualReview` has been imported.
+- `run --business-grade` must generate the review pack and leave the audit in `agent_review_pending` until import.
+- Automated scans must be labeled `automated_scan`, not `business_grade`.
+- Scores must remain capped when `businessGradeStatus !== business_grade`.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
-- Any future LLM reviewer must produce the same `Finding` schema and pass the same deterministic QA gate.
+- Any future LLM reviewer must produce the same `Finding` or `AgentVisualReview` schema and pass the same deterministic QA/business-grade gates.
 - Use local files and `.env` for credentials. Never commit secrets.
 - Keep generated `projects/*/audits/*` output out of Git except curated examples.
 - Keep `projects/index.sqlite`, `projects/index.json`, and `projects/figma/` out of Git.

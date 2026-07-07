@@ -2,6 +2,14 @@
 
 The scorecard is a decision aid, not the single source of truth. Prioritized findings and implementation recommendations remain the most important output.
 
+Scores are status-aware:
+
+- `automated_scan`: deterministic evidence only; overall and sub-scores are capped at 86.
+- `agent_review_pending`: business-grade lane was requested but visual review has not been imported; scores are capped at 82.
+- `business_grade`: a validated `AgentVisualReview` has been imported; scores can rise to 98 but still depend on findings, confidence, and coverage.
+
+No finding detected does not mean 100. Coverage confidence and business-grade status determine the ceiling.
+
 ## Dimensions
 
 | Dimension | Weight |
@@ -50,3 +58,14 @@ A finding is removed or downgraded when it:
 - Duplicates a stronger finding
 - Overclaims beyond MVP scope
 - Lacks viewport context where viewport matters
+
+## Business-Grade Gate
+
+`business-grade lint` fails unless the report includes:
+
+- `businessGradeStatus: business_grade`
+- Imported `report/agent-visual-review.json`
+- Reviewed screenshot references that exist in `report/screenshot-manifest.json`
+- Page-by-page visual notes
+- Actionable grouped issues with evidence, recommendations, and acceptance criteria
+- No unsupported analytics, heatmap, revenue, user-behavior, competitor, or market claims
