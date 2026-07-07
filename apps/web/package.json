@@ -1,7 +1,7 @@
 {
   "name": "@design-review-workflow/web",
   "version": "0.1.0",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
     "build": "vite build && tsup src/server.ts --format esm --platform node --sourcemap --clean --out-dir dist/server --tsconfig ../../tsconfig.base.json --external node:sqlite --external playwright --external playwright-core --external chromium-bidi --external chromium-bidi/* --external axe-core --external puppeteer-core --external puppeteer-core/* --external ws --external pngjs --external pixelmatch",

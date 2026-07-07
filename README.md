@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/RNT56/design-review-workflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/RNT56/design-review-workflow/actions/workflows/ci.yml/badge.svg" /></a>
-  <img alt="License: Non-commercial only" src="https://img.shields.io/badge/license-Non--commercial--only-red.svg" />
+  <img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-red.svg" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6.svg" />
   <img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24-339933.svg" />
   <img alt="npm workspaces" src="https://img.shields.io/badge/npm-workspaces-CB3837.svg" />
@@ -21,7 +21,7 @@ It is built for repeatable design critique instead of loose screenshot notes: th
 | Primary interface | `node apps/cli/dist/index.js run <url>`                                  |
 | Agent handoff     | Works with repo-capable agents such as Codex, Claude Code and opencode   |
 | Storage           | Local-first under `audit-reports/<site>/<run-id>/`                       |
-| License           | Custom non-commercial license; commercial use is prohibited              |
+| License           | PolyForm Noncommercial 1.0.0                                             |
 
 ## What It Reviews
 
@@ -297,6 +297,6 @@ npm audit --omit=dev
 
 ## License
 
-This repository is distributed under the [SEO Polish Non-Commercial License v1.0](LICENSE), the same non-commercial license used by the SEO workflow. It is not an open source license. Commercial use, client work, paid work, internal business use and commercial derivative use are prohibited unless the rights holder grants a separate commercial license.
+This repository is distributed under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`PolyForm-Noncommercial-1.0.0`). It is source-available for noncommercial use; commercial use requires a separate license from the rights holder.
 
 See [AGENTS.md](AGENTS.md) for the agent source of truth and [AGENT-RUNBOOK.md](AGENT-RUNBOOK.md) for detailed handoff instructions.
