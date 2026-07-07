@@ -19,6 +19,9 @@ Optional input:
 - Competitor URLs
 - Audit mode
 - Language
+- Audit output root via `--audit-root <dir>` or `DESIGN_REVIEW_AUDIT_ROOT`
+- Audit folder name via `--audit-name <name>`
+- Explicit output directory via `--output <dir>`
 - Target website source repository via `--repo <path>`
 - Suppression file
 - Baseline audit for compare/monitor workflows
@@ -50,6 +53,8 @@ Required outputs for the MVP:
 - Patch plan and changed-file proposal
 - Redesign briefing
 - Ticket-ready recommendations
+- Local export manifest and checksums when an export profile is generated
+- Local export ZIPs or directories under `exports/` when requested
 
 ## Current Implementation Boundary
 
@@ -58,7 +63,7 @@ The implemented MVP is deterministic and local-first:
 - TypeScript monorepo
 - CLI audit runner
 - Local web UI
-- Project-folder storage under `projects/`
+- Deterministic local audit storage under `audit-reports/<site-or-audit-name>/<timestamp>-<scan-id>/`
 - Playwright capture for desktop and mobile screenshots
 - DOM, text, form, link, button, section, and CSS-signal extraction
 - Basic same-domain crawl and page selection
@@ -69,14 +74,16 @@ The implemented MVP is deterministic and local-first:
 - Basic annotated screenshot generation for validated findings
 - Manual competitor benchmark mode for supplied competitor URLs
 - Local ticket export bundle for GitHub Issues, Linear, Jira, and JSON backlog
-- Local project index under `projects/index.json`
-- SQLite-backed local project index under `projects/index.sqlite` with JSON fallback
+- Local audit index under `audit-reports/audit-index.json`
+- SQLite-backed local audit index under `audit-reports/audit-index.sqlite` with JSON fallback
 - Regression compare command with score deltas, finding deltas, and screenshot pixel diffs where screenshots are compatible
 - Environment-configured LLM provider adapters for future reviewer use
 - Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
 - Local monitor runs from YAML/JSON configuration
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
 - Primary `run` command for audit, validation, and agent handoff
+- `--audit-root`, `--audit-name`, and explicit `--output` storage controls
+- Local export profiles via `export --profile review|full|repo-import`
 - Strict business-grade gate with `automated_scan`, `agent_review_pending`, and `business_grade` statuses
 - Multimodal agent visual-review pack generation via `review-pack build`
 - Visual-review import via `agent-review import`, with validation against captured screenshot IDs and unsupported-claim checks
@@ -89,7 +96,7 @@ The implemented MVP is deterministic and local-first:
 - Issue evidence sheets with numbered markers and side legends for agent visual review
 - Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
 - Design-native parity mechanics: `benchmark`, `standards update`, non-destructive `suppressions`, `--repo` source mapping, patch-plan proposals, changed-file proposals, evidence JSONL, route templates, visual-system inventory, and experience-timing artifacts
-- Latest-audit pointers under `projects/latest-audit.json` and `projects/<site>/latest-audit.json`
+- Latest-audit pointers under `audit-reports/latest-audit.json` and `audit-reports/<site>/latest-audit.json`
 - axe-core accessibility basics where injection succeeds
 - Browser navigation-timing performance basics; Lighthouse-grade audits are intentionally external to this dependency-light workflow
 
@@ -103,6 +110,7 @@ The following are planned seams, not completed product claims unless code and te
 - Login-area audits
 - SaaS/cloud multi-user storage
 - Live Jira, Linear, GitHub Issues, Notion, Slack, or Google Docs writes
+- Built-in cloud upload. Agents with explicit connector access may upload generated export packages, but core should stay local-first.
 - Full WCAG certification
 - Deep SEO, analytics, privacy, bundle, server, or tracking analysis
 
@@ -163,8 +171,30 @@ Primary built CLI command:
 ```bash
 node apps/cli/dist/index.js run <public-url>
 node apps/cli/dist/index.js run <public-url> --repo <target-website-source-repo>
+node apps/cli/dist/index.js run <public-url> --audit-root /path/to/design-review-workflow/audit-reports
 node apps/cli/dist/index.js run <public-url> --business-grade
 ```
+
+Default audit storage:
+
+```text
+audit-reports/
+  <site-or-audit-name>/
+    <timestamp>Z-<scan-id>/
+      audit-config.json
+      audit-state.json
+      screenshots/
+      extracted/
+      agent-runs/
+      synthesis/
+      exports/
+      report/
+  audit-index.json
+  audit-index.sqlite
+  latest-audit.json
+```
+
+Slug priority is `--audit-name`, then config `auditName`/`auditSlug`, then the target domain. Normal runs never overwrite prior audit folders. `--output <dir>` is an explicit advanced override and still fails if the directory already exists.
 
 Every completed audit must produce a self-contained agent bundle under `report/`:
 
@@ -233,7 +263,18 @@ node apps/cli/dist/index.js plan build --report <audit-dir>
 node apps/cli/dist/index.js standards update --report <audit-dir>
 node apps/cli/dist/index.js suppressions init design-review-suppressions.json
 node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file design-review-suppressions.json
+node apps/cli/dist/index.js export --report <audit-dir> --profile review
+node apps/cli/dist/index.js export --report <audit-dir> --profile full
+node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import
 ```
+
+Export profiles are local-only:
+
+- `review`: customer-readable report bundle with hosted report, contact sheets, findings, score, gates, and selected visual evidence.
+- `full`: complete internal audit artifact bundle excluding nested prior exports.
+- `repo-import`: source-repo handoff package for implementation agents, with local absolute paths redacted by default.
+
+Each export writes `export-manifest.json`, `checksums.sha256`, and `LICENSE-NOTICE.md`. Cloud upload is intentionally outside the core workflow; use a separate explicitly authorized agent connector if a user asks for upload.
 
 `--repo` is read-only. It may generate `repo-analysis.json`, `source-candidates.json`, `patch-plan.md`, and `changed-files.json`, but it must not modify the target website repository. Implementation agents must verify candidate files before editing and must run the target repo's own tests/build after any changes.
 
@@ -247,14 +288,15 @@ packages/
   core/         Capture, schemas, storage, review, synthesis, reports.
 docs/           Architecture, scoring, schemas, prompts, eval plan.
 examples/       Example audit config.
-projects/       Local audit outputs. Keep generated audit folders untracked.
+audit-reports/  Generated local audit outputs. Ignored by Git.
+projects/       Legacy audit output root. Read-compatible; do not use for new default output.
 ```
 
 ## Implementation Rules
 
 - Prefer deterministic capture and structured schemas over free-form prose.
 - Keep model names and provider choices in config/adapters, never hard-coded through core logic.
-- Save intermediate artifacts in the audit project folder so failures are inspectable.
+- Save intermediate artifacts in the audit folder so failures are inspectable.
 - Reports must reference existing screenshot/evidence files only.
 - Raw screenshots must remain unchanged; generated contact sheets and gallery files are derived review surfaces.
 - `screenshot-manifest.json` must include actual PNG pixel dimensions, display roles, group memberships, and derived sheet references when the review pack is built.
@@ -273,8 +315,9 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
 - Any future LLM reviewer must produce the same `Finding` or `AgentVisualReview` schema and pass the same deterministic QA/business-grade gates.
 - Use local files and `.env` for credentials. Never commit secrets.
-- Keep generated `projects/*/audits/*` output out of Git except curated examples.
-- Keep `projects/index.sqlite`, `projects/index.json`, and `projects/figma/` out of Git.
+- Keep generated `audit-reports/` output out of Git except curated examples.
+- Keep legacy generated `projects/*/audits/*`, `projects/index.sqlite`, `projects/index.json`, and `projects/figma/` out of Git.
+- Do not add Google Drive, Dropbox, S3, or other upload behavior to the core runner unless the roadmap explicitly changes; export deterministic local packages first.
 
 ## Verification Expectations
 

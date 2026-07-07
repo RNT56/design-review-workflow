@@ -9,8 +9,10 @@ import {
   createAuditConfig,
   createModelRouterFromEnv,
   defaultDesignStandardsRegistry,
+  AUDIT_ROOT_ENV,
   buildReviewPack,
   evaluateBusinessGradeGate,
+  exportAudit,
   fetchFigmaEvidence,
   importAgentVisualReview,
   lintAuditReport,
@@ -22,6 +24,8 @@ import {
   sampleMonitorConfig,
   validateReport,
   type AuditInput,
+  type AuditExportFormat,
+  type AuditExportProfile,
   type ProjectIndexEntry,
   type ReportLintResult,
   type RunAuditResult
@@ -45,6 +49,9 @@ program
   .option("--brand-context <text>", "Brand context")
   .option("--competitor <url...>", "Competitor URL(s)")
   .option("--repo <path>", "Target website source repository for read-only source candidates")
+  .option("--audit-root <dir>", `Audit output root (default: ./audit-reports or ${AUDIT_ROOT_ENV})`)
+  .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
+  .option("--output <dir>", "Explicit audit output directory override")
   .option("--no-pdf", "Disable PDF output")
   .option("--no-html", "Disable HTML output")
   .option("--no-json", "Disable JSON output")
@@ -62,6 +69,9 @@ program
   .argument("<url>", "Website URL")
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
   .option("--repo <path>", "Target website source repository for read-only source candidates")
+  .option("--audit-root <dir>", "Audit output root")
+  .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
+  .option("--output <dir>", "Explicit audit output directory override")
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "quick_scan" });
   });
@@ -72,6 +82,9 @@ program
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
   .option("--competitor <url...>", "Competitor URL(s)")
   .option("--repo <path>", "Target website source repository for read-only source candidates")
+  .option("--audit-root <dir>", "Audit output root")
+  .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
+  .option("--output <dir>", "Explicit audit output directory override")
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "full_audit" });
   });
@@ -231,6 +244,34 @@ businessGrade
   });
 
 program
+  .command("export")
+  .description("Create deterministic local export packages for an audit")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .option("--profile <profile>", "review, full, or repo-import", "review")
+  .option("--format <format>", "zip or directory", "zip")
+  .option("--output <path>", "Output zip or directory path")
+  .option("--include-private-paths", "Do not redact local absolute paths in text artifacts")
+  .option("--overwrite", "Replace an existing export output")
+  .action(async (options) => {
+    const result = await exportAudit({
+      auditDir: String(options.report),
+      profile: String(options.profile) as AuditExportProfile,
+      format: String(options.format) as AuditExportFormat,
+      outputPath: stringOption(options.output),
+      includePrivatePaths: options.includePrivatePaths === true,
+      overwrite: options.overwrite === true
+    });
+    console.log(`Export profile: ${result.profile}`);
+    console.log(`Export format: ${result.format}`);
+    console.log(`Output: ${result.outputPath}`);
+    console.log(`Files: ${result.files}`);
+    console.log(`Bytes: ${result.bytes}`);
+    console.log(`Manifest: ${result.manifestPath}`);
+    console.log(`Checksums: ${result.checksumsPath}`);
+    console.log(`Local paths redacted: ${result.localPathsRedacted ? "yes" : "no"}`);
+  });
+
+program
   .command("benchmark")
   .description("Print or refresh the design workflow benchmark for an audit")
   .requiredOption("--report <auditDir>", "Audit directory")
@@ -331,8 +372,9 @@ program
   .argument("[siteOrUrl]", "Optional site slug or URL")
   .description("Print the latest indexed audit and agent handoff paths")
   .option("--format <format>", "summary or json", "summary")
+  .option("--audit-root <dir>", "Audit output root to inspect")
   .action(async (siteOrUrl, options) => {
-    const index = await readProjectIndex(process.cwd());
+    const index = await readProjectIndex(process.cwd(), stringOption(options.auditRoot));
     const entry = selectLatestAudit(index.audits, siteOrUrl ? String(siteOrUrl) : undefined);
     if (!entry) {
       console.error(siteOrUrl ? `No audit found for ${siteOrUrl}` : "No audits found.");
@@ -379,8 +421,8 @@ program
     checks.push(["Agent compatibility docs", await exists(path.join(process.cwd(), "docs", "agent-compatibility.md")), "docs/agent-compatibility.md"]);
     checks.push(["Agent runner script", await exists(path.join(process.cwd(), "scripts", "agent-run.sh")), "scripts/agent-run.sh"]);
     checks.push(["CI workflow", await exists(path.join(process.cwd(), ".github", "workflows", "ci.yml")), ".github/workflows/ci.yml"]);
-    checks.push(["Generated output ignored", await gitignoreContains("projects/*/audits/"), ".gitignore"]);
-    checks.push(["Latest audit pointers ignored", await gitignoreContains("projects/*/latest-audit.json") && await gitignoreContains("projects/latest-audit.json"), ".gitignore"]);
+    checks.push(["Audit report root ignored", await gitignoreContains("audit-reports/"), ".gitignore"]);
+    checks.push(["Legacy generated output ignored", await gitignoreContains("projects/*/audits/"), ".gitignore"]);
     try {
       const playwright = await import("playwright");
       checks.push(["Playwright chromium", Boolean(playwright.chromium.executablePath()), playwright.chromium.executablePath()]);
@@ -417,8 +459,9 @@ program
   .command("history")
   .description("List indexed local audits")
   .option("--site <slug>", "Filter by site slug")
+  .option("--audit-root <dir>", "Audit output root to inspect")
   .action(async (options) => {
-    const index = await readProjectIndex(process.cwd());
+    const index = await readProjectIndex(process.cwd(), stringOption(options.auditRoot));
     const audits = options.site ? index.audits.filter((audit) => audit.site === options.site) : index.audits;
     for (const audit of audits.slice(0, 50)) {
       console.log(`${audit.generatedAt} ${audit.site} ${audit.overallScore}/100 ${audit.findings} findings ${audit.auditRoot}`);
@@ -470,8 +513,9 @@ monitor
   });
 monitor
   .command("status")
-  .action(async () => {
-    const index = await readProjectIndex(process.cwd());
+  .option("--audit-root <dir>", "Audit output root to inspect")
+  .action(async (options) => {
+    const index = await readProjectIndex(process.cwd(), stringOption(options.auditRoot));
     console.log(`Indexed audits: ${index.audits.length}`);
     for (const audit of index.audits.slice(0, 10)) {
       console.log(`- ${audit.site}: ${audit.generatedAt} ${audit.overallScore}/100`);
@@ -543,6 +587,9 @@ function configureAgentRunCommand(command: Command): void {
     .option("--brand-context <text>", "Brand context")
     .option("--competitor <url...>", "Competitor URL(s)")
     .option("--repo <path>", "Target website source repository for read-only source candidates")
+    .option("--audit-root <dir>", "Audit output root")
+    .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
+    .option("--output <dir>", "Explicit audit output directory override")
     .option("--config <path>", "Optional YAML or JSON config file")
     .option("--no-pdf", "Disable PDF output")
     .option("--no-html", "Disable full HTML report output")
@@ -615,17 +662,21 @@ function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult, b
 async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCloseout> {
   const qualityGatePath = entry.qualityGateJson ?? path.join(entry.auditRoot, "report", "quality-gate.json");
   const qualityGate = await readOptionalJson(qualityGatePath);
+  const report = (await readOptionalJson(entry.reportJson)) as { businessGradeStatus?: string; scorecard?: { overallScore?: number }; findings?: unknown[] } | undefined;
+  const businessGradeStatus = report?.businessGradeStatus ?? "unknown";
+  const technicalPass = qualityGate && (qualityGate as { status?: string }).status === "pass";
+  const status = technicalPass ? (businessGradeStatus === "agent_review_pending" ? "agent_review_required" : "ready") : "failed";
   return {
     schemaVersion: "design-review-workflow.cli-closeout.v1",
-    status: qualityGate && (qualityGate as { status?: string }).status === "pass" ? "ready" : "failed",
+    status,
     auditId: entry.auditId,
     url: entry.url,
     mode: entry.mode,
     auditRoot: entry.auditRoot,
     reportRoot: path.join(entry.auditRoot, "report"),
-    score: entry.overallScore,
-    findings: entry.findings,
-    businessGradeStatus: "unknown",
+    score: report?.scorecard?.overallScore ?? entry.overallScore,
+    findings: Array.isArray(report?.findings) ? report.findings.length : entry.findings,
+    businessGradeStatus,
     qualityGate: qualityGate ?? { status: "unknown", path: qualityGatePath },
     files: closeoutFiles(entry.auditRoot, entry.reportPdf)
   };
@@ -705,13 +756,16 @@ function repositoryWorkflowContract() {
     runbook: "AGENT-RUNBOOK.md",
     commands: {
       oneCommandRun: "bash scripts/agent-run.sh <url>",
-      primaryRun: "node apps/cli/dist/index.js run <url> [--repo <target-source-repo>]",
-      npmRun: "npm run agent -- <url> --repo <target-source-repo>",
+      primaryRun: "node apps/cli/dist/index.js run <url> [--repo <target-source-repo>] [--audit-root ./audit-reports]",
+      npmRun: "npm run agent -- <url> --repo <target-source-repo> --audit-root ./audit-reports",
       lint: "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       plan: "node apps/cli/dist/index.js plan build --report <audit-dir>",
       reviewPack: "node apps/cli/dist/index.js review-pack build --report <audit-dir>",
       agentReviewImport: "node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>",
       businessGradeLint: "node apps/cli/dist/index.js business-grade lint --report <audit-dir>",
+      exportReview: "node apps/cli/dist/index.js export --report <audit-dir> --profile review",
+      exportFull: "node apps/cli/dist/index.js export --report <audit-dir> --profile full",
+      exportRepoImport: "node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import",
       benchmark: "node apps/cli/dist/index.js benchmark --report <audit-dir>",
       standards: "node apps/cli/dist/index.js standards update --report <audit-dir>",
       suppressions: "node apps/cli/dist/index.js suppressions init [file] && node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file <file>",
@@ -746,7 +800,10 @@ function repositoryWorkflowContract() {
       "report/contact-sheets/first-viewports.png when built",
       "report/contact-sheets/pages/*.png when built",
       "report/contact-sheets/issues/*.png when built",
-      "report/agent-instructions/"
+      "report/agent-instructions/",
+      "export-manifest.json after export",
+      "checksums.sha256 after export",
+      "exports/*.zip after export"
     ],
     safetyRules: [
       "No login, admin, account, payment, or checkout completion areas.",
@@ -765,12 +822,17 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
     ...fileInput,
     url,
     mode,
-    maxPages: typeof options.maxPages === "number" ? Number(options.maxPages) : undefined,
-    websiteGoal: stringOption(options.goal),
-    targetAudience: stringOption(options.audience),
-    industry: stringOption(options.industry),
-    brandContext: stringOption(options.brandContext),
-    competitors: Array.isArray(options.competitor) ? options.competitor.map(String) : undefined,
+    maxPages: typeof options.maxPages === "number" ? Number(options.maxPages) : fileInput.maxPages,
+    websiteGoal: stringOption(options.goal) ?? fileInput.websiteGoal,
+    targetAudience: stringOption(options.audience) ?? fileInput.targetAudience,
+    industry: stringOption(options.industry) ?? fileInput.industry,
+    brandContext: stringOption(options.brandContext) ?? fileInput.brandContext,
+    competitors: Array.isArray(options.competitor) ? options.competitor.map(String) : fileInput.competitors,
+    auditRoot: stringOption(options.auditRoot) ?? fileInput.auditRoot,
+    auditName: stringOption(options.auditName) ?? fileInput.auditName,
+    auditSlug: fileInput.auditSlug,
+    auditRunId: fileInput.auditRunId,
+    outputDir: stringOption(options.output) ?? fileInput.outputDir,
     outputPdf: options.pdf !== false,
     outputHtml: options.html !== false,
     outputJson: options.json !== false,
@@ -825,7 +887,17 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
     mode: normalizeMode(String(audit.mode ?? "quick_scan")),
     url: typeof audit.url === "string" ? audit.url : undefined,
     maxPages: typeof audit.max_pages === "number" ? audit.max_pages : typeof audit.maxPages === "number" ? audit.maxPages : undefined,
-    language: typeof audit.language === "string" ? audit.language : undefined
+    language: typeof audit.language === "string" ? audit.language : undefined,
+    websiteGoal: typeof audit.websiteGoal === "string" ? audit.websiteGoal : typeof audit.goal === "string" ? audit.goal : undefined,
+    targetAudience: typeof audit.targetAudience === "string" ? audit.targetAudience : typeof audit.audience === "string" ? audit.audience : undefined,
+    industry: typeof audit.industry === "string" ? audit.industry : undefined,
+    brandContext: typeof audit.brandContext === "string" ? audit.brandContext : typeof audit.brand_context === "string" ? audit.brand_context : undefined,
+    competitors: Array.isArray(audit.competitors) ? audit.competitors.map(String) : undefined,
+    auditRoot: typeof audit.auditRoot === "string" ? audit.auditRoot : typeof audit.audit_root === "string" ? audit.audit_root : undefined,
+    auditName: typeof audit.auditName === "string" ? audit.auditName : typeof audit.audit_name === "string" ? audit.audit_name : undefined,
+    auditSlug: typeof audit.auditSlug === "string" ? audit.auditSlug : typeof audit.audit_slug === "string" ? audit.audit_slug : undefined,
+    auditRunId: typeof audit.auditRunId === "string" ? audit.auditRunId : typeof audit.audit_run_id === "string" ? audit.audit_run_id : undefined,
+    outputDir: typeof audit.outputDir === "string" ? audit.outputDir : typeof audit.output === "string" ? audit.output : undefined
   };
 }
 

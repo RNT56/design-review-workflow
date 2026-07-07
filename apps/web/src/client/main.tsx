@@ -5,6 +5,9 @@ import "./styles.css";
 type AuditSummary = {
   site: string;
   audit: string;
+  auditId?: string;
+  auditRoot?: string;
+  publicBasePath?: string;
   reportPath: string;
   htmlPath: string;
   pdfPath: string;
@@ -43,6 +46,8 @@ type ScreenshotRef = {
 
 type AuditReport = {
   auditId: string;
+  auditRoot?: string;
+  publicBasePath?: string;
   generatedAt: string;
   config: { url: string; mode: string; outputs?: { pdf?: boolean; html?: boolean; markdown?: boolean; json?: boolean } };
   businessGradeStatus: "automated_scan" | "agent_review_pending" | "business_grade";
@@ -274,12 +279,12 @@ function App() {
               <span className={`status-badge status-badge--${selected.businessGradeStatus}`}>{label(selected.businessGradeStatus)}</span>
             </div>
             <div className="exports">
-              <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.html`} target="_blank" rel="noreferrer">HTML</a>
-              {selected.config.outputs?.pdf !== false ? <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.pdf`} target="_blank" rel="noreferrer">PDF</a> : null}
-              <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.json`} target="_blank" rel="noreferrer">JSON</a>
-              <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/handoff.json`} target="_blank" rel="noreferrer">Handoff</a>
-              <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/workflow-manifest.json`} target="_blank" rel="noreferrer">Manifest</a>
-              <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/agent-execution-plan.md`} target="_blank" rel="noreferrer">Plan</a>
+              <a href={reportFileHref(selected, "report.html")} target="_blank" rel="noreferrer">HTML</a>
+              {selected.config.outputs?.pdf !== false ? <a href={reportFileHref(selected, "report.pdf")} target="_blank" rel="noreferrer">PDF</a> : null}
+              <a href={reportFileHref(selected, "report.json")} target="_blank" rel="noreferrer">JSON</a>
+              <a href={reportFileHref(selected, "handoff.json")} target="_blank" rel="noreferrer">Handoff</a>
+              <a href={reportFileHref(selected, "workflow-manifest.json")} target="_blank" rel="noreferrer">Manifest</a>
+              <a href={reportFileHref(selected, "agent-execution-plan.md")} target="_blank" rel="noreferrer">Plan</a>
             </div>
           </div>
 
@@ -510,7 +515,7 @@ function App() {
                       <h3>Annotations</h3>
                       <div className="annotation-list">
                         {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
-                          <a key={annotation.annotationId} href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/${annotation.annotatedScreenshot.path}`} target="_blank" rel="noreferrer">
+                          <a key={annotation.annotationId} href={auditFileHref(selected, annotation.annotatedScreenshot.path)} target="_blank" rel="noreferrer">
                             {annotation.label}
                           </a>
                         ))}
@@ -791,7 +796,7 @@ function screenshotIndex(report: AuditReport) {
 }
 
 function reportFileHref(report: AuditReport, file: string) {
-  return `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/report/${file}`;
+  return `${auditBaseHref(report)}/report/${file}`;
 }
 
 function issueSheetHref(report: AuditReport, issueId: string) {
@@ -820,11 +825,15 @@ function evidenceCompletenessLabel(report: AuditReport) {
 }
 
 function auditFileHref(report: AuditReport, file: string) {
-  return `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/${file}`;
+  return `${auditBaseHref(report)}/${file}`;
 }
 
 function auditRootFor(report: AuditReport) {
-  return `projects/${siteSlug(report.config.url)}/audits/${report.auditId}`;
+  return report.auditRoot ?? `audit-reports/${siteSlug(report.config.url)}/${report.auditId}`;
+}
+
+function auditBaseHref(report: AuditReport) {
+  return report.publicBasePath ?? `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}`;
 }
 
 function label(value: string) {
@@ -836,10 +845,18 @@ function siteSlug(url: string) {
 }
 
 function toProjectHref(value: string, report: AuditReport) {
-  const marker = `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/`;
-  const index = value.indexOf(marker);
-  if (index >= 0) {
-    return value.slice(index);
+  const publicMarker = `${auditBaseHref(report)}/`;
+  const publicIndex = value.indexOf(publicMarker);
+  if (publicIndex >= 0) {
+    return value.slice(publicIndex);
+  }
+  if (report.auditRoot) {
+    const normalizedValue = value.replace(/\\/g, "/");
+    const normalizedRoot = report.auditRoot.replace(/\\/g, "/");
+    const rootIndex = normalizedValue.indexOf(`${normalizedRoot}/`);
+    if (rootIndex >= 0) {
+      return `${auditBaseHref(report)}/${normalizedValue.slice(rootIndex + normalizedRoot.length + 1)}`;
+    }
   }
   return value;
 }

@@ -1,7 +1,8 @@
-import { AuditMode } from "../schemas/audit.js";
+import { randomBytes } from "node:crypto";
+import type { AuditMode } from "../schemas/audit.js";
 
-export function createAuditId(mode: AuditMode): string {
-  return `${new Date().toISOString().replace(/[:.]/g, "-")}-${mode}`;
+export function createAuditId(_mode: AuditMode): string {
+  return `scan_${randomBytes(4).toString("hex")}`;
 }
 
 export function stableId(prefix: string, value: string, index?: number): string {

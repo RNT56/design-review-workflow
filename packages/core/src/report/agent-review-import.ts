@@ -4,6 +4,7 @@ import { applyAgentVisualReview, evaluateBusinessGradeGate, parseAgentVisualRevi
 import { groupFindings } from "../review/grouping.js";
 import { createScorecard } from "../review/scoring.js";
 import { AuditReport } from "../schemas/audit.js";
+import { auditReportsRootFromAuditDir, workspaceRootFromAuditReportsRoot } from "../storage/audit-output.js";
 import { readReportFromAuditDir, updateProjectIndex } from "../storage/index.js";
 import { createNestedAuditPaths } from "../storage/project.js";
 import { ensureDir, writeJson } from "../utils/fs.js";
@@ -74,7 +75,11 @@ export async function importAgentVisualReview(auditDir: string, filePath: string
 }
 
 function workspaceRootFromAuditDir(auditDir: string): string {
-  return path.dirname(path.dirname(path.dirname(path.dirname(path.resolve(auditDir)))));
+  const auditReportsRoot = auditReportsRootFromAuditDir(auditDir);
+  if (auditReportsRoot) {
+    return workspaceRootFromAuditReportsRoot(auditReportsRoot);
+  }
+  return path.dirname(path.dirname(path.resolve(auditDir)));
 }
 
 function slug(value: string): string {

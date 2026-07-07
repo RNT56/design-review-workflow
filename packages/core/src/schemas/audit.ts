@@ -91,6 +91,11 @@ export const AuditConfigSchema = z.object({
   industry: z.string().optional(),
   brandContext: z.string().optional(),
   competitors: z.array(z.string().url()).default([]),
+  auditRoot: z.string().optional(),
+  auditName: z.string().optional(),
+  auditSlug: z.string().optional(),
+  auditRunId: z.string().optional(),
+  outputDir: z.string().optional(),
   viewports: z.array(ViewportConfigSchema).min(1),
   crawl: z.object({
     sameDomainOnly: z.boolean().default(true),

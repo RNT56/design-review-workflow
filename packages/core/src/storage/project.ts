@@ -1,7 +1,8 @@
+import { access } from "node:fs/promises";
 import * as path from "node:path";
 import { AuditConfig } from "../schemas/audit.js";
 import { ensureDir, writeJson } from "../utils/fs.js";
-import { siteSlug } from "../utils/url.js";
+import { resolveAuditOutputLocation } from "./audit-output.js";
 
 export type AuditPaths = {
   root: string;
@@ -20,8 +21,12 @@ export type AuditPaths = {
 };
 
 export async function createAuditPaths(config: AuditConfig, workspaceRoot = process.cwd()): Promise<AuditPaths> {
-  const root = path.join(workspaceRoot, "projects", siteSlug(config.url));
-  const auditRoot = path.join(root, "audits", config.auditId);
+  const location = resolveAuditOutputLocation(config, workspaceRoot);
+  const root = location.explicitOutput ? path.dirname(location.auditRoot) : path.join(location.auditReportsRoot, location.siteSlug);
+  const auditRoot = location.auditRoot;
+  if (await pathExists(auditRoot)) {
+    throw new Error(`Audit output already exists: ${auditRoot}. Choose a different --audit-name/--output or remove the existing folder.`);
+  }
   const paths: AuditPaths = {
     root,
     auditRoot,
@@ -49,9 +54,16 @@ export async function createAuditPaths(config: AuditConfig, workspaceRoot = proc
   return paths;
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  return access(filePath).then(
+    () => true,
+    () => false
+  );
+}
+
 export async function createNestedAuditPaths(auditRoot: string): Promise<AuditPaths> {
   auditRoot = path.resolve(auditRoot);
-  const root = path.dirname(path.dirname(auditRoot));
+  const root = path.basename(path.dirname(auditRoot)) === "audits" ? path.dirname(path.dirname(auditRoot)) : path.dirname(auditRoot);
   const paths: AuditPaths = {
     root,
     auditRoot,

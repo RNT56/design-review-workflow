@@ -10,7 +10,7 @@ CLI / Local Web UI
   -> Reviewer Agents
   -> Synthesis
   -> QA Gate
-  -> Report Export
+  -> Report Generation
   -> Report Lint
   -> Business-Grade Gate
   -> Design Workflow Artifacts
@@ -23,7 +23,7 @@ CLI / Local Web UI
 
 ### Audit Orchestrator
 
-Interprets config, creates the project folder, coordinates capture, stores intermediate state, runs review, and writes reports.
+Interprets config, creates the audit folder, coordinates capture, stores intermediate state, runs review, and writes reports.
 
 ### Evidence Capture
 
@@ -55,6 +55,16 @@ The report layer writes:
 - `report/hosted/index.html`
 
 The hosted report is a standalone static export with copied local screenshot assets, so it can be served without the Express UI.
+
+### Local Export Packages
+
+The `export` command creates deterministic local handoff packages without cloud credentials:
+
+- `review`: customer-readable report package.
+- `full`: complete internal artifact package excluding nested exports.
+- `repo-import`: implementation-agent handoff package with local absolute paths redacted by default.
+
+Each export includes `export-manifest.json`, `checksums.sha256`, and `LICENSE-NOTICE.md`. Cloud upload is intentionally outside the core pipeline and should happen only through an explicitly authorized external connector after a local package exists.
 
 ### Design Workflow Artifacts
 
@@ -139,7 +149,7 @@ Every completed audit runs report lint and writes a stable agent bundle:
 Each audit is a reproducible local snapshot:
 
 ```text
-projects/<site>/audits/<timestamp>-<mode>/
+audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/
   audit-config.json
   audit-state.json
   crawl-map.json
@@ -152,15 +162,26 @@ projects/<site>/audits/<timestamp>-<mode>/
     pages/
   agent-runs/
   synthesis/
+  exports/
   report/
 ```
 
 The latest completed audit is also exposed through generated pointers:
 
 ```text
-projects/latest-audit.json
-projects/<site>/latest-audit.json
+audit-reports/audit-index.json
+audit-reports/audit-index.sqlite
+audit-reports/latest-audit.json
+audit-reports/<site>/latest-audit.json
 ```
+
+Storage controls:
+
+- `--audit-root <dir>` and `DESIGN_REVIEW_AUDIT_ROOT` select the root. The default is `./audit-reports`.
+- `--audit-name <name>` controls the site folder slug before falling back to the domain.
+- `--output <dir>` is an explicit advanced override and must not overwrite an existing audit directory.
+
+Legacy `projects/<site>/audits/<id>/` reports remain readable for compatibility, but new runs should use `audit-reports/`.
 
 ## Extension Points
 
@@ -169,5 +190,5 @@ projects/<site>/latest-audit.json
 - Design standards registry for workflow-level rules
 - Read-only source repo analyzer for implementation candidate mapping
 - Report generator boundaries for external document exports
-- Project storage boundary for future SQLite/cloud indexing
+- Audit storage boundary for future cloud indexing or optional upload layers
 - Agent bundle JSON files for downstream coding-agent execution

@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { configuredAuditRoot } from "../storage/audit-output.js";
 import { ensureDir, writeJson } from "../utils/fs.js";
 import { sanitizePath } from "../utils/url.js";
 
@@ -33,7 +34,7 @@ export async function fetchFigmaEvidence(options: FigmaFetchOptions): Promise<Fi
   const fileKey = parseFigmaFileKey(options.fileKeyOrUrl);
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const fetchedAt = new Date().toISOString();
-  const root = path.join(workspaceRoot, "projects", "figma", sanitizePath(fileKey), fetchedAt.replace(/[:.]/g, "-"));
+  const root = path.join(configuredAuditRoot(undefined, workspaceRoot), "figma", sanitizePath(fileKey), fetchedAt.replace(/[:.]/g, "-"));
   await ensureDir(root);
 
   const file = await figmaGet(token, `https://api.figma.com/v1/files/${encodeURIComponent(fileKey)}`);

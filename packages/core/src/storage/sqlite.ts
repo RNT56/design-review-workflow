@@ -11,8 +11,8 @@ type DatabaseSyncConstructor = new (path: string, options?: { open?: boolean }) 
   close(): void;
 };
 
-export async function upsertAuditIndexSqlite(workspaceRoot: string, entry: ProjectIndexEntry): Promise<void> {
-  const dbPath = path.join(workspaceRoot, "projects", "index.sqlite");
+export async function upsertAuditIndexSqlite(indexRoot: string, entry: ProjectIndexEntry): Promise<void> {
+  const dbPath = path.join(indexRoot, "audit-index.sqlite");
   await ensureDir(path.dirname(dbPath));
   const DatabaseSync = await getDatabaseSync();
   const db = new DatabaseSync(dbPath);
@@ -81,8 +81,8 @@ export async function upsertAuditIndexSqlite(workspaceRoot: string, entry: Proje
   }
 }
 
-export async function readAuditIndexSqlite(workspaceRoot: string): Promise<ProjectIndexEntry[]> {
-  const dbPath = path.join(workspaceRoot, "projects", "index.sqlite");
+export async function readAuditIndexSqlite(indexRoot: string, fileName = "audit-index.sqlite"): Promise<ProjectIndexEntry[]> {
+  const dbPath = path.join(indexRoot, fileName);
   const DatabaseSync = await getDatabaseSync();
   const db = new DatabaseSync(dbPath, { open: true });
   try {

@@ -23,6 +23,14 @@ npm run build
 node apps/cli/dist/index.js run https://example.com
 ```
 
+Audit output defaults to:
+
+```text
+audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/
+```
+
+Use `--audit-root <dir>` or `DESIGN_REVIEW_AUDIT_ROOT` when running from another repository and keep `--output <dir>` for explicit manual overrides.
+
 With read-only source mapping for an implementation agent:
 
 ```bash
@@ -33,19 +41,32 @@ Business-grade lane:
 
 ```bash
 node apps/cli/dist/index.js run https://example.com --business-grade
-node apps/cli/dist/index.js review-pack build --report projects/<site>/audits/<audit-id>
+node apps/cli/dist/index.js review-pack build --report audit-reports/<site>/<run-id>
 # The repo-capable multimodal agent follows report/agent-review-pack/review-pack-manifest.json,
 # inspects the gallery and optimized PNG sheets, then writes a completed visual-review JSON.
-node apps/cli/dist/index.js agent-review import --report projects/<site>/audits/<audit-id> --file agent-runs/<agent>/visual-review.json
-node apps/cli/dist/index.js business-grade lint --report projects/<site>/audits/<audit-id>
+node apps/cli/dist/index.js agent-review import --report audit-reports/<site>/<run-id> --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report audit-reports/<site>/<run-id>
 ```
 
-Audit outputs are written to `projects/<site>/audits/<timestamp>-<mode>/`.
+For local handoff packages:
+
+```bash
+node apps/cli/dist/index.js export --report audit-reports/<site>/<run-id> --profile review
+node apps/cli/dist/index.js export --report audit-reports/<site>/<run-id> --profile full
+node apps/cli/dist/index.js export --report audit-reports/<site>/<run-id> --profile repo-import
+```
+
+Exports write `export-manifest.json`, `checksums.sha256`, and `LICENSE-NOTICE.md`. Local absolute paths are redacted by default. Cloud upload is intentionally left to an explicitly authorized external agent connector.
 
 Each completed audit writes:
 
 - `report/workflow-manifest.json`
 - `report/handoff.json`
+- `report/report.md`
+- `report/report.html`
+- `report/report.json`
+- `report/index.md`
+- `report/index.html`
 - `report/validation.json`
 - `report/quality-gate.json`
 - `report/business-grade-gate.json`
@@ -75,7 +96,8 @@ Each completed audit writes:
 - `report/contact-sheets/*.png` when built
 - `report/agent-visual-review.json` when imported
 - `report/agent-instructions/*.md`
-- `report/index.md` and `report/index.html`
+- `export-manifest.json` and `checksums.sha256` after export
+- `exports/*.zip` or export directories after export
 
 Run the local UI:
 
@@ -93,21 +115,22 @@ npm run agent -- https://example.com
 npm run quick -- https://example.com
 npm run full -- https://example.com --competitor https://competitor.example
 node apps/cli/dist/index.js latest example.com
-node apps/cli/dist/index.js validate ./projects/example-com/audits/<audit-id>/report/report.json
-node apps/cli/dist/index.js compare ./projects/example-com/audits/before ./projects/example-com/audits/after
+node apps/cli/dist/index.js validate ./audit-reports/example-com/<run-id>/report/report.json
+node apps/cli/dist/index.js compare ./audit-reports/example-com/before ./audit-reports/example-com/after
 node apps/cli/dist/index.js monitor init monitor.yaml
 node apps/cli/dist/index.js monitor run monitor.yaml
 node apps/cli/dist/index.js providers status
 node apps/cli/dist/index.js workflow --format json
-node apps/cli/dist/index.js report lint ./projects/example-com/audits/<audit-id> --strict
-node apps/cli/dist/index.js review-pack build --report ./projects/example-com/audits/<audit-id>
-node apps/cli/dist/index.js agent-review import --report ./projects/example-com/audits/<audit-id> --file agent-runs/<agent>/visual-review.json
-node apps/cli/dist/index.js business-grade lint --report ./projects/example-com/audits/<audit-id>
-node apps/cli/dist/index.js plan build --report ./projects/example-com/audits/<audit-id>
-node apps/cli/dist/index.js benchmark --report ./projects/example-com/audits/<audit-id>
-node apps/cli/dist/index.js standards update --report ./projects/example-com/audits/<audit-id>
+node apps/cli/dist/index.js report lint ./audit-reports/example-com/<run-id> --strict
+node apps/cli/dist/index.js review-pack build --report ./audit-reports/example-com/<run-id>
+node apps/cli/dist/index.js agent-review import --report ./audit-reports/example-com/<run-id> --file agent-runs/<agent>/visual-review.json
+node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example-com/<run-id>
+node apps/cli/dist/index.js plan build --report ./audit-reports/example-com/<run-id>
+node apps/cli/dist/index.js benchmark --report ./audit-reports/example-com/<run-id>
+node apps/cli/dist/index.js standards update --report ./audit-reports/example-com/<run-id>
+node apps/cli/dist/index.js export --report ./audit-reports/example-com/<run-id> --profile review
 node apps/cli/dist/index.js suppressions init design-review-suppressions.json
-node apps/cli/dist/index.js suppressions apply --report ./projects/example-com/audits/<audit-id> --file design-review-suppressions.json
+node apps/cli/dist/index.js suppressions apply --report ./audit-reports/example-com/<run-id> --file design-review-suppressions.json
 npm run doctor
 ```
 
@@ -124,6 +147,7 @@ npm run doctor
 - Rule-based reviewer agents for design, UX, conversion, brand/trust, content, mobile, accessibility, performance, and design-system consistency
 - Deterministic synthesis, QA gate, scorecard, quick wins, redesign briefing, and ticket-ready recommendations
 - Markdown, HTML, PDF, and JSON report exports
+- Local export profiles: `review`, `full`, and `repo-import`
 - Basic annotated screenshots for validated findings
 - Screenshot manifest, contact sheets, and static hosted report with local screenshot assets
 - Business-grade visual-review pack for repo-capable multimodal agents, including optimized first-viewport, page-flow, issue-evidence PNG sheets and a static filterable gallery
@@ -131,7 +155,7 @@ npm run doctor
 - Competitor benchmark output when competitor URLs are supplied
 - Local ticket export files for GitHub Issues, Linear, Jira, and JSON backlog
 - Audit compare artifacts with subscore deltas and screenshot diffs where dimensions match
-- SQLite-backed local audit index with JSON fallback
+- SQLite-backed local audit index with JSON fallback under `audit-reports/`
 - Local monitor runs from YAML/JSON config
 - Read-only Figma evidence fetch command when `FIGMA_TOKEN` is configured
 - Environment-configured model provider adapters
@@ -182,7 +206,8 @@ packages/
   core/         Capture, schemas, review, scoring, reports.
 docs/           Architecture and operating docs.
 examples/       Example audit config.
-projects/       Generated local audit output.
+audit-reports/  Generated local audit output.
+projects/       Legacy generated audit output.
 ```
 
 ## Development
@@ -194,4 +219,4 @@ npm run build
 npm run doctor
 ```
 
-The generated `projects/*/audits/*` folders are ignored by Git. Keep only intentional samples under `examples/`.
+The generated `audit-reports/` folder is ignored by Git. Legacy `projects/*/audits/*` folders remain ignored for backward compatibility. Keep only intentional samples under `examples/`.

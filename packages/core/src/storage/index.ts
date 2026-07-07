@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { AuditReport, AuditReportSchema } from "../schemas/audit.js";
 import { ensureDir, writeJson } from "../utils/fs.js";
-import { siteSlug } from "../utils/url.js";
+import { auditSlugForTarget, configuredAuditRoot, legacyProjectsRoot } from "./audit-output.js";
 import { readAuditIndexSqlite, upsertAuditIndexSqlite } from "./sqlite.js";
 
 export type ProjectIndexEntry = {
@@ -30,10 +30,11 @@ export type ProjectIndex = {
 };
 
 export async function updateProjectIndex(workspaceRoot: string, report: AuditReport, auditRoot: string, outputs: { json?: string; html?: string; pdf?: string }): Promise<ProjectIndex> {
-  const indexPath = path.join(workspaceRoot, "projects", "index.json");
+  const indexRoot = configuredAuditRoot(report.config.auditRoot, workspaceRoot);
+  const indexPath = path.join(indexRoot, "audit-index.json");
   await ensureDir(path.dirname(indexPath));
   const current = await readProjectIndex(workspaceRoot);
-  const site = siteSlug(report.config.url);
+  const site = auditSlugForTarget(report.config.url, report.config.auditName, report.config.auditSlug);
   const entry: ProjectIndexEntry = {
     auditId: report.auditId,
     site,
@@ -53,36 +54,31 @@ export async function updateProjectIndex(workspaceRoot: string, report: AuditRep
     pages: report.pages.length
   };
 
-  const withoutCurrent = current.audits.filter((audit) => audit.auditId !== report.auditId);
+  const withoutCurrent = current.audits.filter((audit) => audit.auditRoot !== auditRoot && audit.auditId !== report.auditId);
   const next: ProjectIndex = {
     updatedAt: new Date().toISOString(),
     audits: [entry, ...withoutCurrent].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
   };
   await writeJson(indexPath, next);
-  await writeLatestPointers(workspaceRoot, entry);
-  await upsertAuditIndexSqlite(workspaceRoot, entry).catch(() => undefined);
+  await writeLatestPointers(indexRoot, entry);
+  await upsertAuditIndexSqlite(indexRoot, entry).catch(() => undefined);
   return next;
 }
 
-export async function readProjectIndex(workspaceRoot: string): Promise<ProjectIndex> {
-  const sqliteAudits = await readAuditIndexSqlite(workspaceRoot).catch(() => []);
-  if (sqliteAudits.length > 0) {
-    return {
-      updatedAt: new Date().toISOString(),
-      audits: sqliteAudits
-    };
-  }
-
-  const indexPath = path.join(workspaceRoot, "projects", "index.json");
-  try {
-    const parsed = JSON.parse(await readFile(indexPath, "utf8")) as ProjectIndex;
-    return {
-      updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
-      audits: Array.isArray(parsed.audits) ? parsed.audits : []
-    };
-  } catch {
-    return { updatedAt: new Date(0).toISOString(), audits: [] };
-  }
+export async function readProjectIndex(workspaceRoot: string, auditRootInput?: string): Promise<ProjectIndex> {
+  const auditRoot = configuredAuditRoot(auditRootInput, workspaceRoot);
+  const legacyRoot = legacyProjectsRoot(workspaceRoot);
+  const sources = await Promise.all([
+    readAuditIndexSqlite(auditRoot).catch(() => []),
+    readIndexJson(path.join(auditRoot, "audit-index.json")).catch(() => []),
+    readAuditIndexSqlite(legacyRoot, "index.sqlite").catch(() => []),
+    readIndexJson(path.join(legacyRoot, "index.json")).catch(() => [])
+  ]);
+  const audits = dedupeAudits(sources.flat()).sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
+  return {
+    updatedAt: audits[0]?.generatedAt ?? new Date(0).toISOString(),
+    audits
+  };
 }
 
 export async function readReportFromAuditDir(auditDir: string): Promise<AuditReport> {
@@ -90,12 +86,29 @@ export async function readReportFromAuditDir(auditDir: string): Promise<AuditRep
   return AuditReportSchema.parse(JSON.parse(await readFile(reportPath, "utf8")));
 }
 
-async function writeLatestPointers(workspaceRoot: string, entry: ProjectIndexEntry): Promise<void> {
+async function writeLatestPointers(indexRoot: string, entry: ProjectIndexEntry): Promise<void> {
   const latest = {
     schemaVersion: "design-review-workflow.latest-audit.v1",
     updatedAt: new Date().toISOString(),
     audit: entry
   };
-  await writeJson(path.join(workspaceRoot, "projects", "latest-audit.json"), latest);
-  await writeJson(path.join(workspaceRoot, "projects", entry.site, "latest-audit.json"), latest);
+  await writeJson(path.join(indexRoot, "latest-audit.json"), latest);
+  await writeJson(path.join(indexRoot, entry.site, "latest-audit.json"), latest);
+}
+
+async function readIndexJson(indexPath: string): Promise<ProjectIndexEntry[]> {
+  const parsed = JSON.parse(await readFile(indexPath, "utf8")) as ProjectIndex;
+  return Array.isArray(parsed.audits) ? parsed.audits : [];
+}
+
+function dedupeAudits(audits: ProjectIndexEntry[]): ProjectIndexEntry[] {
+  const byKey = new Map<string, ProjectIndexEntry>();
+  for (const audit of audits) {
+    const key = audit.auditRoot || `${audit.site}:${audit.auditId}`;
+    const current = byKey.get(key);
+    if (!current || audit.generatedAt.localeCompare(current.generatedAt) >= 0) {
+      byKey.set(key, audit);
+    }
+  }
+  return [...byKey.values()];
 }

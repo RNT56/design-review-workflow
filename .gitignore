@@ -5,6 +5,7 @@ dist/
 !.env.example
 coverage/
 .DS_Store
+audit-reports/
 projects/*/audits/
 projects/*/latest-audit.json
 projects/index.json

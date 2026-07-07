@@ -1,4 +1,5 @@
 import { AuditConfig, AuditConfigSchema, AuditMode, ViewportConfig } from "../schemas/audit.js";
+import { AUDIT_ROOT_ENV, DEFAULT_AUDIT_ROOT } from "../storage/audit-output.js";
 import { createAuditId } from "../utils/id.js";
 
 const defaultViewports: ViewportConfig[] = [
@@ -28,6 +29,11 @@ export type AuditInput = {
   industry?: string;
   brandContext?: string;
   competitors?: string[];
+  auditRoot?: string;
+  auditName?: string;
+  auditSlug?: string;
+  auditRunId?: string;
+  outputDir?: string;
   outputPdf?: boolean;
   outputHtml?: boolean;
   outputJson?: boolean;
@@ -49,6 +55,11 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
     industry: input.industry,
     brandContext: input.brandContext,
     competitors: input.competitors ?? [],
+    auditRoot: input.auditRoot ?? process.env[AUDIT_ROOT_ENV] ?? DEFAULT_AUDIT_ROOT,
+    auditName: input.auditName,
+    auditSlug: input.auditSlug,
+    auditRunId: input.auditRunId,
+    outputDir: input.outputDir,
     viewports: defaultViewports,
     crawl: {
       sameDomainOnly: true,

@@ -2,6 +2,8 @@
 
 The repository now generates local artifacts that are ready for external systems without creating side effects.
 
+Generated audit data lives under `audit-reports/` by default. `--audit-root <dir>` and `DESIGN_REVIEW_AUDIT_ROOT` can relocate that root. Cloud upload is intentionally outside the core workflow; generate a local export package first, then use an explicitly authorized external connector if upload is requested.
+
 ## Ticketing
 
 Each audit writes:
@@ -12,6 +14,18 @@ Each audit writes:
 - `exports/jira-import.csv`
 
 These files are intentionally local. Live GitHub, Linear, or Jira writes require explicit credentials and should be added as separate commands with confirmation.
+
+## Export Packages
+
+Use deterministic local packages for sharing:
+
+```bash
+node apps/cli/dist/index.js export --report <audit-dir> --profile review
+node apps/cli/dist/index.js export --report <audit-dir> --profile full
+node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import
+```
+
+Each package includes `export-manifest.json`, `checksums.sha256`, and `LICENSE-NOTICE.md`. Text artifacts redact local absolute paths by default unless `--include-private-paths` is supplied.
 
 ## Model Providers
 
@@ -44,7 +58,7 @@ Implemented read-only command:
 node apps/cli/dist/index.js figma fetch <file-key-or-url> --node <node-id>
 ```
 
-This writes evidence under `projects/figma/` and requires `FIGMA_TOKEN`.
+This writes evidence under `audit-reports/figma/` by default and requires `FIGMA_TOKEN`.
 
 ## Monitoring
 

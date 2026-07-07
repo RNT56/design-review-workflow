@@ -30,6 +30,7 @@ export * from "./review/grouping.js";
 export * from "./review/business-grade.js";
 export * from "./compare/compare.js";
 export * from "./storage/index.js";
+export * from "./storage/audit-output.js";
 export * from "./integrations/figma.js";
 export * from "./monitoring/monitor.js";
 export * from "./validation/report-lint.js";
@@ -38,10 +39,16 @@ export * from "./report/screenshot-manifest.js";
 export * from "./report/business-grade-artifacts.js";
 export * from "./report/review-pack.js";
 export * from "./report/agent-review-import.js";
+export * from "./report/export.js";
 export * from "./source/repo-analysis.js";
 
 export type RunAuditOptions = {
   workspaceRoot?: string;
+  auditRoot?: string;
+  auditName?: string;
+  auditSlug?: string;
+  auditRunId?: string;
+  outputDir?: string;
   onProgress?: (event: ProgressEvent) => void;
 };
 
@@ -54,7 +61,15 @@ export type RunAuditResult = {
 };
 
 export async function runAudit(input: AuditInput | AuditConfig, options: RunAuditOptions = {}): Promise<RunAuditResult> {
-  const config = AuditConfigSchema.safeParse(input).success ? AuditConfigSchema.parse(input) : createAuditConfig(input as AuditInput);
+  const parsedConfig = AuditConfigSchema.safeParse(input).success ? AuditConfigSchema.parse(input) : createAuditConfig(input as AuditInput);
+  const config = AuditConfigSchema.parse({
+    ...parsedConfig,
+    auditRoot: options.auditRoot ?? parsedConfig.auditRoot,
+    auditName: options.auditName ?? parsedConfig.auditName,
+    auditSlug: options.auditSlug ?? parsedConfig.auditSlug,
+    auditRunId: options.auditRunId ?? parsedConfig.auditRunId,
+    outputDir: options.outputDir ?? parsedConfig.outputDir
+  });
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const paths = await createAuditPaths(config, workspaceRoot);
 

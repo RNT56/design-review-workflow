@@ -177,6 +177,16 @@ Every completed audit writes machine-readable agent contracts under `report/`:
 - `agent-visual-review.json`: imported multimodal agent review when present
 - `hosted/index.html`: standalone static report with copied screenshot assets
 
+## Export Manifest
+
+When `export --profile review|full|repo-import` runs, the audit root receives:
+
+- `export-manifest.json`: package metadata with target URL, audit ID, profile, format, artifact list, SHA-256 hashes, validation status, privacy notes, and license notice pointer
+- `checksums.sha256`: hashes for exported package entries
+- `exports/*.zip` or a directory export
+
+Export packages also contain `LICENSE-NOTICE.md`. Local absolute paths are redacted from text artifacts by default unless explicitly disabled.
+
 ## Source Candidate
 
 Source candidates are proposal data, not edits:

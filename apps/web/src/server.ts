@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import { createAuditConfig, readProjectIndex, runAudit, validateReport, type AuditReport } from "../../../packages/core/src/index.js";
+import { configuredAuditRoot, createAuditConfig, readProjectIndex, runAudit, validateReport, type AuditReport } from "../../../packages/core/src/index.js";
 
 type Job = {
   id: string;
@@ -18,6 +18,7 @@ const app = express();
 const jobs = new Map<string, Job>();
 
 app.use(express.json({ limit: "1mb" }));
+app.use("/audit-reports", express.static(configuredAuditRoot(undefined, workspaceRoot)));
 app.use("/projects", express.static(path.join(workspaceRoot, "projects")));
 
 app.post("/api/audits", async (req, res) => {
@@ -50,7 +51,7 @@ app.post("/api/audits", async (req, res) => {
       .then((result) => {
         job.status = "completed";
         job.auditRoot = result.auditRoot;
-        job.report = result.report;
+        job.report = attachPublicBase(result.report, result.auditRoot);
       })
       .catch((error) => {
         job.status = "failed";
@@ -78,9 +79,19 @@ app.get("/api/audits", async (_req, res) => {
 
 app.get("/api/audits/:site/:audit/report", async (req, res) => {
   try {
-    const reportPath = path.join(workspaceRoot, "projects", req.params.site, "audits", req.params.audit, "report", "report.json");
+    const index = await readProjectIndex(workspaceRoot);
+    const entry = index.audits.find(
+      (audit) => audit.site === req.params.site && (audit.auditId === req.params.audit || path.basename(audit.auditRoot) === req.params.audit)
+    );
+    const auditRoot =
+      entry?.auditRoot ??
+      (await firstExistingDirectory([
+        path.join(configuredAuditRoot(undefined, workspaceRoot), req.params.site, req.params.audit),
+        path.join(workspaceRoot, "projects", req.params.site, "audits", req.params.audit)
+      ]));
+    const reportPath = entry?.reportJson ?? path.join(auditRoot ?? "", "report", "report.json");
     const report = validateReport(JSON.parse(await readFile(reportPath, "utf8")));
-    res.json(report);
+    res.json(attachPublicBase(report, auditRoot ?? path.dirname(path.dirname(reportPath))));
   } catch (error) {
     res.status(404).json({ error: error instanceof Error ? error.message : String(error) });
   }
@@ -115,20 +126,23 @@ async function listAudits() {
   if (indexed.audits.length > 0) {
     return indexed.audits.map((audit) => ({
       site: audit.site,
-      audit: audit.auditId,
-      reportPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.json`,
-      htmlPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.html`,
-      pdfPath: `/projects/${audit.site}/audits/${audit.auditId}/report/report.pdf`,
-      workflowManifestPath: `/projects/${audit.site}/audits/${audit.auditId}/report/workflow-manifest.json`,
-      handoffPath: `/projects/${audit.site}/audits/${audit.auditId}/report/handoff.json`,
-      validationPath: `/projects/${audit.site}/audits/${audit.auditId}/report/validation.json`,
-      agentPlanPath: `/projects/${audit.site}/audits/${audit.auditId}/report/agent-execution-plan.md`,
-      sourceCandidatesPath: `/projects/${audit.site}/audits/${audit.auditId}/report/source-candidates.json`,
-      repoAnalysisPath: `/projects/${audit.site}/audits/${audit.auditId}/report/repo-analysis.json`,
-      patchPlanPath: `/projects/${audit.site}/audits/${audit.auditId}/report/patch-plan.md`,
-      benchmarkPath: `/projects/${audit.site}/audits/${audit.auditId}/report/design-benchmark.json`,
-      standardsPath: `/projects/${audit.site}/audits/${audit.auditId}/report/standards-registry.json`,
-      visualSystemPath: `/projects/${audit.site}/audits/${audit.auditId}/report/visual-system.json`,
+      audit: path.basename(audit.auditRoot) || audit.auditId,
+      auditId: audit.auditId,
+      auditRoot: audit.auditRoot,
+      publicBasePath: publicBaseForAuditRoot(audit.auditRoot),
+      reportPath: reportPublicPath(audit.auditRoot, "report/report.json"),
+      htmlPath: reportPublicPath(audit.auditRoot, "report/report.html"),
+      pdfPath: reportPublicPath(audit.auditRoot, "report/report.pdf"),
+      workflowManifestPath: reportPublicPath(audit.auditRoot, "report/workflow-manifest.json"),
+      handoffPath: reportPublicPath(audit.auditRoot, "report/handoff.json"),
+      validationPath: reportPublicPath(audit.auditRoot, "report/validation.json"),
+      agentPlanPath: reportPublicPath(audit.auditRoot, "report/agent-execution-plan.md"),
+      sourceCandidatesPath: reportPublicPath(audit.auditRoot, "report/source-candidates.json"),
+      repoAnalysisPath: reportPublicPath(audit.auditRoot, "report/repo-analysis.json"),
+      patchPlanPath: reportPublicPath(audit.auditRoot, "report/patch-plan.md"),
+      benchmarkPath: reportPublicPath(audit.auditRoot, "report/design-benchmark.json"),
+      standardsPath: reportPublicPath(audit.auditRoot, "report/standards-registry.json"),
+      visualSystemPath: reportPublicPath(audit.auditRoot, "report/visual-system.json"),
       generatedAt: audit.generatedAt,
       score: audit.overallScore,
       findings: audit.findings
@@ -153,10 +167,62 @@ async function listAudits() {
     benchmarkPath: string;
     standardsPath: string;
     visualSystemPath: string;
+    auditRoot?: string;
+    publicBasePath?: string;
     generatedAt?: string;
     score?: number;
     findings?: number;
   }> = [];
+
+  const auditReportsRoot = configuredAuditRoot(undefined, workspaceRoot);
+  const auditReportSites = await readdir(auditReportsRoot).catch(() => []);
+  for (const site of auditReportSites) {
+    const siteRoot = path.join(auditReportsRoot, site);
+    if (!(await stat(siteRoot).then((value) => value.isDirectory()).catch(() => false))) {
+      continue;
+    }
+    const entries = await readdir(siteRoot).catch(() => []);
+    for (const audit of entries) {
+      const auditRoot = path.join(siteRoot, audit);
+      if (!(await stat(auditRoot).then((value) => value.isDirectory()).catch(() => false))) {
+        continue;
+      }
+      const reportPath = path.join(auditRoot, "report", "report.json");
+      let generatedAt: string | undefined;
+      let score: number | undefined;
+      let findings: number | undefined;
+      try {
+        const report = validateReport(JSON.parse(await readFile(reportPath, "utf8")));
+        generatedAt = report.generatedAt;
+        score = report.scorecard.overallScore;
+        findings = report.findings.length;
+      } catch {
+        continue;
+      }
+      audits.push({
+        site,
+        audit,
+        auditRoot,
+        publicBasePath: publicBaseForAuditRoot(auditRoot),
+        reportPath: reportPublicPath(auditRoot, "report/report.json"),
+        htmlPath: reportPublicPath(auditRoot, "report/report.html"),
+        pdfPath: reportPublicPath(auditRoot, "report/report.pdf"),
+        workflowManifestPath: reportPublicPath(auditRoot, "report/workflow-manifest.json"),
+        handoffPath: reportPublicPath(auditRoot, "report/handoff.json"),
+        validationPath: reportPublicPath(auditRoot, "report/validation.json"),
+        agentPlanPath: reportPublicPath(auditRoot, "report/agent-execution-plan.md"),
+        sourceCandidatesPath: reportPublicPath(auditRoot, "report/source-candidates.json"),
+        repoAnalysisPath: reportPublicPath(auditRoot, "report/repo-analysis.json"),
+        patchPlanPath: reportPublicPath(auditRoot, "report/patch-plan.md"),
+        benchmarkPath: reportPublicPath(auditRoot, "report/design-benchmark.json"),
+        standardsPath: reportPublicPath(auditRoot, "report/standards-registry.json"),
+        visualSystemPath: reportPublicPath(auditRoot, "report/visual-system.json"),
+        generatedAt,
+        score,
+        findings
+      });
+    }
+  }
 
   for (const site of sites) {
     const auditsRoot = path.join(projectsRoot, site, "audits");
@@ -183,6 +249,8 @@ async function listAudits() {
       audits.push({
         site,
         audit,
+        auditRoot,
+        publicBasePath: publicBaseForAuditRoot(auditRoot),
         reportPath: `/projects/${site}/audits/${audit}/report/report.json`,
         htmlPath: `/projects/${site}/audits/${audit}/report/report.html`,
         pdfPath: `/projects/${site}/audits/${audit}/report/report.pdf`,
@@ -204,6 +272,51 @@ async function listAudits() {
   }
 
   return audits.sort((a, b) => (b.generatedAt ?? "").localeCompare(a.generatedAt ?? ""));
+}
+
+function attachPublicBase(report: AuditReport, auditRoot: string): AuditReport {
+  return {
+    ...report,
+    auditRoot,
+    publicBasePath: publicBaseForAuditRoot(auditRoot)
+  } as AuditReport;
+}
+
+function reportPublicPath(auditRoot: string, file: string): string {
+  const base = publicBaseForAuditRoot(auditRoot);
+  return base ? `${base}/${file}` : file;
+}
+
+function publicBaseForAuditRoot(auditRoot: string): string | undefined {
+  const resolved = path.resolve(auditRoot);
+  const auditReportsRoot = configuredAuditRoot(undefined, workspaceRoot);
+  const auditReportsRelative = path.relative(auditReportsRoot, resolved);
+  if (isRelativeInside(auditReportsRelative)) {
+    return `/audit-reports/${toUrlPath(auditReportsRelative)}`;
+  }
+  const legacyRoot = path.join(workspaceRoot, "projects");
+  const legacyRelative = path.relative(legacyRoot, resolved);
+  if (isRelativeInside(legacyRelative)) {
+    return `/projects/${toUrlPath(legacyRelative)}`;
+  }
+  return undefined;
+}
+
+function isRelativeInside(value: string): boolean {
+  return value !== "" && !value.startsWith("..") && !path.isAbsolute(value);
+}
+
+function toUrlPath(value: string): string {
+  return value.split(path.sep).map(encodeURIComponent).join("/");
+}
+
+async function firstExistingDirectory(candidates: string[]): Promise<string | undefined> {
+  for (const candidate of candidates) {
+    if (await stat(candidate).then((value) => value.isDirectory()).catch(() => false)) {
+      return candidate;
+    }
+  }
+  return undefined;
 }
 
 function stringValue(value: unknown): string | undefined {

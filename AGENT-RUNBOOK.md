@@ -59,6 +59,13 @@ With read-only source mapping:
 node apps/cli/dist/index.js run https://example.com --repo /path/to/target-website-repo
 ```
 
+When an agent launches the workflow while its shell is inside another website repository, point output back to this workflow repo:
+
+```bash
+node /path/to/design-review-workflow/apps/cli/dist/index.js run https://example.com \
+  --audit-root /path/to/design-review-workflow/audit-reports
+```
+
 Business-grade lane:
 
 ```bash
@@ -79,6 +86,7 @@ npm run agent -- https://example.com \
   --goal "Generate qualified demo requests" \
   --audience "B2B operations teams" \
   --competitor https://competitor.example \
+  --audit-name "Example Client" \
   --repo /path/to/target-website-repo
 ```
 
@@ -94,6 +102,9 @@ node apps/cli/dist/index.js plan build --report <audit-dir>
 node apps/cli/dist/index.js standards update --report <audit-dir>
 node apps/cli/dist/index.js suppressions init design-review-suppressions.json
 node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file design-review-suppressions.json
+node apps/cli/dist/index.js export --report <audit-dir> --profile review
+node apps/cli/dist/index.js export --report <audit-dir> --profile full
+node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import
 ```
 
 ## Required Closeout
@@ -131,8 +142,8 @@ Agents must report:
 - `report/agent-review-pack/` when built
 - `report/contact-sheets/*.png` when built
 - `report/agent-visual-review.json` when imported
-- `report/index.html`
-- `report/index.md`
+- `export-manifest.json` and `checksums.sha256` when an export profile is generated
+- `exports/*.zip` or export directory when an export profile is generated
 - Top findings and score
 - Any failed validation gate or runtime limitation
 
@@ -166,6 +177,24 @@ The stable machine-readable files are:
 
 Agents should not scrape Markdown when these JSON files are available.
 
+## Storage And Export
+
+Default storage is:
+
+```text
+audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/
+```
+
+Slug priority is `--audit-name`, then config `auditName`/`auditSlug`, then the URL domain. `DESIGN_REVIEW_AUDIT_ROOT` and `--audit-root <dir>` control the audit root. `--output <dir>` is an explicit manual override and still must not overwrite an existing audit directory.
+
+Use local export profiles for handoff:
+
+- `review`: customer-readable report package.
+- `full`: complete internal artifact package excluding nested exports.
+- `repo-import`: implementation-agent handoff package with local absolute paths redacted by default.
+
+The workflow does not upload to cloud storage. If upload is needed, use a separate explicitly authorized connector after the export ZIP exists.
+
 ## Visual Review Order
 
 For business-grade work, use `report/agent-review-pack/review-pack-manifest.json` as the review source of truth:
@@ -183,6 +212,7 @@ For business-grade work, use `report/agent-review-pack/review-pack-manifest.json
 - No private/auth/payment/account/admin areas.
 - No real form submission with personal data.
 - No external ticket writes unless a human explicitly asks and credentials are configured.
+- No cloud uploads from core workflow commands.
 - All findings must remain evidence-backed.
 - Business-grade status requires imported visual-review evidence from the running multimodal agent.
 - `--repo` is read-only and produces candidates/proposals only.

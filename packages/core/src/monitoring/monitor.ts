@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { compareAuditDirs } from "../compare/compare.js";
 import { createAuditConfig, type AuditInput } from "../config/defaults.js";
 import { runAudit } from "../index.js";
+import { configuredAuditRoot } from "../storage/audit-output.js";
 import { readProjectIndex } from "../storage/index.js";
 import { writeJson } from "../utils/fs.js";
 import { siteSlug } from "../utils/url.js";
@@ -81,7 +82,7 @@ export async function runMonitorConfig(configPath: string, workspaceRoot = proce
   }
 
   const output: MonitorRunResult = { generatedAt, runs };
-  const outputPath = path.join(workspaceRoot, "projects", "monitor-runs", `${generatedAt.replace(/[:.]/g, "-")}.json`);
+  const outputPath = path.join(configuredAuditRoot(undefined, workspaceRoot), "monitor-runs", `${generatedAt.replace(/[:.]/g, "-")}.json`);
   await writeJson(outputPath, output);
   return output;
 }
