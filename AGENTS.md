@@ -64,7 +64,7 @@ The implemented MVP is deterministic and local-first:
 - Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
 - Latest-audit pointers under `projects/latest-audit.json` and `projects/<site>/latest-audit.json`
 - axe-core accessibility basics where injection succeeds
-- Browser navigation-timing performance basics plus Lighthouse summaries where local Chrome/Lighthouse succeeds
+- Browser navigation-timing performance basics; Lighthouse-grade audits are intentionally external to this dependency-light workflow
 
 The following are planned seams, not completed product claims unless code and tests prove otherwise:
 

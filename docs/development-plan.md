@@ -15,7 +15,7 @@ Implemented or targeted in the current codebase:
 - DOM, text, links, buttons, forms, sections, components, CSS signals
 - Basic interaction capture for common mobile navigation state
 - axe-core accessibility basics when injection succeeds
-- Browser navigation-timing performance basics and Lighthouse summaries where local Chrome succeeds
+- Browser navigation-timing performance basics, with Lighthouse-grade audits left to a dedicated external performance pass
 - Rule-based page classification
 - Criteria-backed deterministic reviewer findings
 - Synthesis, dedupe, QA validation, scorecard, quick wins
