@@ -1,6 +1,7 @@
 {
   "name": "@design-review-workflow/cli",
   "version": "0.1.0",
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "bin": {
     "wdr": "./dist/index.js"

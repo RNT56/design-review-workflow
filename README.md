@@ -1,20 +1,70 @@
 # Agentic Website Design Review Workflow
 
-Local-first, agent-native website design review workflow for evidence-backed UX, visual design, conversion, mobile, accessibility-basic, and performance-perception audits.
+<p align="center">
+  <a href="https://github.com/RNT56/design-review-workflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/RNT56/design-review-workflow/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="License: Non-commercial only" src="https://img.shields.io/badge/license-Non--commercial--only-red.svg" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.8-3178C6.svg" />
+  <img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24-339933.svg" />
+  <img alt="npm workspaces" src="https://img.shields.io/badge/npm-workspaces-CB3837.svg" />
+</p>
 
-The intended handoff is simple: give any repo-capable agent this repository plus a public URL. The workflow captures evidence, validates the report bundle, and emits both human-readable reports and machine-readable handoff files.
+Design Review Workflow turns a public URL into an evidence-backed UX, visual design, conversion, mobile and accessibility-basic review bundle that repo-capable agents can run, inspect and hand off.
 
-Business-grade design-review claims are gated. A normal run is an `automated_scan`; a business-grade report requires the running multimodal agent to inspect the generated screenshots/contact sheets, write an `AgentVisualReview` JSON artifact, import it, and pass `business-grade lint`. No additional API keys are required for that lane.
+It is built for repeatable design critique instead of loose screenshot notes: the workflow captures rendered evidence, extracts page structure, writes validated findings, generates review-pack contact sheets, and keeps business-grade claims gated until the running multimodal agent has actually inspected the screenshots.
 
-## Quick Start
+## Status
 
-For agents or fresh clones:
+| Item              | State                                                                    |
+| ----------------- | ------------------------------------------------------------------------ |
+| Current version   | `0.1.0`                                                                  |
+| Stability         | Pre-1.0; report lint and business-grade gates enforce the bundle shape   |
+| Primary interface | `node apps/cli/dist/index.js run <url>`                                  |
+| Agent handoff     | Works with repo-capable agents such as Codex, Claude Code and opencode   |
+| Storage           | Local-first under `audit-reports/<site>/<run-id>/`                       |
+| License           | Custom non-commercial license; commercial use is prohibited              |
+
+## What It Reviews
+
+| Area                    | Coverage                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| First impression        | above-fold hierarchy, immediate comprehension, CTA clarity, visual priority and page intent                         |
+| Visual design           | typography, color signals, spacing, radius usage, rhythm, composition and design-system consistency                 |
+| UX and navigation       | page classification, navigation clarity, route inventory, link/button/form evidence and repeated section patterns   |
+| Conversion and trust    | proof, reassurance, portfolio narrative, service persuasion, contact paths, risk reduction and action readiness     |
+| Mobile experience       | mobile screenshots, small-viewport composition, density, cropping, CTA placement and mobile navigation evidence     |
+| Accessibility basics    | axe-core basics where injection succeeds, missing alt counts, contrast samples and evidence-linked warnings         |
+| Performance perception  | browser navigation timing, visible loading context and limitations for non-Lighthouse dependency-light audits       |
+| Agent implementation    | source candidates, patch-plan proposals and changed-file proposals when `--repo <path>` is supplied                 |
+
+This is a design-review workflow, not an SEO, analytics, privacy, legal accessibility, backend performance or bundle-internals audit.
+
+## How It Works
+
+```mermaid
+flowchart LR
+  A["Public URL"] --> B["Crawl and render"]
+  B --> C["Screenshots and DOM evidence"]
+  C --> D["Deterministic design reviewers"]
+  D --> E["Findings, score and grouped issues"]
+  E --> F["Report lint and quality gates"]
+  F --> G["Review pack for multimodal agent"]
+  G --> H["Agent visual review import"]
+  H --> I["Business-grade report and export bundle"]
+```
+
+The scanner collects deterministic evidence first. The agent running the workflow then uses that evidence for the high-fidelity visual judgment. Without an imported `AgentVisualReview`, the output remains an `automated_scan` or `agent_review_pending`; it must not be described as business-grade.
+
+## Quickstart
+
+Fresh clone or agent handoff:
 
 ```bash
+git clone https://github.com/RNT56/design-review-workflow.git
+cd design-review-workflow
 bash scripts/agent-run.sh https://example.com
 ```
 
-Equivalent manual path:
+Manual setup:
 
 ```bash
 npm ci
@@ -23,200 +73,230 @@ npm run build
 node apps/cli/dist/index.js run https://example.com
 ```
 
-Audit output defaults to:
+Run a fuller audit:
+
+```bash
+node apps/cli/dist/index.js run https://example.com \
+  --mode full \
+  --max-pages 15 \
+  --audit-name "Example" \
+  --goal "Generate qualified demo requests" \
+  --audience "B2B operations teams"
+```
+
+Run with read-only source mapping:
+
+```bash
+node apps/cli/dist/index.js run https://example.com \
+  --repo /path/to/target-website-repo \
+  --audit-name "Example"
+```
+
+`--repo` never edits the target repository. It only writes candidate files, source maps and patch-plan proposals into the audit report.
+
+## Run It With An Agent
+
+Give a repo-capable agent this repository and a public URL:
 
 ```text
-audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/
+Open https://github.com/RNT56/design-review-workflow.
+Run a design review for:
+
+https://example.com
+
+Follow the repository instructions. Do not enter login, account, admin,
+payment or checkout-completion areas. Return the audit root, quality-gate
+status, report links and top evidence-backed findings.
 ```
 
-Use `--audit-root <dir>` or `DESIGN_REVIEW_AUDIT_ROOT` when running from another repository and keep `--output <dir>` for explicit manual overrides.
+For source-aware handoff:
 
-With read-only source mapping for an implementation agent:
+```text
+Run the design review workflow for https://example.com.
+Also use this target website source repository only for read-only source
+candidate mapping:
+
+/path/to/target-website-repo
+
+Do not modify the target repo unless separately asked.
+```
+
+If the agent runs the CLI while its shell is inside another website repository, keep output with this workflow repo:
 
 ```bash
-node apps/cli/dist/index.js run https://example.com --repo /path/to/target-website-repo
+node /path/to/design-review-workflow/apps/cli/dist/index.js run https://example.com \
+  --audit-root /path/to/design-review-workflow/audit-reports \
+  --audit-name "Example"
 ```
 
-Business-grade lane:
+## Business-Grade Review
+
+Business-grade depth requires the multimodal agent running the workflow to inspect the screenshots and import a validated visual-review artifact. No additional API keys are added by the workflow; the host agent supplies the visual understanding.
 
 ```bash
-node apps/cli/dist/index.js run https://example.com --business-grade
-node apps/cli/dist/index.js review-pack build --report audit-reports/<site>/<run-id>
-# The repo-capable multimodal agent follows report/agent-review-pack/review-pack-manifest.json,
-# inspects the gallery and optimized PNG sheets, then writes a completed visual-review JSON.
-node apps/cli/dist/index.js agent-review import --report audit-reports/<site>/<run-id> --file agent-runs/<agent>/visual-review.json
-node apps/cli/dist/index.js business-grade lint --report audit-reports/<site>/<run-id>
+node apps/cli/dist/index.js run https://example.com --business-grade --audit-name "Example"
+node apps/cli/dist/index.js review-pack build --report ./audit-reports/example/<run-id>
+
+# The running multimodal agent inspects:
+# - report/agent-review-pack/review-pack-manifest.json
+# - report/agent-review-pack/gallery/index.html
+# - report/contact-sheets/first-viewports.png
+# - report/contact-sheets/issues/*.png
+# - report/contact-sheets/pages/*-flow.png
+# - raw screenshots in report/screenshot-manifest.json
+
+node apps/cli/dist/index.js agent-review import \
+  --report ./audit-reports/example/<run-id> \
+  --file agent-runs/<agent>/visual-review.json
+
+node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example/<run-id>
 ```
 
-For local handoff packages:
+The generated review pack includes optimized PNG sheets, a static gallery, screenshot manifests, prompts, a JSON schema and an import template. Raw screenshots remain unchanged.
+
+## Audit Storage
+
+Audits are stored locally and never overwrite prior runs by default:
+
+```text
+audit-reports/
+  example/
+    2026-07-07T101743Z-scan_c7869f76/
+      audit-config.json
+      audit-state.json
+      screenshots/
+      extracted/
+      agent-runs/
+      synthesis/
+      report/
+      exports/
+  audit-index.json
+  audit-index.sqlite
+  latest-audit.json
+```
+
+Folder naming uses `--audit-name` when supplied, otherwise the URL/domain slug. The run folder contains a UTC timestamp and scan ID.
+
+Storage controls:
+
+| Option | Purpose |
+| ------ | ------- |
+| `--audit-root <dir>` | Place audits under a specific root, usually this workflow repo's `audit-reports/` |
+| `DESIGN_REVIEW_AUDIT_ROOT` | Environment default for the audit root |
+| `--audit-name <name>` | Human-readable name that becomes the site folder slug |
+| `--output <dir>` | Explicit manual output directory; fails if it already exists |
+
+`audit-reports/` is ignored by Git. Legacy `projects/<site>/audits/<id>/` reports remain readable for compatibility.
+
+## Export Packages
+
+Create portable local packages for review, source-repo handoff or complete internal inspection:
 
 ```bash
-node apps/cli/dist/index.js export --report audit-reports/<site>/<run-id> --profile review
-node apps/cli/dist/index.js export --report audit-reports/<site>/<run-id> --profile full
-node apps/cli/dist/index.js export --report audit-reports/<site>/<run-id> --profile repo-import
+node apps/cli/dist/index.js export --report ./audit-reports/example/<run-id> --profile review
+node apps/cli/dist/index.js export --report ./audit-reports/example/<run-id> --profile repo-import
+node apps/cli/dist/index.js export --report ./audit-reports/example/<run-id> --profile full
 ```
 
-Exports write `export-manifest.json`, `checksums.sha256`, and `LICENSE-NOTICE.md`. Local absolute paths are redacted by default. Cloud upload is intentionally left to an explicitly authorized external agent connector.
+| Profile | Purpose |
+| ------- | ------- |
+| `review` | Customer-readable report package with the hosted report, score, gates, findings and visual evidence |
+| `repo-import` | Source-repo handoff package for implementation agents, with local absolute paths redacted by default |
+| `full` | Complete internal artifact package excluding nested prior exports |
 
-Each completed audit writes:
+Every export includes `export-manifest.json`, `checksums.sha256` and `LICENSE-NOTICE.md`. Local absolute paths are redacted by default; pass `--include-private-paths` only for trusted internal handoff.
 
-- `report/workflow-manifest.json`
-- `report/handoff.json`
-- `report/report.md`
-- `report/report.html`
-- `report/report.json`
-- `report/index.md`
-- `report/index.html`
-- `report/validation.json`
-- `report/quality-gate.json`
-- `report/business-grade-gate.json`
-- `report/grouped-issues.json`
-- `report/screenshot-manifest.json`
-- `report/agent-review-pack/review-pack-manifest.json` when built
-- `report/agent-review-pack/gallery/index.html` when built
-- `report/contact-sheets/first-viewports.png` when built
-- `report/contact-sheets/pages/*.png` when built
-- `report/contact-sheets/issues/*.png` when built
-- `report/agent-execution-plan.md`
-- `report/implementation-plan.json`
-- `report/evidence-index.json`
-- `report/evidence.jsonl`
-- `report/source-candidates.json`
-- `report/repo-analysis.json`
-- `report/patch-plan.md`
-- `report/changed-files.json`
-- `report/route-templates.json`
-- `report/visual-system.json`
-- `report/experience-timing.json`
-- `report/design-benchmark.json`
-- `report/standards-registry.json`
-- `report/suppression-report.json`
-- `report/hosted/index.html`
-- `report/agent-review-pack/` when built
-- `report/contact-sheets/*.png` when built
-- `report/agent-visual-review.json` when imported
-- `report/agent-instructions/*.md`
-- `export-manifest.json` and `checksums.sha256` after export
-- `exports/*.zip` or export directories after export
+Cloud upload is intentionally not part of the core workflow. If a user explicitly asks for Google Drive, Dropbox, S3 or similar storage, an authorized external agent connector can upload the generated package.
 
-Run the local UI:
+## Report Surfaces
+
+High-signal report files:
+
+| File | Purpose |
+| ---- | ------- |
+| `report/report.html` and `report/report.md` | Human-readable report |
+| `report/hosted/index.html` | Standalone static report with copied screenshot assets |
+| `report/report.json` | Full structured report |
+| `report/findings.json` | Prioritized evidence-backed findings |
+| `report/grouped-issues.json` | Root-cause issue groups with affected pages and recommendations |
+| `report/score.json` | Scorecard and confidence summary |
+| `report/screenshot-manifest.json` | Screenshot inventory with PNG dimensions and sheet references |
+| `report/contact-sheets/` | First-viewport, page-flow and issue evidence sheets |
+| `report/agent-review-pack/gallery/index.html` | Static screenshot gallery for visual review |
+| `report/business-grade-gate.json` | Business-grade claim gate |
+| `report/quality-gate.json` and `report/validation.json` | Technical bundle validation |
+| `report/source-candidates.json` | Candidate source files when `--repo` is supplied |
+| `report/patch-plan.md` and `report/changed-files.json` | Proposal-only implementation planning |
+| `report/agent-execution-plan.md` | Handoff plan for repo-capable agents |
+| `report/agent-instructions/*.md` | Agent-specific execution notes |
+
+Use `report lint` and `business-grade lint` before sharing or acting on a report:
+
+```bash
+node apps/cli/dist/index.js report lint ./audit-reports/example/<run-id> --strict
+node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example/<run-id>
+```
+
+## Local UI
+
+Start the local cockpit:
 
 ```bash
 npm run web
 ```
 
-Then open the printed local URL.
+Then open the printed localhost URL. The UI lists local audits, opens reports, links handoff files, shows screenshot drawers collapsed by default, and exposes page evidence, issue evidence, raw screenshots and imported agent review sections.
 
-## CLI
+## Useful Commands
 
 ```bash
-node apps/cli/dist/index.js run https://example.com --mode full --max-pages 15
-npm run agent -- https://example.com
-npm run quick -- https://example.com
-npm run full -- https://example.com --competitor https://competitor.example
-node apps/cli/dist/index.js latest example.com
-node apps/cli/dist/index.js validate ./audit-reports/example-com/<run-id>/report/report.json
-node apps/cli/dist/index.js compare ./audit-reports/example-com/before ./audit-reports/example-com/after
+node apps/cli/dist/index.js latest [site-or-url]
+node apps/cli/dist/index.js history
+node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
 node apps/cli/dist/index.js monitor init monitor.yaml
 node apps/cli/dist/index.js monitor run monitor.yaml
-node apps/cli/dist/index.js providers status
 node apps/cli/dist/index.js workflow --format json
-node apps/cli/dist/index.js report lint ./audit-reports/example-com/<run-id> --strict
-node apps/cli/dist/index.js review-pack build --report ./audit-reports/example-com/<run-id>
-node apps/cli/dist/index.js agent-review import --report ./audit-reports/example-com/<run-id> --file agent-runs/<agent>/visual-review.json
-node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example-com/<run-id>
-node apps/cli/dist/index.js plan build --report ./audit-reports/example-com/<run-id>
-node apps/cli/dist/index.js benchmark --report ./audit-reports/example-com/<run-id>
-node apps/cli/dist/index.js standards update --report ./audit-reports/example-com/<run-id>
-node apps/cli/dist/index.js export --report ./audit-reports/example-com/<run-id> --profile review
-node apps/cli/dist/index.js suppressions init design-review-suppressions.json
-node apps/cli/dist/index.js suppressions apply --report ./audit-reports/example-com/<run-id> --file design-review-suppressions.json
-npm run doctor
+node apps/cli/dist/index.js doctor
 ```
 
-## What The Workflow Does
+## Safety Boundaries
 
-- Same-domain crawl with relevance ranking
-- Desktop and mobile screenshots
-- Above-the-fold and full-page screenshots
-- DOM/text/link/button/form extraction
-- Section and component inventory
-- CSS signals: colors, fonts, sizes, spacing, contrast samples
-- axe-core accessibility basics when page injection succeeds
-- Browser navigation-timing performance basics
-- Rule-based reviewer agents for design, UX, conversion, brand/trust, content, mobile, accessibility, performance, and design-system consistency
-- Deterministic synthesis, QA gate, scorecard, quick wins, redesign briefing, and ticket-ready recommendations
-- Markdown, HTML, PDF, and JSON report exports
-- Local export profiles: `review`, `full`, and `repo-import`
-- Basic annotated screenshots for validated findings
-- Screenshot manifest, contact sheets, and static hosted report with local screenshot assets
-- Business-grade visual-review pack for repo-capable multimodal agents, including optimized first-viewport, page-flow, issue-evidence PNG sheets and a static filterable gallery
-- Visual-review import that merges agent observations, grouped issues, refreshed score confidence, and report/UI output
-- Competitor benchmark output when competitor URLs are supplied
-- Local ticket export files for GitHub Issues, Linear, Jira, and JSON backlog
-- Audit compare artifacts with subscore deltas and screenshot diffs where dimensions match
-- SQLite-backed local audit index with JSON fallback under `audit-reports/`
-- Local monitor runs from YAML/JSON config
-- Read-only Figma evidence fetch command when `FIGMA_TOKEN` is configured
-- Environment-configured model provider adapters
-- One-command agent runner for repo-capable agents
-- Repository-level workflow contract via `workflow`
-- Strict report lint and quality-gate files
-- Design workflow benchmark, standards registry, and non-destructive suppression ledger
-- Optional `--repo` source analysis that emits candidate files, patch plan, and changed-file proposal without modifying the target repo
-- Latest-audit pointers for timestamp-free handoff
-- Agent execution plan, machine-readable handoff, implementation plan, evidence index, evidence JSONL, and agent-specific instructions
+- Public pages only; no login, account, admin, checkout completion or payment areas.
+- No purchases and no real personal-data submission.
+- No invented screenshots, metrics, user behavior, competitors or brand guidelines.
+- No business-grade claim without imported multimodal visual review.
+- No automatic target-repo edits from `--repo`; source mapping is read-only.
+- No live GitHub, Linear, Jira, Slack, Notion or cloud-storage writes from the core workflow.
+- No legal WCAG certification, privacy audit, SEO audit, analytics audit, backend performance audit or bundle-internals audit.
 
-## Safety Boundary
-
-- No login-area audits
-- No purchases or personal-data submission
-- No full WCAG, SEO, analytics, privacy, bundle, or server-performance audit
-- No production LLM provider calls yet
-- No business-grade claim without imported agent visual review
-- No true Lighthouse report yet
-- No Figma or external ticketing integrations yet
-- No automatic target-repo edits from `--repo`; it is read-only source mapping
-- No live writes to external ticketing systems without explicit credentials and a dedicated command
-- No model call is made unless both provider API key and model env vars are configured
-
-See [AGENTS.md](./AGENTS.md) for the source-of-truth implementation contract.
-See [AGENT-RUNBOOK.md](./AGENT-RUNBOOK.md) for handing this workflow to another agent.
-
-## Review Pack Order
-
-When business-grade depth is required, agents should build the review pack and inspect evidence in this order:
-
-1. `report/agent-review-pack/review-pack-manifest.json`
-2. `report/agent-review-pack/gallery/index.html`
-3. `report/contact-sheets/first-viewports.png`
-4. `report/contact-sheets/issues/*.png`
-5. `report/contact-sheets/pages/*-flow.png`
-6. Raw screenshots listed in `report/screenshot-manifest.json`
-
-Raw screenshots are never modified. The generated sheets are inspection surfaces over that evidence.
-
-## Project Structure
+## Repository Layout
 
 ```text
 apps/
-  cli/          CLI entrypoint.
-  web/          Local web UI and local API server.
+  cli/          Command-line interface.
+  web/          Local report cockpit and API server.
 packages/
-  core/         Capture, schemas, review, scoring, reports.
-docs/           Architecture and operating docs.
-examples/       Example audit config.
-audit-reports/  Generated local audit output.
-projects/       Legacy generated audit output.
+  core/         Capture, schemas, review, scoring, storage and reports.
+docs/           Architecture, schemas, compatibility and integration notes.
+examples/       Example audit configuration.
+scripts/        Fresh-clone agent runner.
+audit-reports/  Generated local audits; ignored by Git.
 ```
 
 ## Development
 
 ```bash
+npm ci
+npx playwright install chromium
 npm run typecheck
 npm test
 npm run build
 npm run doctor
+npm audit --omit=dev
 ```
 
-The generated `audit-reports/` folder is ignored by Git. Legacy `projects/*/audits/*` folders remain ignored for backward compatibility. Keep only intentional samples under `examples/`.
+## License
+
+This repository is distributed under the [SEO Polish Non-Commercial License v1.0](LICENSE), the same non-commercial license used by the SEO workflow. It is not an open source license. Commercial use, client work, paid work, internal business use and commercial derivative use are prohibited unless the rights holder grants a separate commercial license.
+
+See [AGENTS.md](AGENTS.md) for the agent source of truth and [AGENT-RUNBOOK.md](AGENT-RUNBOOK.md) for detailed handoff instructions.
