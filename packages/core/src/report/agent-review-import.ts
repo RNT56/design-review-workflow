@@ -29,7 +29,7 @@ export async function markAgentReviewPending(auditDir: string): Promise<AgentRev
     groupedIssues: report.groupedIssues.length > 0 ? report.groupedIssues : groupFindings(report.findings, report.agentVisualReview),
     scorecard: createScorecard(report.findings, report.pages, report.websiteType, "agent_review_pending")
   };
-  const outputs = await writeReports(updatedReport.config, updatedReport, paths);
+  const outputs = await writeReports(updatedReport.config, updatedReport, paths, { reviewPack: true });
   const gate = evaluateBusinessGradeGate(updatedReport);
   await writeJson(path.join(paths.report, "business-grade-gate.json"), gate);
   await updateProjectIndex(workspaceRootFromAuditDir(auditDir, updatedReport), updatedReport, auditDir, outputs).catch(() => undefined);
@@ -58,7 +58,7 @@ export async function importAgentVisualReview(auditDir: string, filePath: string
   });
   await writeJson(canonicalReviewPath, review);
 
-  const outputs = await writeReports(updatedReport.config, updatedReport, paths);
+  const outputs = await writeReports(updatedReport.config, updatedReport, paths, { reviewPack: true });
   const gate = evaluateBusinessGradeGate(updatedReport);
   await writeJson(path.join(paths.report, "business-grade-gate.json"), gate);
   await updateProjectIndex(workspaceRootFromAuditDir(auditDir, updatedReport), updatedReport, auditDir, outputs).catch(() => undefined);

@@ -25,6 +25,11 @@ describe("lintAuditReport", () => {
     expect(JSON.parse(await readFile(path.join(paths.report, "quality-gate.json"), "utf8")).status).toBe("pass");
     expect(JSON.parse(await readFile(path.join(paths.report, "workflow-manifest.json"), "utf8")).qualityGate.status).toBe("pass");
     expect(JSON.parse(await readFile(path.join(paths.report, "handoff.json"), "utf8")).qualityGate.status).toBe("pass");
+    const auditIndex = await readFile(path.join(auditRoot, "index.html"), "utf8");
+    expect(auditIndex).toContain("Website Design Review");
+    expect(auditIndex).toContain("report/report.json");
+    expect(auditIndex).toContain("screenshots/desktop/page_1_desktop_above_fold.png");
+    expect(auditIndex).not.toContain(auditRoot);
   });
 });
 

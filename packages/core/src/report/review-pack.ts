@@ -103,6 +103,18 @@ function reviewTemplate(report: AuditReport, manifest: ScreenshotManifest): Agen
     reviewer: "agent-name",
     reviewedAt: new Date().toISOString(),
     auditId: report.auditId,
+    designVerdict: {
+      readiness: "targeted_redesign_recommended",
+      styleAndTaste: "TODO: describe the visual style, taste level, freshness, restraint, and whether the page feels modern and appropriate for the audience.",
+      audienceFit: "TODO: explain whether the design language matches the likely target audience, their expectations, and the decision they need to make.",
+      brandFit: "TODO: explain whether the visible brand impression feels credible, distinct, coherent, and aligned with the offer.",
+      strongestDesignQualities: ["TODO: name a concrete visual strength supported by screenshot evidence."],
+      weakestDesignRisks: ["TODO: name a concrete visual risk supported by screenshot evidence."],
+      redesignDirection: "TODO: state the recommended redesign direction, including what should become more prominent, quieter, clearer, or more convincing.",
+      rationale: "TODO: give an evidence-backed rationale for the readiness verdict, based only on screenshots and captured page evidence.",
+      confidence: "medium",
+      limitations: ["TODO: state any visual-review limits, such as missing brand context or pages not captured."]
+    },
     screenshotsReviewed: manifest.screenshots.map((screenshot) => screenshot.id),
     pageReviews: report.pages.map((page) => ({
       pageId: page.pageId,
@@ -110,12 +122,33 @@ function reviewTemplate(report: AuditReport, manifest: ScreenshotManifest): Agen
       screenshotsReviewed: Object.keys(page.screenshots),
       firstViewport: "TODO: inspect the first viewport screenshot and describe visual hierarchy, clarity, and immediate comprehension.",
       hierarchy: "TODO: inspect page hierarchy, typography, spacing, rhythm, scannability, and whether the most important content leads.",
+      composition: "TODO: inspect layout balance, spatial rhythm, density, cropping, section transitions, and whether the composition feels intentional.",
       navigation: "TODO: inspect navigation clarity, orientation, information scent, and whether page-to-page movement is obvious.",
+      ctaClarity: "TODO: inspect whether the primary next action is visually dominant, specific, and placed at the right decision moment.",
       mobile: "TODO: inspect mobile composition, cropping, density, CTA placement, and whether important content survives the small viewport.",
       trustAndProof: "TODO: inspect trust signals, proof, portfolio/service credibility, reassurance, and whether claims are visually supported.",
+      visualSystemCoherence: "TODO: inspect whether type, color, spacing, card styles, borders, radii, and imagery form a coherent visual system.",
+      accessibilityBasics: "TODO: inspect visible accessibility basics such as contrast, text size, tap target comfort, and readable structure.",
+      styleAndTaste: "TODO: state whether the page feels dated, generic, premium, restrained, playful, utilitarian, overdesigned, or underdesigned, with evidence.",
+      redesignAdvice: "TODO: state the concrete redesign advice for this page, even if the advice is to preserve the current direction with minor refinements.",
       notes: []
     })),
     visualFindings: [],
+    redesignActions: [
+      {
+        actionId: "action_1",
+        title: "TODO: concise redesign action title",
+        priority: "medium",
+        effort: "medium",
+        confidence: "medium",
+        affectedPages: report.pages.slice(0, 1).map((page) => ({ pageId: page.pageId, url: page.url, section: "first viewport" })),
+        evidenceRefs: manifest.screenshots.slice(0, 1).map((screenshot) => screenshot.id),
+        recommendation: "TODO: write a concrete redesign recommendation tied to visible screenshot evidence.",
+        expectedImpact: "TODO: explain the expected user or business impact without claiming analytics, revenue, or user behavior.",
+        acceptanceCriteria: ["TODO: write one objective acceptance criterion for the redesign action."],
+        sourceFindingIds: []
+      }
+    ],
     strengths: [],
     risks: [],
     confidence: "medium",
@@ -128,20 +161,53 @@ function agentReviewJsonSchema() {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     title: "AgentVisualReview",
     type: "object",
-    required: ["schemaVersion", "reviewer", "reviewedAt", "auditId", "screenshotsReviewed", "pageReviews", "visualFindings", "strengths", "risks", "confidence", "limitations"],
+    required: ["schemaVersion", "reviewer", "reviewedAt", "auditId", "designVerdict", "screenshotsReviewed", "pageReviews", "visualFindings", "redesignActions", "strengths", "risks", "confidence", "limitations"],
     additionalProperties: false,
     properties: {
       schemaVersion: { const: "design-review-workflow.agent-visual-review.v1" },
       reviewer: { type: "string", minLength: 1 },
       reviewedAt: { type: "string", minLength: 1 },
       auditId: { type: "string", minLength: 1 },
+      designVerdict: {
+        type: "object",
+        required: ["readiness", "styleAndTaste", "audienceFit", "brandFit", "strongestDesignQualities", "weakestDesignRisks", "redesignDirection", "rationale", "confidence", "limitations"],
+        additionalProperties: false,
+        properties: {
+          readiness: { enum: ["no_major_redesign_needed", "minor_refinement_needed", "targeted_redesign_recommended", "major_redesign_recommended"] },
+          styleAndTaste: { type: "string", minLength: 40 },
+          audienceFit: { type: "string", minLength: 40 },
+          brandFit: { type: "string", minLength: 40 },
+          strongestDesignQualities: { type: "array", minItems: 1, items: { type: "string", minLength: 20 } },
+          weakestDesignRisks: { type: "array", minItems: 1, items: { type: "string", minLength: 20 } },
+          redesignDirection: { type: "string", minLength: 40 },
+          rationale: { type: "string", minLength: 40 },
+          confidence: { enum: ["high", "medium", "low"] },
+          limitations: { type: "array", items: { type: "string", minLength: 8 } }
+        }
+      },
       screenshotsReviewed: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
       pageReviews: {
         type: "array",
         minItems: 1,
         items: {
           type: "object",
-          required: ["pageId", "url", "screenshotsReviewed", "firstViewport", "hierarchy", "navigation", "mobile", "trustAndProof", "notes"],
+          required: [
+            "pageId",
+            "url",
+            "screenshotsReviewed",
+            "firstViewport",
+            "hierarchy",
+            "composition",
+            "navigation",
+            "ctaClarity",
+            "mobile",
+            "trustAndProof",
+            "visualSystemCoherence",
+            "accessibilityBasics",
+            "styleAndTaste",
+            "redesignAdvice",
+            "notes"
+          ],
           additionalProperties: false,
           properties: {
             pageId: { type: "string", minLength: 1 },
@@ -149,9 +215,15 @@ function agentReviewJsonSchema() {
             screenshotsReviewed: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
             firstViewport: { type: "string", minLength: 20 },
             hierarchy: { type: "string", minLength: 20 },
+            composition: { type: "string", minLength: 20 },
             navigation: { type: "string", minLength: 20 },
+            ctaClarity: { type: "string", minLength: 20 },
             mobile: { type: "string", minLength: 20 },
             trustAndProof: { type: "string", minLength: 20 },
+            visualSystemCoherence: { type: "string", minLength: 20 },
+            accessibilityBasics: { type: "string", minLength: 20 },
+            styleAndTaste: { type: "string", minLength: 20 },
+            redesignAdvice: { type: "string", minLength: 20 },
             notes: { type: "array", items: { type: "string" } }
           }
         }
@@ -198,6 +270,40 @@ function agentReviewJsonSchema() {
           }
         }
       },
+      redesignActions: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["actionId", "title", "priority", "effort", "confidence", "affectedPages", "evidenceRefs", "recommendation", "expectedImpact", "acceptanceCriteria", "sourceFindingIds"],
+          additionalProperties: false,
+          properties: {
+            actionId: { type: "string", minLength: 1 },
+            title: { type: "string", minLength: 8 },
+            priority: { enum: ["critical", "high", "medium", "low"] },
+            effort: { enum: ["low", "medium", "high"] },
+            confidence: { enum: ["high", "medium", "low"] },
+            affectedPages: {
+              type: "array",
+              minItems: 1,
+              items: {
+                type: "object",
+                required: ["pageId", "url"],
+                additionalProperties: false,
+                properties: {
+                  pageId: { type: "string", minLength: 1 },
+                  url: { type: "string", format: "uri" },
+                  section: { type: "string" }
+                }
+              }
+            },
+            evidenceRefs: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
+            recommendation: { type: "string", minLength: 40 },
+            expectedImpact: { type: "string", minLength: 30 },
+            acceptanceCriteria: { type: "array", minItems: 1, items: { type: "string", minLength: 8 } },
+            sourceFindingIds: { type: "array", items: { type: "string" } }
+          }
+        }
+      },
       strengths: { type: "array", items: { type: "string" } },
       risks: { type: "array", items: { type: "string" } },
       confidence: { enum: ["high", "medium", "low"] },
@@ -222,10 +328,14 @@ This pack is for the repo-capable multimodal agent running the workflow. It inte
 4. Inspect the optimized PNG sheets under \`../contact-sheets/\`.
 5. Use \`agent-review-template.json\` as the starting shape.
 6. Replace every TODO with concrete visual observations based on screenshots.
-7. Save your completed artifact at \`agent-runs/<agent>/visual-review.json\` or another local path.
-8. Import it:
+7. Complete \`designVerdict\` with readiness, style/taste, audience fit, brand fit, redesign direction, strengths, risks, rationale, confidence, and limitations.
+8. Complete every \`pageReviews[]\` entry, including composition, CTA clarity, visual-system coherence, accessibility basics, style/taste notes, and redesign advice.
+9. Add at least 3 concrete \`redesignActions[]\`, or use \`designVerdict.readiness = "no_major_redesign_needed"\` with a detailed evidence-backed rationale.
+10. Save your completed artifact at \`agent-runs/<agent>/visual-review.json\` or another local path.
+11. Validate and import it:
 
 \`\`\`bash
+node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}
 \`\`\`
@@ -233,9 +343,11 @@ node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}
 ## Review Rules
 
 - Reference only screenshot IDs or screenshot paths listed in \`screenshot-manifest.json\`.
+- Do not leave TODO/template text anywhere in the review artifact.
 - Do not claim analytics, heatmaps, users, revenue, competitor performance, or brand rules unless they are explicitly supplied as evidence.
 - Prefer grouped, root-cause issues over repeated page-level symptoms.
-- Cover hierarchy, first viewport, CTA clarity, trust/proof, portfolio narrative or service persuasion, bilingual consistency when visible, mobile composition, visual-system coherence, and accessibility basics.
+- Cover style/taste, hierarchy, composition, first viewport, CTA clarity, trust/proof, portfolio narrative or service persuasion, bilingual consistency when visible, mobile feel, visual-system coherence, accessibility basics, and concrete redesign direction.
+- Automated scans must not be treated as style/taste verdicts; business-grade style judgment comes from this completed artifact.
 - If confidence is low, say why in \`limitations\`.
 `;
 }
@@ -263,12 +375,16 @@ async function writePagePrompts(report: AuditReport, manifest: ScreenshotManifes
         "",
         "- First viewport: does the page immediately communicate what it is, who it is for, and what to do next?",
         "- Hierarchy: do typography, spacing, contrast, and layout make the important content dominant?",
+        "- Composition: does the page feel intentionally arranged, balanced, and scannable?",
         "- CTA clarity: is the primary next action visually and verbally clear?",
         "- Trust/proof: are credibility signals present, specific, and close to decision points?",
         "- Mobile composition: does the small viewport preserve the intent without awkward cropping or excessive density?",
         "- Visual-system coherence: do colors, type, spacing, components, imagery, and interaction states feel consistent?",
+        "- Accessibility basics: are text size, visible contrast, structure, and tap-target comfort acceptable from the screenshots?",
+        "- Style and taste: does the page feel current, credible, appropriate, overdesigned, underdesigned, generic, or distinctive?",
+        "- Redesign advice: what specifically should be preserved, quieted, emphasized, removed, or redesigned?",
         "",
-        "Write findings only when the screenshot evidence supports the claim.",
+        "Write findings only when screenshot evidence supports a defect claim. Always complete page review fields and redesign advice.",
         ""
       ].join("\n")
     );
@@ -347,15 +463,10 @@ async function renderOverviewSheetHtml(report: AuditReport, manifest: Screenshot
   const pageRows = await Promise.all(
     report.pages.map(async (page) => {
       const screenshots = manifest.screenshots.filter((screenshot) => screenshot.pageId === page.pageId);
-      const thumbs = await Promise.all(
-        screenshots
-          .filter((screenshot) => screenshot.kind === "above_fold" || screenshot.kind === "state")
-          .slice(0, 4)
-          .map((screenshot) => renderThumbnailFigure(screenshot, "overview-thumb"))
-      );
+      const thumbs = await Promise.all(screenshots.map((screenshot) => renderThumbnailFigure(screenshot, "overview-thumb")));
       return `<article class="page-summary">
         <h2>${escapeHtml(page.title ?? page.url)}</h2>
-        <p>${escapeHtml(page.pageType)} / ${escapeHtml(page.url)}</p>
+        <p>${escapeHtml(page.pageType)} / ${escapeHtml(page.url)} / ${screenshots.length} raw screenshot(s)</p>
         <div class="thumbs">${thumbs.join("")}</div>
       </article>`;
     })
@@ -500,7 +611,7 @@ async function renderThumbnailFigure(screenshot: ScreenshotManifest["screenshots
   const src = await screenshotSrc(screenshot.absolutePath);
   return `<figure class="${escapeAttribute(className)}">
     <img src="${escapeAttribute(src)}" alt="${escapeAttribute(screenshot.id)}" />
-    <figcaption>${escapeHtml(screenshot.viewport)} / ${escapeHtml(screenshot.kind)}</figcaption>
+    <figcaption>${escapeHtml(screenshot.viewport)} / ${escapeHtml(screenshot.kind)}<br />${escapeHtml(screenshot.id)}</figcaption>
   </figure>`;
 }
 
@@ -576,7 +687,7 @@ function shellHtml(title: string, body: string): string {
     p { color:var(--muted); margin:0 0 10px; }
     .page-stack { display:grid; gap:22px; }
     .page-summary, .viewport-pair, .flow-section, .issue-sheet { border:1px solid var(--line); border-radius:8px; padding:16px; background:var(--panel); }
-    .thumbs { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:10px; }
+    .thumbs { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:10px; }
     .overview-thumb { margin:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }
     .overview-thumb img { width:100%; height:220px; object-fit:cover; object-position:top; display:block; }
     .viewport-grid { display:grid; grid-template-columns:minmax(0, 1fr) 330px; gap:16px; align-items:start; }

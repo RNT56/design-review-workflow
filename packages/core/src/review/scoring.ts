@@ -51,7 +51,7 @@ export function createScorecard(
   websiteType: WebsiteType,
   businessGradeStatus: BusinessGradeStatus = "automated_scan"
 ): Scorecard {
-  const statusCap = businessGradeStatus === "business_grade" ? 98 : businessGradeStatus === "agent_review_pending" ? 82 : 86;
+  const statusCap = businessGradeStatus === "business_grade" ? 98 : businessGradeStatus === "agent_review_pending" ? 82 : 74;
   const scoreFor = (categories: FindingCategory[]) => {
     const relevant = findings.filter((finding) => categories.includes(finding.category));
     const penalty = relevant.reduce((sum, finding) => {
@@ -59,7 +59,7 @@ export function createScorecard(
       const confidenceFactor = { high: 1, medium: 0.75, low: 0.45 }[finding.confidence];
       return sum + severityPenalty * confidenceFactor;
     }, 0);
-    const base = businessGradeStatus === "business_grade" ? 96 : 86;
+    const base = businessGradeStatus === "business_grade" ? 96 : businessGradeStatus === "agent_review_pending" ? 82 : 74;
     return Math.max(35, Math.min(statusCap, Math.round(base - penalty)));
   };
 
@@ -99,7 +99,9 @@ export function createScorecard(
       `${websiteType === "unknown" ? "No website-type-specific scoring adjustment was applied." : `Scoring used ${websiteType} as inferred context.`} ` +
       (businessGradeStatus === "business_grade"
         ? "Multimodal agent review was imported, so score confidence may include visual judgment."
-        : "Scores are capped because no validated multimodal agent review has been imported."),
+        : businessGradeStatus === "agent_review_pending"
+          ? "Scores are capped because visual review is pending."
+          : "This is an automated signal score capped below business-grade because no validated multimodal agent review has been imported."),
     topStrengths,
     topRisks
   };
@@ -119,7 +121,9 @@ function item(score: number, findings: Finding[], label: string, businessGradeSt
       `${label} score derived from validated findings and captured evidence. ` +
       (businessGradeStatus === "business_grade"
         ? "Imported multimodal agent review is included."
-        : "The score is capped because no validated multimodal agent review has been imported.")
+        : businessGradeStatus === "agent_review_pending"
+          ? "The score is capped because visual review is pending."
+          : "This automated signal score is capped below business-grade because no validated multimodal agent review has been imported.")
   };
 }
 

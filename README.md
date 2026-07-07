@@ -135,7 +135,6 @@ Business-grade depth requires the multimodal agent running the workflow to inspe
 
 ```bash
 node apps/cli/dist/index.js run https://example.com --business-grade --audit-name "Example"
-node apps/cli/dist/index.js review-pack build --report ./audit-reports/example/<run-id>
 
 # The running multimodal agent inspects:
 # - report/agent-review-pack/review-pack-manifest.json
@@ -145,6 +144,15 @@ node apps/cli/dist/index.js review-pack build --report ./audit-reports/example/<
 # - report/contact-sheets/pages/*-flow.png
 # - raw screenshots in report/screenshot-manifest.json
 
+# The completed visual review must include:
+# - site-level design verdict with style/taste, audience fit, brand fit and redesign direction
+# - page-by-page visual judgment for every captured page
+# - evidence-linked redesign actions, or a no-major-redesign verdict with rationale
+
+node apps/cli/dist/index.js agent-review validate \
+  --report ./audit-reports/example/<run-id> \
+  --file agent-runs/<agent>/visual-review.json
+
 node apps/cli/dist/index.js agent-review import \
   --report ./audit-reports/example/<run-id> \
   --file agent-runs/<agent>/visual-review.json
@@ -152,7 +160,7 @@ node apps/cli/dist/index.js agent-review import \
 node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example/<run-id>
 ```
 
-The generated review pack includes optimized PNG sheets, a static gallery, screenshot manifests, prompts, a JSON schema and an import template. Raw screenshots remain unchanged.
+Every completed CLI run generates the review pack: optimized PNG sheets, a static gallery, screenshot manifests, prompts, a strict JSON schema and an import template. Raw screenshots remain unchanged. Use `review-pack build --report <audit-dir>` only to refresh or backfill those assets on an existing audit folder. Automated scans do not include subjective style/taste verdicts; they show that visual review is required.
 
 ## Audit Storage
 
@@ -164,6 +172,7 @@ audit-reports/
     2026-07-07T101743Z-scan_c7869f76/
       audit-config.json
       audit-state.json
+      index.html
       screenshots/
       extracted/
       agent-runs/
@@ -214,8 +223,9 @@ High-signal report files:
 
 | File | Purpose |
 | ---- | ------- |
+| `index.html` | Primary static audit dashboard; open this first, no server required |
 | `report/report.html` and `report/report.md` | Human-readable report |
-| `report/hosted/index.html` | Standalone static report with copied screenshot assets |
+| `report/hosted/index.html` | Secondary standalone report with copied screenshot assets |
 | `report/report.json` | Full structured report |
 | `report/findings.json` | Prioritized evidence-backed findings |
 | `report/grouped-issues.json` | Root-cause issue groups with affected pages and recommendations |
@@ -247,6 +257,8 @@ npm run web
 
 Then open the printed localhost URL. The UI lists local audits, opens reports, links handoff files, shows screenshot drawers collapsed by default, and exposes page evidence, issue evidence, raw screenshots and imported agent review sections.
 
+The local cockpit is convenience tooling. Completed audits are meant to be read and shared from the generated `audit-reports/<site>/<run>/index.html` first.
+
 ## Useful Commands
 
 ```bash
@@ -264,7 +276,7 @@ node apps/cli/dist/index.js doctor
 - Public pages only; no login, account, admin, checkout completion or payment areas.
 - No purchases and no real personal-data submission.
 - No invented screenshots, metrics, user behavior, competitors or brand guidelines.
-- No business-grade claim without imported multimodal visual review.
+- No business-grade claim without imported strict multimodal visual review.
 - No automatic target-repo edits from `--repo`; source mapping is read-only.
 - No live GitHub, Linear, Jira, Slack, Notion or cloud-storage writes from the core workflow.
 - No legal WCAG certification, privacy audit, SEO audit, analytics audit, backend performance audit or bundle-internals audit.

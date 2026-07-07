@@ -637,7 +637,7 @@ input:focus {
 
 .visual-dashboard {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr) minmax(260px, 0.9fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(260px, 0.82fr) minmax(260px, 0.86fr);
   gap: 12px;
   margin: 14px 0 18px;
 }
@@ -658,34 +658,73 @@ input:focus {
   margin-bottom: 0;
 }
 
-.bar-list {
+.subscore-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(154px, 1fr));
+  gap: 12px;
 }
 
-.bar-row {
+.subscore-card {
+  min-width: 0;
   display: grid;
-  grid-template-columns: minmax(130px, 0.8fr) minmax(120px, 1fr) 38px;
-  gap: 10px;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfe;
 }
 
-.bar-row span,
+.subscore-ring {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  display: grid;
+  place-items: center;
+}
+
+.subscore-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.subscore-ring .gauge-track,
+.subscore-ring .gauge-value {
+  stroke-width: 12;
+}
+
+.subscore-ring strong {
+  position: relative;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.subscore-copy {
+  min-width: 0;
+}
+
+.subscore-copy span,
 .category-row span {
   display: block;
   color: var(--text);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 850;
+  line-height: 1.25;
 }
 
-.bar-row small {
+.subscore-copy small {
   display: block;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 750;
 }
 
-.bar-track,
 .category-row div {
   overflow: hidden;
   height: 9px;
@@ -693,7 +732,6 @@ input:focus {
   background: var(--panel-subtle);
 }
 
-.bar-track span,
 .category-row i {
   display: block;
   height: 100%;
@@ -701,9 +739,20 @@ input:focus {
   background: var(--blue);
 }
 
-.bar-row strong,
 .category-row strong {
   text-align: right;
+}
+
+.subscore-value--strong {
+  stroke: var(--green);
+}
+
+.subscore-value--mixed {
+  stroke: var(--amber);
+}
+
+.subscore-value--risk {
+  stroke: var(--red);
 }
 
 .mini-bars {
@@ -794,6 +843,41 @@ input:focus {
 .workflow-node.pending {
   border-color: #f2d8a9;
   background: var(--amber-soft);
+}
+
+.verdict-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+  margin: 14px 0 18px;
+}
+
+.verdict-panel--pending {
+  border-color: #f2d8a9;
+  background: var(--amber-soft);
+}
+
+.verdict-grid,
+.verdict-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.verdict-grid article {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 14px;
+}
+
+.verdict-grid h4,
+.verdict-actions h4 {
+  margin: 8px 0;
 }
 
 .tabs {
@@ -1196,7 +1280,6 @@ th {
     gap: 6px;
   }
 
-  .bar-row,
   .category-row,
   .workflow-map,
   .empty-diagram {

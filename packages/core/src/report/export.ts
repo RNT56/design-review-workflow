@@ -42,6 +42,7 @@ type ExportManifestArtifact = {
 };
 
 const REVIEW_FILES = new Set([
+  "index.html",
   "audit-config.json",
   "audit-state.json",
   "report/report.html",
@@ -73,10 +74,14 @@ const REVIEW_PREFIXES = [
   "report/hosted/",
   "report/contact-sheets/",
   "report/agent-review-pack/gallery/",
+  "screenshots/desktop/",
+  "screenshots/mobile/",
+  "screenshots/states/",
   "screenshots/annotated/"
 ];
 
 const REPO_IMPORT_FILES = new Set([
+  "index.html",
   "audit-config.json",
   "report/workflow-manifest.json",
   "report/handoff.json",
@@ -108,7 +113,11 @@ const REPO_IMPORT_FILES = new Set([
 const REPO_IMPORT_PREFIXES = [
   "report/agent-instructions/",
   "report/agent-review-pack/",
-  "report/contact-sheets/"
+  "report/contact-sheets/",
+  "screenshots/desktop/",
+  "screenshots/mobile/",
+  "screenshots/states/",
+  "screenshots/annotated/"
 ];
 
 const EXCLUDED_TOP_LEVEL = new Set(["exports"]);

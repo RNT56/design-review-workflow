@@ -52,7 +52,11 @@ describe("exportAudit", () => {
     expect(manifest.targetUrl).toBe("https://example.com/");
     expect(manifest.privacy).toMatchObject({ localPathsRedacted: true, cloudUploadIncluded: false });
     expect(manifest.license.noticeFile).toBe("LICENSE-NOTICE.md");
+    expect(manifest.artifacts.some((artifact) => artifact.path === "index.html")).toBe(true);
     expect(manifest.artifacts.some((artifact) => artifact.path === "report/handoff.json")).toBe(true);
+    expect(manifest.artifacts.some((artifact) => artifact.path === "screenshots/desktop/page_1_desktop_above_fold.png")).toBe(true);
+    expect(await readFile(path.join(outputPath, "index.html"), "utf8")).toContain("Website Design Review");
+    await readFile(path.join(outputPath, "screenshots", "desktop", "page_1_desktop_above_fold.png"));
     expect(sourceCandidates).toContain("[redacted-local-path]");
     expect(sourceCandidates).not.toContain("/Users/example/private");
     expect(await readFile(path.join(outputPath, "LICENSE-NOTICE.md"), "utf8")).toContain("non-commercial");
@@ -81,6 +85,7 @@ describe("exportAudit", () => {
     expect(result.outputPath).toMatch(/exports\/design-review-example-org-\d{4}-\d{2}-\d{2}T\d{6}Z-review\.zip$/);
     expect(zip.subarray(0, 2).toString("utf8")).toBe("PK");
     expect(await readFile(path.join(paths.auditRoot, "checksums.sha256"), "utf8")).toContain("LICENSE-NOTICE.md");
+    expect(await readFile(path.join(paths.auditRoot, "export-manifest.json"), "utf8")).toContain("\"path\": \"index.html\"");
   });
 });
 

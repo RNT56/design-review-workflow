@@ -194,6 +194,18 @@ function reportFixture(auditId: string, withAgentReview: boolean) {
           reviewer: "codex",
           reviewedAt: "2026-07-07T00:00:00.000Z",
           auditId,
+          designVerdict: {
+            readiness: "targeted_redesign_recommended",
+            styleAndTaste: "The fixture page feels clean and practical, but the CTA area needs more confidence and visual emphasis.",
+            audienceFit: "The visual language fits a professional audience that wants a quick read and clear next step.",
+            brandFit: "The brand impression is coherent enough for the fixture but would benefit from stronger proof placement.",
+            strongestDesignQualities: ["The first viewport keeps the offer readable and avoids unnecessary decoration."],
+            weakestDesignRisks: ["The primary action is too visually muted for a decision-oriented page."],
+            redesignDirection: "Keep the restrained structure and redesign the action/proof area to make the decision path more obvious.",
+            rationale: "The screenshot evidence shows a clear page structure, but the business action does not read as strongly as the message.",
+            confidence: "high",
+            limitations: []
+          },
           screenshotsReviewed: ["page_1_desktop_above_fold", "page_1_mobile_above_fold"],
           pageReviews: [
             {
@@ -202,9 +214,15 @@ function reportFixture(auditId: string, withAgentReview: boolean) {
               screenshotsReviewed: ["page_1_desktop_above_fold"],
               firstViewport: "The page communicates the offer but the CTA hierarchy is visually muted.",
               hierarchy: "Typography and spacing are readable, with a weak decision area.",
+              composition: "The composition is stable but does not push the primary action into a strong focal position.",
               navigation: "Navigation is clear enough for the fixture.",
+              ctaClarity: "The CTA is present, but it needs stronger contrast and isolation from supporting content.",
               mobile: "Mobile preserves the hero but compresses the CTA relationship.",
               trustAndProof: "Proof is present but not close enough to the action.",
+              visualSystemCoherence: "The fixture has a coherent type and spacing system with room to clarify action treatment.",
+              accessibilityBasics: "The visible text hierarchy is readable in the fixture screenshot.",
+              styleAndTaste: "The page feels restrained and modern enough, but it lacks a decisive action moment.",
+              redesignAdvice: "Redesign the first viewport so message, proof, and CTA form one stronger decision unit.",
               notes: []
             }
           ],
@@ -220,6 +238,21 @@ function reportFixture(auditId: string, withAgentReview: boolean) {
               evidenceRefs: ["page_1_desktop_above_fold"],
               observation: "The screenshot shows the CTA competing with adjacent visual elements.",
               recommendation: "Increase contrast and isolate the primary CTA."
+            }
+          ],
+          redesignActions: [
+            {
+              actionId: "action_1",
+              title: "Strengthen the first viewport CTA",
+              priority: "medium",
+              effort: "medium",
+              confidence: "high",
+              affectedPages: [{ pageId: "page_1", url: "https://example.com/", section: "hero" }],
+              evidenceRefs: ["page_1_desktop_above_fold"],
+              recommendation: "Increase the CTA contrast, spacing, and proof proximity so the first viewport has one obvious next step.",
+              expectedImpact: "The first viewport should become easier to scan and easier to act on from the captured design state.",
+              acceptanceCriteria: ["The primary CTA is visually dominant in the first viewport."],
+              sourceFindingIds: ["finding_1"]
             }
           ],
           strengths: ["The first viewport is structurally clear."],

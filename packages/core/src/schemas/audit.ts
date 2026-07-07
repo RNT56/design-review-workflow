@@ -71,6 +71,14 @@ export type FindingSource = z.infer<typeof FindingSourceSchema>;
 export const BusinessGradeStatusSchema = z.enum(["automated_scan", "agent_review_pending", "business_grade"]);
 export type BusinessGradeStatus = z.infer<typeof BusinessGradeStatusSchema>;
 
+export const DesignReadinessSchema = z.enum([
+  "no_major_redesign_needed",
+  "minor_refinement_needed",
+  "targeted_redesign_recommended",
+  "major_redesign_recommended"
+]);
+export type DesignReadiness = z.infer<typeof DesignReadinessSchema>;
+
 export const ViewportConfigSchema = z.object({
   name: ViewportNameSchema,
   width: z.number().int().positive(),
@@ -358,21 +366,58 @@ export const AgentPageReviewSchema = z.object({
   screenshotsReviewed: z.array(z.string()).min(1),
   firstViewport: z.string().min(20),
   hierarchy: z.string().min(20),
+  composition: z.string().min(20),
   navigation: z.string().min(20),
+  ctaClarity: z.string().min(20),
   mobile: z.string().min(20),
   trustAndProof: z.string().min(20),
+  visualSystemCoherence: z.string().min(20),
+  accessibilityBasics: z.string().min(20),
+  styleAndTaste: z.string().min(20),
+  redesignAdvice: z.string().min(20),
   notes: z.array(z.string()).default([])
 });
 export type AgentPageReview = z.infer<typeof AgentPageReviewSchema>;
+
+export const AgentDesignVerdictSchema = z.object({
+  readiness: DesignReadinessSchema,
+  styleAndTaste: z.string().min(40),
+  audienceFit: z.string().min(40),
+  brandFit: z.string().min(40),
+  strongestDesignQualities: z.array(z.string().min(20)).min(1),
+  weakestDesignRisks: z.array(z.string().min(20)).min(1),
+  redesignDirection: z.string().min(40),
+  rationale: z.string().min(40),
+  confidence: ConfidenceSchema,
+  limitations: z.array(z.string().min(8)).default([])
+});
+export type AgentDesignVerdict = z.infer<typeof AgentDesignVerdictSchema>;
+
+export const AgentRedesignActionSchema = z.object({
+  actionId: z.string().min(1),
+  title: z.string().min(8),
+  priority: SeveritySchema,
+  effort: EffortSchema,
+  confidence: ConfidenceSchema,
+  affectedPages: z.array(z.object({ pageId: z.string(), url: z.string().url(), section: z.string().optional() })).min(1),
+  evidenceRefs: z.array(z.string()).min(1),
+  recommendation: z.string().min(40),
+  expectedImpact: z.string().min(30),
+  acceptanceCriteria: z.array(z.string().min(8)).min(1),
+  sourceFindingIds: z.array(z.string()).default([])
+});
+export type AgentRedesignAction = z.infer<typeof AgentRedesignActionSchema>;
 
 export const AgentVisualReviewSchema = z.object({
   schemaVersion: z.literal("design-review-workflow.agent-visual-review.v1"),
   reviewer: z.string().min(1),
   reviewedAt: z.string().min(1),
   auditId: z.string(),
+  designVerdict: AgentDesignVerdictSchema,
   screenshotsReviewed: z.array(z.string()).min(1),
   pageReviews: z.array(AgentPageReviewSchema).min(1),
   visualFindings: z.array(AgentVisualFindingSchema).default([]),
+  redesignActions: z.array(AgentRedesignActionSchema).default([]),
   strengths: z.array(z.string()).default([]),
   risks: z.array(z.string()).default([]),
   confidence: ConfidenceSchema,

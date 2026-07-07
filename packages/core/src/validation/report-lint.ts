@@ -70,6 +70,7 @@ export async function lintAuditReport(auditDir: string, strict = false): Promise
 
 async function checkBundleFiles(report: AuditReport, auditDir: string, errors: string[], warnings: string[]) {
   const required = [
+    "index.html",
     "report/report.json",
     "report/index.md",
     "report/index.html",
@@ -253,7 +254,10 @@ async function checkJsonShape(auditDir: string, file: string, requiredKey: strin
 
 async function refreshAgentBundle(report: AuditReport, auditDir: string, result?: ReportLintResult): Promise<void> {
   const paths = await createNestedAuditPaths(auditDir);
-  await writeBusinessGradeArtifacts(report, paths);
+  const hasReviewPack = await exists(path.join(paths.report, "agent-review-pack", "review-pack-manifest.json"));
+  await writeBusinessGradeArtifacts(report, paths, {
+    preserveReviewPackManifest: hasReviewPack
+  });
   await writeAgentBundle(
     report,
     paths,
@@ -262,6 +266,7 @@ async function refreshAgentBundle(report: AuditReport, auditDir: string, result?
       markdown: (await exists(path.join(paths.report, "report.md"))) ? path.join(paths.report, "report.md") : undefined,
       html: (await exists(path.join(paths.report, "report.html"))) ? path.join(paths.report, "report.html") : undefined,
       pdf: (await exists(path.join(paths.report, "report.pdf"))) ? path.join(paths.report, "report.pdf") : undefined,
+      staticIndex: path.join(paths.auditRoot, "index.html"),
       executiveSummary: (await exists(path.join(paths.report, "executive-summary.md"))) ? path.join(paths.report, "executive-summary.md") : undefined
     },
     result

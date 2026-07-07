@@ -15,10 +15,15 @@ export type ReportOutputs = {
   markdown?: string;
   html?: string;
   pdf?: string;
+  staticIndex?: string;
   executiveSummary?: string;
 };
 
-export async function writeReports(config: AuditConfig, report: AuditReport, paths: AuditPaths): Promise<ReportOutputs> {
+export type ReportWriteOptions = {
+  reviewPack?: boolean;
+};
+
+export async function writeReports(config: AuditConfig, report: AuditReport, paths: AuditPaths, options: ReportWriteOptions = {}): Promise<ReportOutputs> {
   const outputs: ReportOutputs = {};
   report.businessGradeStatus = report.businessGradeStatus ?? "automated_scan";
   report.groupedIssues = report.groupedIssues.length > 0 ? report.groupedIssues : groupFindings(report.findings, report.agentVisualReview);
@@ -57,7 +62,8 @@ export async function writeReports(config: AuditConfig, report: AuditReport, pat
     await renderPdfFromHtml(outputs.html, outputs.pdf);
   }
 
-  await writeBusinessGradeArtifacts(report, paths);
+  await writeBusinessGradeArtifacts(report, paths, { buildReviewPack: options.reviewPack === true });
+  outputs.staticIndex = path.join(paths.auditRoot, "index.html");
   await writeAgentBundle(report, paths, outputs);
 
   return outputs;

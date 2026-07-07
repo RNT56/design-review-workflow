@@ -47,6 +47,7 @@ Findings are deduplicated, grouped into root-cause issues, scored, validated aga
 
 The report layer writes:
 
+- `index.html` at the audit root
 - `report/report.json`
 - `report/report.md`
 - `report/report.html`
@@ -54,7 +55,7 @@ The report layer writes:
 - `report/executive-summary.md`
 - `report/hosted/index.html`
 
-The hosted report is a standalone static export with copied local screenshot assets, so it can be served without the Express UI.
+The top-level audit `index.html` is the canonical no-server dashboard and links into generated JSON, screenshots, contact sheets, review gallery, gates, and handoff files by relative path. `report/hosted/index.html` remains a secondary static report with copied local screenshot assets.
 
 ### Local Export Packages
 
@@ -82,12 +83,12 @@ The design-review bundle adds stable operational artifacts:
 - `report/business-grade-gate.json`
 - `report/screenshot-manifest.json`
 - `report/agent-review-pack/`
-- `report/agent-review-pack/review-pack-manifest.json` when built
-- `report/agent-review-pack/gallery/index.html` when built
-- `report/contact-sheets/first-viewports.png` when built
-- `report/contact-sheets/pages/*.png` when built
-- `report/contact-sheets/issues/*.png` when built
-- `report/contact-sheets/*.png` when built
+- `report/agent-review-pack/review-pack-manifest.json`
+- `report/agent-review-pack/gallery/index.html`
+- `report/contact-sheets/first-viewports.png`
+- `report/contact-sheets/pages/*.png`
+- `report/contact-sheets/issues/*.png`
+- `report/contact-sheets/*.png`
 - `report/patch-plan.md`
 - `report/changed-files.json`
 - `report/manual-actions.md`
@@ -112,7 +113,7 @@ Business-grade mode is local and keyless. `review-pack build` writes screenshot 
 
 The review-pack order is first viewports, grouped issue evidence, page-flow sheets split into readable chunks, then raw screenshots. `contact-sheets/all-pages.png` is retained as a compatibility overview. Raw screenshots remain unchanged; sheets and gallery files are derived inspection surfaces.
 
-`agent-review import` validates the review against the captured screenshot inventory, rejects unsupported analytics/user/competitor claims, converts visual findings into the normal finding pipeline, refreshes grouped issues, scoring, tickets, report surfaces, and writes `report/agent-visual-review.json`.
+`agent-review import` validates the review against the captured screenshot inventory, rejects TODO/template text, shallow generic verdicts, unknown screenshots, and unsupported analytics/user/competitor claims. A passing artifact must include site-level design verdict, style/taste assessment, page-level visual judgment for every captured page, and prioritized redesign actions or a detailed no-major-redesign rationale. The import converts visual findings into the normal finding pipeline, turns redesign actions into ticket-ready recommendations, refreshes grouped issues, scoring, tickets, report surfaces, and writes `report/agent-visual-review.json`.
 
 `business-grade lint` passes only after that import succeeds.
 
@@ -120,6 +121,7 @@ The review-pack order is first viewports, grouped issue evidence, page-flow shee
 
 Every completed audit runs report lint and writes a stable agent bundle:
 
+- `index.html`
 - `report/workflow-manifest.json`
 - `report/handoff.json`
 - `report/validation.json`
@@ -152,6 +154,7 @@ Each audit is a reproducible local snapshot:
 audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/
   audit-config.json
   audit-state.json
+  index.html
   crawl-map.json
   page-inventory.json
   screenshots/

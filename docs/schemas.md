@@ -65,15 +65,17 @@ Business-grade reports require an imported visual review from the repo-capable m
 - `reviewer`
 - `reviewedAt`
 - `auditId`
+- `designVerdict`: readiness, style/taste, audience fit, brand fit, strongest qualities, weakest risks, redesign direction, rationale, confidence, limitations
 - `screenshotsReviewed`
-- `pageReviews`
-- `visualFindings`
+- `pageReviews`: one completed review per captured page, covering first viewport, hierarchy, composition, navigation, CTA clarity, mobile, trust/proof, visual-system coherence, accessibility basics, style/taste, and redesign advice
+- `visualFindings`: defect-style visual findings when evidence supports them
+- `redesignActions`: prioritized evidence-linked redesign recommendations
 - `strengths`
 - `risks`
 - `confidence`
 - `limitations`
 
-All screenshot references must match IDs or paths in `report/screenshot-manifest.json`. The import step rejects unknown screenshot references and unsupported analytics, user-behavior, revenue, heatmap, or competitor claims.
+All screenshot references must match IDs or paths in `report/screenshot-manifest.json`. The import step rejects unknown screenshot references, TODO/template text, shallow generic verdicts, unsupported analytics/user-behavior/revenue/heatmap/competitor claims, and missing redesign advice. A strict import needs at least 3 redesign actions unless `designVerdict.readiness` is `no_major_redesign_needed` with detailed rationale.
 
 ## ScreenshotManifest
 
@@ -169,13 +171,14 @@ Every completed audit writes machine-readable agent contracts under `report/`:
 - `business-grade-gate.json`: pass/fail gate for business-grade claims
 - `grouped-issues.json`: root-cause issue inventory
 - `screenshot-manifest.json`: page screenshot IDs, paths, actual PNG dimensions, display roles, groups, sheet refs, and absolute local paths for agent review
-- `agent-review-pack/review-pack-manifest.json`: generated sheet inventory and recommended visual review order when built
-- `agent-review-pack/gallery/index.html`: static filterable screenshot and sheet gallery when built
-- `contact-sheets/first-viewports.png`: first-viewport overview sheet when built
-- `contact-sheets/pages/*.png`: per-page first-viewport and page-flow sheets when built
-- `contact-sheets/issues/*.png`: grouped issue evidence sheets when built
+- `agent-review-pack/review-pack-manifest.json`: generated sheet inventory and recommended visual review order
+- `agent-review-pack/gallery/index.html`: static filterable screenshot and sheet gallery
+- `contact-sheets/first-viewports.png`: first-viewport overview sheet
+- `contact-sheets/pages/*.png`: per-page first-viewport and page-flow sheets
+- `contact-sheets/issues/*.png`: grouped issue evidence sheets
 - `agent-visual-review.json`: imported multimodal agent review when present
-- `hosted/index.html`: standalone static report with copied screenshot assets
+- `../index.html`: primary audit-root static dashboard; no server required
+- `hosted/index.html`: secondary standalone static report with copied screenshot assets
 
 ## Export Manifest
 

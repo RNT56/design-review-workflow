@@ -30,20 +30,58 @@ describe("business-grade review gate", () => {
     expect(updated.scorecard.overallScore).toBeLessThanOrEqual(98);
   });
 
+  it("rejects shallow template visual reviews", () => {
+    const report = sampleReport();
+    const review = visualReview();
+    review.designVerdict.styleAndTaste = "TODO: make it better";
+
+    expect(() => applyAgentVisualReview(report, review)).toThrow(/template\/TODO/);
+  });
+
+  it("passes a strong-site verdict with no visual defects when rationale is complete", () => {
+    const report = { ...sampleReport(), findings: [], groupedIssues: [] };
+    const review = visualReview({}, "no_major_redesign_needed");
+    review.visualFindings = [];
+    review.redesignActions = [];
+    review.designVerdict.rationale =
+      "The captured first viewport has a clear offer, coherent hierarchy, visible action, and enough proof density for a business-grade no-major-redesign verdict.";
+
+    const updated = applyAgentVisualReview(report, review);
+    const gate = evaluateBusinessGradeGate(updated);
+
+    expect(updated.findings).toHaveLength(0);
+    expect(gate.status).toBe("pass");
+  });
+
   it("caps scores when business-grade status has not passed", () => {
     const page = samplePage();
 
-    expect(createScorecard([], [page], "portfolio", "automated_scan").overallScore).toBeLessThanOrEqual(86);
+    expect(createScorecard([], [page], "portfolio", "automated_scan").overallScore).toBeLessThanOrEqual(74);
     expect(createScorecard([], [page], "portfolio", "agent_review_pending").overallScore).toBeLessThanOrEqual(82);
   });
 });
 
-function visualReview(overrides: Partial<AgentVisualReview["visualFindings"][number]> = {}): AgentVisualReview {
+function visualReview(
+  overrides: Partial<AgentVisualReview["visualFindings"][number]> = {},
+  readiness: AgentVisualReview["designVerdict"]["readiness"] = "targeted_redesign_recommended"
+): AgentVisualReview {
   return {
     schemaVersion: "design-review-workflow.agent-visual-review.v1",
     reviewer: "codex",
     reviewedAt: "2026-07-07T00:00:00.000Z",
     auditId: "audit_1",
+    designVerdict: {
+      readiness,
+      styleAndTaste: "The visual style is restrained and credible, but the action area needs a sharper editorial hierarchy to feel fully intentional.",
+      audienceFit: "The design language fits a professional service audience that needs clarity, confidence, and a fast read of the offer.",
+      brandFit: "The brand impression is competent and calm, though stronger proof placement would make the positioning feel more distinctive.",
+      strongestDesignQualities: ["The first viewport has a clear message and enough structure to review visually."],
+      weakestDesignRisks: ["Decision proof and action hierarchy can still be tightened before the page feels fully persuasive."],
+      redesignDirection: "Preserve the calm structure, but increase the contrast, spacing, and proof proximity around the main action.",
+      rationale: "The screenshot evidence shows a readable page with a visible offer, but the design still needs targeted refinement around action hierarchy.",
+      confidence: "high",
+      limitations: ["Only the captured public page screenshots were reviewed."]
+    },
     screenshotsReviewed: ["page_1_desktop_above_fold"],
     pageReviews: [
       {
@@ -52,9 +90,15 @@ function visualReview(overrides: Partial<AgentVisualReview["visualFindings"][num
         screenshotsReviewed: ["page_1_desktop_above_fold"],
         firstViewport: "The first viewport explains the offer, but the action area competes with supporting copy.",
         hierarchy: "The layout has a readable structure, though the highest-value action needs stronger visual contrast.",
+        composition: "The composition is balanced enough to scan, but spacing around the main action should create a stronger focal point.",
         navigation: "Navigation is understandable and does not dominate the primary page message.",
+        ctaClarity: "The CTA is visible, but it needs stronger contrast and placement to read as the primary next step.",
         mobile: "The mobile composition keeps the core message visible but should give the action more breathing room.",
         trustAndProof: "Trust proof is present but not close enough to the primary decision point.",
+        visualSystemCoherence: "Typography, spacing, and component treatment feel mostly coherent, with room to tighten action and proof modules.",
+        accessibilityBasics: "The visible structure is readable in the captured screenshot, though final contrast should be checked after redesign.",
+        styleAndTaste: "The page feels professional and restrained, not flashy, but it could feel more confident with stronger visual emphasis.",
+        redesignAdvice: "Keep the current calm direction and redesign the hero action area so message, proof, and next step form one clear decision unit.",
         notes: []
       }
     ],
@@ -79,10 +123,27 @@ function visualReview(overrides: Partial<AgentVisualReview["visualFindings"][num
         ...overrides
       }
     ],
+    redesignActions: [redesignAction("action_1"), redesignAction("action_2"), redesignAction("action_3")],
     strengths: ["The first viewport has a clear message and enough structure to review visually."],
     risks: ["Decision proof and action hierarchy can still be tightened."],
     confidence: "high",
     limitations: []
+  };
+}
+
+function redesignAction(actionId: string): AgentVisualReview["redesignActions"][number] {
+  return {
+    actionId,
+    title: `Strengthen first viewport decision path ${actionId}`,
+    priority: "medium",
+    effort: "medium",
+    confidence: "high",
+    affectedPages: [{ pageId: "page_1", url: "https://example.com/", section: "hero" }],
+    evidenceRefs: ["page_1_desktop_above_fold"],
+    recommendation: "Rework the hero decision area so the primary CTA, supporting proof, and lead message read as one intentional path.",
+    expectedImpact: "Visitors should understand the next step faster and have clearer confidence before exploring details.",
+    acceptanceCriteria: ["The primary action is visually dominant and supported by adjacent proof."],
+    sourceFindingIds: []
   };
 }
 

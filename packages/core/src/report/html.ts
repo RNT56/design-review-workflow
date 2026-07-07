@@ -45,8 +45,14 @@ export function renderHtmlReport(report: AuditReport): string {
             <h3>${escapeHtml(review.url)}</h3>
             <p><strong>First viewport:</strong> ${escapeHtml(review.firstViewport)}</p>
             <p><strong>Hierarchy:</strong> ${escapeHtml(review.hierarchy)}</p>
+            <p><strong>Composition:</strong> ${escapeHtml(review.composition)}</p>
+            <p><strong>CTA clarity:</strong> ${escapeHtml(review.ctaClarity)}</p>
             <p><strong>Mobile:</strong> ${escapeHtml(review.mobile)}</p>
             <p><strong>Trust/proof:</strong> ${escapeHtml(review.trustAndProof)}</p>
+            <p><strong>Visual system:</strong> ${escapeHtml(review.visualSystemCoherence)}</p>
+            <p><strong>Accessibility basics:</strong> ${escapeHtml(review.accessibilityBasics)}</p>
+            <p><strong>Style/taste:</strong> ${escapeHtml(review.styleAndTaste)}</p>
+            <p><strong>Redesign advice:</strong> ${escapeHtml(review.redesignAdvice)}</p>
           </article>`
         )
         .join("")}`
@@ -61,6 +67,21 @@ export function renderHtmlReport(report: AuditReport): string {
     .slice(0, 20)
     .map((annotation) => `<li>${escapeHtml(annotation.label)}: ${escapeHtml(annotation.annotatedScreenshot.path)}</li>`)
     .join("");
+  const scoreCards = Object.entries(report.scorecard.subscores)
+    .sort(([, a], [, b]) => b.score - a.score)
+    .map(([key, item]) => {
+      const score = clampScore(item.score);
+      const dimension = label(key);
+      return `<article class="score-card">
+        <span class="score-ring score-ring--${scoreBand(score)}" style="--score:${score}" aria-label="${escapeAttribute(`${dimension} score ${score} of 100`)}"><strong>${score}</strong></span>
+        <div>
+          <h3>${escapeHtml(dimension)}</h3>
+          <p>${escapeHtml(item.confidence)} confidence</p>
+        </div>
+      </article>`;
+    })
+    .join("");
+  const designVerdict = renderDesignVerdict(report);
 
   return `<!doctype html>
 <html lang="en">
@@ -126,6 +147,63 @@ export function renderHtmlReport(report: AuditReport): string {
         display: block;
         font-size: 28px;
       }
+      .scorecard-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+        margin: 18px 0 28px;
+      }
+      .score-card {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 14px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        background: var(--panel);
+      }
+      .score-card h3 {
+        margin: 0 0 6px;
+        font-size: 17px;
+      }
+      .score-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .score-ring {
+        --ring: var(--accent);
+        position: relative;
+        width: 78px;
+        height: 78px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: conic-gradient(var(--ring) calc(var(--score) * 1%), #e8edf1 0);
+      }
+      .score-ring::after {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        border-radius: inherit;
+        background: #ffffff;
+      }
+      .score-ring strong {
+        position: relative;
+        z-index: 1;
+        font-size: 22px;
+      }
+      .score-ring--strong {
+        --ring: #15803d;
+      }
+      .score-ring--mixed {
+        --ring: #b45309;
+      }
+      .score-ring--risk {
+        --ring: #b42318;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -171,6 +249,18 @@ export function renderHtmlReport(report: AuditReport): string {
         border-radius: 8px;
         padding: 16px;
       }
+      .verdict-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+        margin: 18px 0;
+      }
+      .verdict-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        background: var(--panel);
+      }
       @media print {
         main { padding: 24px; }
         .finding { break-inside: avoid; }
@@ -194,23 +284,20 @@ export function renderHtmlReport(report: AuditReport): string {
         <div class="metric"><span>Quick wins</span><strong>${report.quickWins.length}</strong></div>
       </section>
 
+      ${designVerdict}
+
       <h2>Grouped Issues</h2>
-      ${groupedIssues || "<p>No grouped issues were generated.</p>"}
+      ${groupedIssues || "<p>No grouped deterministic issues were generated. Business-grade design judgment still requires imported strict visual review.</p>"}
 
       ${agentReview}
 
       <h2>Scorecard</h2>
-      <table>
-        <thead><tr><th>Dimension</th><th>Score</th><th>Confidence</th></tr></thead>
-        <tbody>
-          ${Object.entries(report.scorecard.subscores)
-            .map(([key, item]) => `<tr><td>${escapeHtml(label(key))}</td><td>${item.score}</td><td>${escapeHtml(item.confidence)}</td></tr>`)
-            .join("")}
-        </tbody>
-      </table>
+      <section class="scorecard-grid" aria-label="Category scorecard">
+        ${scoreCards}
+      </section>
 
       <h2>Top Findings</h2>
-      ${findings || "<p>No validated findings were generated by the MVP rules.</p>"}
+      ${findings || "<p>Automated rules found no deterministic blockers; this is not a design-quality verdict until strict multimodal visual review is imported.</p>"}
 
       ${
         competitorRows
@@ -250,8 +337,53 @@ export function renderHtmlReport(report: AuditReport): string {
 </html>`;
 }
 
+function renderDesignVerdict(report: AuditReport): string {
+  if (!report.agentVisualReview || report.businessGradeStatus !== "business_grade") {
+    return `<section class="verdict-card">
+      <h2>Design Verdict</h2>
+      <p><strong>Visual review required.</strong> Automated rules may find deterministic blockers, but this is not a design-quality verdict and does not include style/taste judgment.</p>
+      <p>A repo-capable multimodal agent must inspect screenshots, complete the visual review JSON, import it, and pass the business-grade gate.</p>
+    </section>`;
+  }
+  const verdict = report.agentVisualReview.designVerdict;
+  const actions = report.agentVisualReview.redesignActions
+    .map(
+      (action) => `<article class="verdict-card">
+        <h3>${escapeHtml(action.title)}</h3>
+        <p>${escapeHtml(action.priority)} / ${escapeHtml(action.effort)} effort / ${escapeHtml(action.confidence)} confidence</p>
+        <p><strong>Recommendation:</strong> ${escapeHtml(action.recommendation)}</p>
+        <p><strong>Expected impact:</strong> ${escapeHtml(action.expectedImpact)}</p>
+        <p><strong>Evidence:</strong> ${escapeHtml(action.evidenceRefs.join(", "))}</p>
+      </article>`
+    )
+    .join("");
+  return `<section>
+    <h2>Design Verdict</h2>
+    <div class="verdict-grid">
+      <article class="verdict-card"><h3>Readiness</h3><p>${escapeHtml(label(verdict.readiness))}</p><p>${escapeHtml(verdict.rationale)}</p></article>
+      <article class="verdict-card"><h3>Style And Taste</h3><p>${escapeHtml(verdict.styleAndTaste)}</p></article>
+      <article class="verdict-card"><h3>Audience Fit</h3><p>${escapeHtml(verdict.audienceFit)}</p></article>
+      <article class="verdict-card"><h3>Brand Fit</h3><p>${escapeHtml(verdict.brandFit)}</p></article>
+      <article class="verdict-card"><h3>Redesign Direction</h3><p>${escapeHtml(verdict.redesignDirection)}</p></article>
+    </div>
+    <h3>Prioritized Redesign Actions</h3>
+    <div class="verdict-grid">${actions || "<p>No major redesign actions were required by the imported visual review.</p>"}</div>
+  </section>`;
+}
+
 function label(value: string): string {
   return value.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+}
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function scoreBand(score: number): "strong" | "mixed" | "risk" {
+  if (score >= 85) return "strong";
+  if (score >= 70) return "mixed";
+  return "risk";
 }
 
 function escapeHtml(value: string): string {

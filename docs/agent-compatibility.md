@@ -62,6 +62,7 @@ node apps/cli/dist/index.js latest [site-or-url]
 node apps/cli/dist/index.js doctor
 node apps/cli/dist/index.js report lint <audit-dir> --strict
 node apps/cli/dist/index.js review-pack build --report <audit-dir>
+node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 node apps/cli/dist/index.js plan build --report <audit-dir>
@@ -77,6 +78,7 @@ node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
 
 ## Stable Bundle Files
 
+- `index.html`
 - `report/workflow-manifest.json`
 - `report/handoff.json`
 - `report/report.md`
@@ -106,14 +108,14 @@ node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
 - `report/business-grade-gate.json`
 - `report/grouped-issues.json`
 - `report/screenshot-manifest.json`
-- `report/agent-review-pack/review-pack-manifest.json` when built
-- `report/agent-review-pack/gallery/index.html` when built
-- `report/contact-sheets/first-viewports.png` when built
-- `report/contact-sheets/pages/*.png` when built
-- `report/contact-sheets/issues/*.png` when built
+- `report/agent-review-pack/review-pack-manifest.json`
+- `report/agent-review-pack/gallery/index.html`
+- `report/contact-sheets/first-viewports.png`
+- `report/contact-sheets/pages/*.png`
+- `report/contact-sheets/issues/*.png`
 - `report/hosted/index.html`
-- `report/agent-review-pack/` when built
-- `report/contact-sheets/*.png` when built
+- `report/agent-review-pack/`
+- `report/contact-sheets/*.png`
 - `report/agent-visual-review.json` when imported
 - `report/priority-action-plan.md`
 - `report/next-actions.md`
@@ -155,13 +157,17 @@ The workflow must not silently assume the current directory is the target websit
 
 `report lint --strict` validates the technical bundle. `business-grade lint` validates the business-grade claim.
 
-Without an imported `AgentVisualReview`, reports remain `automated_scan` or `agent_review_pending`. A repo-capable multimodal agent must inspect the optimized review pack, write a completed visual review JSON, then import it:
+Without an imported strict `AgentVisualReview`, reports remain `automated_scan` or `agent_review_pending`. A repo-capable multimodal agent must inspect the optimized review pack, write a completed visual review JSON with design verdict, style/taste, page reviews, and redesign actions, then validate and import it:
 
 ```bash
+# Normal CLI runs already create the review pack. Use this only to refresh/backfill an existing audit.
 node apps/cli/dist/index.js review-pack build --report <audit-dir>
+node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 ```
+
+The strict review artifact must cover every captured page, reference only known screenshots, contain no TODO/template text, include strengths and risks, and provide at least 3 redesign actions unless the site verdict is `no_major_redesign_needed` with detailed rationale. Automated reports do not provide subjective style/taste verdicts.
 
 The recommended review order is machine-readable in `report/agent-review-pack/review-pack-manifest.json`:
 
@@ -170,6 +176,6 @@ The recommended review order is machine-readable in `report/agent-review-pack/re
 3. `report/contact-sheets/pages/*-flow.png`
 4. Raw screenshots from `report/screenshot-manifest.json`
 
-`report/agent-review-pack/gallery/index.html` is static and filterable by page, viewport, issue, screenshot kind, and source. `report/contact-sheets/all-pages.png` remains available for older agents as an overview sheet.
+The audit-root `index.html` is the primary static report surface for agents and handoff. It links into JSON artifacts, screenshots, contact sheets, review gallery, grouped issues, gates, and implementation files without requiring the Express/Vite local cockpit. `report/agent-review-pack/gallery/index.html` is static and filterable by page, viewport, issue, screenshot kind, and source. `report/contact-sheets/all-pages.png` remains available for older agents as an overview sheet.
 
 The workflow does not need additional API keys for this lane because the visual judgment is performed by the agent running the repo.

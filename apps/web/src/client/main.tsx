@@ -87,6 +87,18 @@ type AuditReport = {
     reviewer: string;
     reviewedAt: string;
     auditId: string;
+    designVerdict: {
+      readiness: string;
+      styleAndTaste: string;
+      audienceFit: string;
+      brandFit: string;
+      strongestDesignQualities: string[];
+      weakestDesignRisks: string[];
+      redesignDirection: string;
+      rationale: string;
+      confidence: string;
+      limitations: string[];
+    };
     screenshotsReviewed: string[];
     pageReviews: Array<{
       pageId: string;
@@ -94,9 +106,15 @@ type AuditReport = {
       screenshotsReviewed: string[];
       firstViewport: string;
       hierarchy: string;
+      composition: string;
       navigation: string;
+      ctaClarity: string;
       mobile: string;
       trustAndProof: string;
+      visualSystemCoherence: string;
+      accessibilityBasics: string;
+      styleAndTaste: string;
+      redesignAdvice: string;
       notes: string[];
     }>;
     visualFindings: Array<{
@@ -110,6 +128,19 @@ type AuditReport = {
       evidenceRefs: string[];
       observation: string;
       recommendation: string;
+    }>;
+    redesignActions: Array<{
+      actionId: string;
+      title: string;
+      priority: string;
+      effort: string;
+      confidence: string;
+      affectedPages: Array<{ pageId: string; url: string; section?: string }>;
+      evidenceRefs: string[];
+      recommendation: string;
+      expectedImpact: string;
+      acceptanceCriteria: string[];
+      sourceFindingIds: string[];
     }>;
     strengths: string[];
     risks: string[];
@@ -373,7 +404,10 @@ function ReportDashboard({
   const pageCount = report.pages.length;
   const screenshotCount = totalScreenshotCount(report);
   const evidenceCompleteness = evidenceCompletenessLabel(report);
-  const highestSignal = sortedIssues[0]?.title ?? sortedFindings[0]?.title ?? "No priority issue detected by the current report.";
+  const highestSignal =
+    sortedIssues[0]?.title ??
+    sortedFindings[0]?.title ??
+    (report.businessGradeStatus === "business_grade" ? "No priority issue was raised by the imported visual review." : "Visual review required before design-quality verdict.");
 
   return (
     <section className="report-shell">
@@ -414,6 +448,8 @@ function ReportDashboard({
         <WorkflowMap status={report.businessGradeStatus} />
       </section>
 
+      <DesignVerdictPanel report={report} />
+
       <nav className="tabs" aria-label="Report sections">
         {reportTabs(report).map((tab) => (
           <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
@@ -430,7 +466,7 @@ function ReportDashboard({
               {sortedIssues.length > 0
                 ? sortedIssues.slice(0, 5).map((issue) => <IssueCard issue={issue} report={report} key={issue.issueId} />)
                 : sortedFindings.slice(0, 5).map((finding) => <FindingCard report={report} finding={finding} key={finding.findingId} />)}
-              {sortedIssues.length === 0 && sortedFindings.length === 0 ? <EmptyPanel title="No findings in this report" body="The current bundle did not produce validated issues. Check evidence coverage and business-grade status before treating that as a clean bill." /> : null}
+              {sortedIssues.length === 0 && sortedFindings.length === 0 ? <EmptyPanel title="No findings in this report" body="Automated rules found no deterministic blockers. This is not a design-quality verdict until strict multimodal visual review is imported." /> : null}
             </div>
           </section>
 
@@ -464,7 +500,7 @@ function ReportDashboard({
             {sortedFindings.map((finding) => (
               <FindingCard report={report} finding={finding} key={finding.findingId} />
             ))}
-            {sortedFindings.length === 0 ? <EmptyPanel title="No validated findings" body="The report may still need agent visual review, review-pack inspection, or stricter target context." /> : null}
+            {sortedFindings.length === 0 ? <EmptyPanel title="No validated findings" body="Automated rules found no deterministic blockers. Business-grade design judgment still requires imported visual review." /> : null}
           </div>
         </section>
       ) : null}
@@ -511,6 +547,68 @@ function ReportDashboard({
       {activeTab === "agentReview" && report.agentVisualReview ? <AgentReviewSection report={report} /> : null}
 
       {activeTab === "agent" ? <AgentBundleSection report={report} /> : null}
+    </section>
+  );
+}
+
+function DesignVerdictPanel({ report }: { report: AuditReport }) {
+  if (!report.agentVisualReview || report.businessGradeStatus !== "business_grade") {
+    return (
+      <section className="verdict-panel verdict-panel--pending">
+        <SectionTitle eyebrow="Business-grade gate" title="Design verdict required" />
+        <p>
+          Automated rules may find deterministic blockers, but this is not a design-quality verdict and does not include
+          style, taste, composition, or redesign-direction judgment.
+        </p>
+        <div className="finding-meta">
+          <span>{report.businessGradeStatus}</span>
+          <span>{totalScreenshotCount(report)} screenshots captured</span>
+          <span>{report.pages.length} pages awaiting visual review</span>
+        </div>
+      </section>
+    );
+  }
+
+  const verdict = report.agentVisualReview.designVerdict;
+  return (
+    <section className="verdict-panel">
+      <SectionTitle eyebrow="Business-grade visual judgment" title="Design verdict" />
+      <div className="verdict-grid">
+        <article>
+          <span className="status-badge status-badge--business_grade">{label(verdict.readiness)}</span>
+          <h4>Readiness</h4>
+          <p>{verdict.rationale}</p>
+        </article>
+        <article>
+          <h4>Style and taste</h4>
+          <p>{verdict.styleAndTaste}</p>
+        </article>
+        <article>
+          <h4>Brand and audience fit</h4>
+          <p>{verdict.audienceFit}</p>
+          <p>{verdict.brandFit}</p>
+        </article>
+        <article>
+          <h4>Redesign direction</h4>
+          <p>{verdict.redesignDirection}</p>
+        </article>
+      </div>
+      <div className="verdict-actions">
+        {report.agentVisualReview.redesignActions.map((action) => (
+          <article className="finding finding-card" key={action.actionId}>
+            <div className="finding-meta">
+              <span>{action.priority}</span>
+              <span>{action.effort} effort</span>
+              <span>{action.confidence}</span>
+            </div>
+            <h4>{action.title}</h4>
+            <p>{action.recommendation}</p>
+            <p><strong>Expected impact:</strong> {action.expectedImpact}</p>
+            <ScreenshotDrawer report={report} refs={action.evidenceRefs} title="Redesign action evidence" />
+          </article>
+        ))}
+        {report.agentVisualReview.redesignActions.length === 0 ? <p className="muted">No major redesign actions were required by the imported visual review.</p> : null}
+      </div>
     </section>
   );
 }
@@ -686,6 +784,9 @@ function AgentReviewSection({ report }: { report: AuditReport }) {
             <span>{report.agentVisualReview.screenshotsReviewed.length} screenshots</span>
           </div>
           <p>{formatDate(report.agentVisualReview.reviewedAt)}</p>
+          <p><strong>Design verdict:</strong> {label(report.agentVisualReview.designVerdict.readiness)}</p>
+          <p><strong>Style and taste:</strong> {report.agentVisualReview.designVerdict.styleAndTaste}</p>
+          <p><strong>Redesign direction:</strong> {report.agentVisualReview.designVerdict.redesignDirection}</p>
           <ScreenshotDrawer report={report} refs={report.agentVisualReview.screenshotsReviewed} title="Reviewed screenshots" />
         </article>
         <div className="page-list">
@@ -694,9 +795,15 @@ function AgentReviewSection({ report }: { report: AuditReport }) {
               <h4>{review.url}</h4>
               <p><strong>First viewport:</strong> {review.firstViewport}</p>
               <p><strong>Hierarchy:</strong> {review.hierarchy}</p>
+              <p><strong>Composition:</strong> {review.composition}</p>
               <p><strong>Navigation:</strong> {review.navigation}</p>
+              <p><strong>CTA clarity:</strong> {review.ctaClarity}</p>
               <p><strong>Mobile:</strong> {review.mobile}</p>
               <p><strong>Trust and proof:</strong> {review.trustAndProof}</p>
+              <p><strong>Visual system:</strong> {review.visualSystemCoherence}</p>
+              <p><strong>Accessibility basics:</strong> {review.accessibilityBasics}</p>
+              <p><strong>Style and taste:</strong> {review.styleAndTaste}</p>
+              <p><strong>Redesign advice:</strong> {review.redesignAdvice}</p>
               <ScreenshotDrawer report={report} refs={review.screenshotsReviewed} title="Page review screenshots" />
             </article>
           ))}
@@ -717,6 +824,24 @@ function AgentReviewSection({ report }: { report: AuditReport }) {
               <p>{finding.observation}</p>
               <p><strong>Recommendation:</strong> {finding.recommendation}</p>
               <ScreenshotDrawer report={report} refs={finding.evidenceRefs} title="Agent evidence screenshots" />
+            </article>
+          ))}
+        </div>
+
+        <SectionTitle eyebrow="Redesign direction" title="Prioritized redesign actions" />
+        <div className="findings">
+          {report.agentVisualReview.redesignActions.map((action) => (
+            <article className="finding finding-card" key={action.actionId}>
+              <div className="finding-meta">
+                <span>{action.priority}</span>
+                <span>{action.effort} effort</span>
+                <span>{action.confidence}</span>
+              </div>
+              <h4>{action.title}</h4>
+              <p>{action.recommendation}</p>
+              <p><strong>Expected impact:</strong> {action.expectedImpact}</p>
+              <ul>{action.acceptanceCriteria.map((item) => <li key={item}>{item}</li>)}</ul>
+              <ScreenshotDrawer report={report} refs={action.evidenceRefs} title="Redesign evidence screenshots" />
             </article>
           ))}
         </div>
@@ -768,6 +893,7 @@ function AgentBundleSection({ report }: { report: AuditReport }) {
         <SectionTitle eyebrow="Verification" title="Closeout commands" />
         <pre className="command-block">{`node apps/cli/dist/index.js report lint ${auditRootFor(report)} --strict
 node apps/cli/dist/index.js review-pack build --report ${auditRootFor(report)}
+node apps/cli/dist/index.js agent-review validate --report ${auditRootFor(report)} --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report ${auditRootFor(report)} --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report ${auditRootFor(report)}
 node apps/cli/dist/index.js benchmark --report ${auditRootFor(report)}
@@ -858,15 +984,9 @@ function ScreenshotDrawer({ report, refs, title }: { report: AuditReport; refs: 
 }
 
 function ScoreGauge({ score, status }: { score: number; status: AuditReport["businessGradeStatus"] }) {
-  const radius = 48;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (Math.max(0, Math.min(score, 100)) / 100) * circumference;
   return (
     <div className="score-gauge" aria-label={`Overall score ${score} of 100`}>
-      <svg viewBox="0 0 120 120" role="img" aria-hidden="true">
-        <circle className="gauge-track" cx="60" cy="60" r={radius} />
-        <circle className={`gauge-value gauge-value--${status}`} cx="60" cy="60" r={radius} strokeDasharray={circumference} strokeDashoffset={offset} />
-      </svg>
+      <CircleMeter score={score} className={`gauge-value--${status}`} />
       <div>
         <strong>{score}</strong>
         <span>/ 100</span>
@@ -875,22 +995,34 @@ function ScoreGauge({ score, status }: { score: number; status: AuditReport["bus
   );
 }
 
+function CircleMeter({ score, className = "" }: { score: number; className?: string }) {
+  const radius = 48;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (Math.max(0, Math.min(score, 100)) / 100) * circumference;
+  return (
+    <svg viewBox="0 0 120 120" role="img" aria-hidden="true">
+      <circle className="gauge-track" cx="60" cy="60" r={radius} />
+      <circle className={`gauge-value ${className}`.trim()} cx="60" cy="60" r={radius} strokeDasharray={circumference} strokeDashoffset={offset} />
+    </svg>
+  );
+}
+
 function ScoreBreakdownChart({ report }: { report: AuditReport }) {
   const entries = Object.entries(report.scorecard.subscores).sort(([, a], [, b]) => b.score - a.score);
   return (
-    <article className="viz-panel">
-      <SectionTitle eyebrow="Score shape" title="Subscores" />
-      <div className="bar-list">
+    <article className="viz-panel subscore-panel">
+      <SectionTitle eyebrow="Score shape" title="Category scoring" />
+      <div className="subscore-grid">
         {entries.map(([key, value]) => (
-          <div className="bar-row" key={key}>
-            <div>
+          <div className="subscore-card" key={key}>
+            <div className="subscore-ring" aria-label={`${label(key)} score ${value.score} of 100`}>
+              <CircleMeter score={value.score} className={`subscore-value subscore-value--${scoreBand(value.score)}`} />
+              <strong>{value.score}</strong>
+            </div>
+            <div className="subscore-copy">
               <span>{label(key)}</span>
               <small>{label(value.confidence)} confidence</small>
             </div>
-            <div className="bar-track" aria-hidden="true">
-              <span style={{ width: `${Math.max(3, Math.min(value.score, 100))}%` }} />
-            </div>
-            <strong>{value.score}</strong>
           </div>
         ))}
       </div>
@@ -1195,6 +1327,12 @@ function topCounts(values: string[], limit: number) {
     .map(([key, count]) => ({ key, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, limit);
+}
+
+function scoreBand(score: number) {
+  if (score >= 85) return "strong";
+  if (score >= 70) return "mixed";
+  return "risk";
 }
 
 function formatRunLabel(item: AuditSummary) {

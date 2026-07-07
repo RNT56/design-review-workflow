@@ -33,7 +33,7 @@ Clone or open this workflow repo, then run a business-grade design review for:
 
 <URL>
 
-Run the business-grade lane. Build the review pack, inspect the generated contact sheets and screenshots yourself, write a completed AgentVisualReview JSON, import it, run both report lint and business-grade lint, then report the final bundle path and business-grade gate status. Do not claim business-grade quality until the visual review import passes.
+Run the business-grade lane. Inspect the generated contact sheets, gallery, and raw screenshots yourself, write a strict AgentVisualReview JSON with design verdict, style/taste, page reviews, and redesign actions, validate it, import it, run both report lint and business-grade lint, then report the final bundle path and business-grade gate status. Do not claim business-grade quality until the visual review import passes.
 ```
 
 ## One Command
@@ -70,9 +70,9 @@ Business-grade lane:
 
 ```bash
 node apps/cli/dist/index.js run https://example.com --business-grade
-node apps/cli/dist/index.js review-pack build --report <audit-dir>
 # Agent follows report/agent-review-pack/review-pack-manifest.json,
 # inspects the gallery and optimized PNG sheets, then writes agent-runs/<agent>/visual-review.json.
+node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 ```
@@ -95,6 +95,7 @@ Existing audit utilities:
 ```bash
 node apps/cli/dist/index.js report lint <audit-dir> --strict
 node apps/cli/dist/index.js review-pack build --report <audit-dir>
+node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 node apps/cli/dist/index.js benchmark --report <audit-dir>
@@ -119,11 +120,12 @@ Agents must report:
 - `report/business-grade-gate.json`
 - `report/grouped-issues.json`
 - `report/screenshot-manifest.json`
-- `report/agent-review-pack/review-pack-manifest.json` when built
-- `report/agent-review-pack/gallery/index.html` when built
-- `report/contact-sheets/first-viewports.png` when built
-- `report/contact-sheets/pages/*.png` when built
-- `report/contact-sheets/issues/*.png` when built
+- `index.html`
+- `report/agent-review-pack/review-pack-manifest.json`
+- `report/agent-review-pack/gallery/index.html`
+- `report/contact-sheets/first-viewports.png`
+- `report/contact-sheets/pages/*.png`
+- `report/contact-sheets/issues/*.png`
 - `report/agent-execution-plan.md`
 - `report/implementation-plan.json`
 - `report/evidence-index.json`
@@ -139,8 +141,8 @@ Agents must report:
 - `report/standards-registry.json`
 - `report/suppression-report.json`
 - `report/hosted/index.html`
-- `report/agent-review-pack/` when built
-- `report/contact-sheets/*.png` when built
+- `report/agent-review-pack/`
+- `report/contact-sheets/*.png`
 - `report/agent-visual-review.json` when imported
 - `export-manifest.json` and `checksums.sha256` when an export profile is generated
 - `exports/*.zip` or export directory when an export profile is generated
@@ -153,11 +155,13 @@ The stable machine-readable files are:
 
 - `report/workflow-manifest.json`
 - `report/handoff.json`
+
+The stable human-readable entrypoint is `index.html` at the audit root. It is generated for every completed audit and does not require the local Express/Vite UI.
 - `report/findings.json`
 - `report/actionability.json`
 - `report/evidence-index.json`
 - `report/screenshot-manifest.json`
-- `report/agent-review-pack/review-pack-manifest.json` when built
+- `report/agent-review-pack/review-pack-manifest.json`
 - `report/grouped-issues.json`
 - `report/business-grade-gate.json`
 - `report/evidence.jsonl`

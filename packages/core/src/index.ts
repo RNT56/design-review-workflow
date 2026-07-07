@@ -96,8 +96,8 @@ export async function runAudit(input: AuditInput | AuditConfig, options: RunAudi
     report.competitorBenchmarks = await runCompetitorBenchmarks(config, report.scorecard.overallScore, paths, options.onProgress);
   }
 
-  options.onProgress?.({ stage: "report", message: "Writing reports" });
-  const outputs = await writeReports(config, report, paths);
+  options.onProgress?.({ stage: "report", message: "Writing reports and static visual pack" });
+  const outputs = await writeReports(config, report, paths, { reviewPack: true });
   options.onProgress?.({ stage: "validate", message: "Validating report bundle" });
   const validation = await lintAuditReport(paths.auditRoot, false);
   await updateProjectIndex(workspaceRoot, report, paths.auditRoot, outputs);

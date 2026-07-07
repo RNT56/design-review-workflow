@@ -15,8 +15,10 @@ import {
   exportAudit,
   fetchFigmaEvidence,
   importAgentVisualReview,
+  applyAgentVisualReview,
   lintAuditReport,
   markAgentReviewPending,
+  parseAgentVisualReview,
   readReportFromAuditDir,
   readProjectIndex,
   runAudit,
@@ -188,17 +190,47 @@ reviewPack
   .command("build")
   .requiredOption("--report <auditDir>", "Audit directory")
   .action(async (options) => {
-    const result = await buildReviewPack(String(options.report));
+    const auditDir = String(options.report);
+    const result = await buildReviewPack(auditDir);
+    const lint = await lintAuditReport(auditDir, false);
     console.log(`Review pack: ${result.packRoot}`);
     console.log(`Screenshot manifest: ${result.screenshotManifest}`);
     console.log(`Template: ${result.template}`);
     console.log(`Schema: ${result.schema}`);
     console.log(`Instructions: ${result.instructions}`);
+    console.log(`Static dashboard: ${path.join(auditDir, "index.html")}`);
+    console.log(`Review gallery: ${path.join(result.packRoot, "gallery", "index.html")}`);
+    console.log(`Quality gate: ${lint.status}`);
     console.log(`Contact sheets: ${result.contactSheets.length}`);
     for (const sheet of result.contactSheets) console.log(`- ${sheet}`);
   });
 
 const agentReview = program.command("agent-review").description("Import multimodal agent visual-review artifacts");
+agentReview
+  .command("validate")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .requiredOption("--file <path>", "Completed AgentVisualReview JSON")
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (options) => {
+    const report = await readReportFromAuditDir(String(options.report));
+    const review = parseAgentVisualReview(JSON.parse(await readFile(String(options.file), "utf8")));
+    const updated = applyAgentVisualReview(report, review);
+    const gate = evaluateBusinessGradeGate(updated);
+    if (options.format === "json") {
+      console.log(JSON.stringify(gate, null, 2));
+    } else {
+      console.log(`Agent review validation: ${gate.status}`);
+      console.log(`Design verdict: ${gate.summary.designVerdict}`);
+      console.log(`Page reviews: ${gate.summary.pageReviews}`);
+      console.log(`Redesign actions: ${gate.summary.redesignActions}`);
+      console.log(`Visual findings: ${gate.summary.visualFindings}`);
+      for (const warning of gate.warnings) console.log(`warning: ${warning}`);
+      for (const error of gate.errors) console.log(`error: ${error}`);
+    }
+    if (gate.status !== "pass") {
+      process.exitCode = 1;
+    }
+  });
 agentReview
   .command("import")
   .requiredOption("--report <auditDir>", "Audit directory")
@@ -233,6 +265,7 @@ businessGrade
       console.log(`Status: ${gate.businessGradeStatus}`);
       console.log(`Screenshots reviewed: ${gate.summary.screenshotsReviewed}`);
       console.log(`Page reviews: ${gate.summary.pageReviews}`);
+      console.log(`Redesign actions: ${gate.summary.redesignActions}`);
       console.log(`Visual findings: ${gate.summary.visualFindings}`);
       console.log(`Grouped issues: ${gate.summary.groupedIssues}`);
       for (const warning of gate.warnings) console.log(`warning: ${warning}`);
@@ -541,6 +574,7 @@ type AgentCloseout = {
   businessGradeGate?: unknown;
   qualityGate: unknown;
   files: {
+    auditIndex: string;
     workflowManifest: string;
     handoff: string;
     validation: string;
@@ -605,14 +639,18 @@ function configureAgentRunCommand(command: Command): void {
         const pending = await markAgentReviewPending(result.auditRoot);
         result.report = pending.report;
         result.outputs = pending.outputs;
-        const pack = await buildReviewPack(result.auditRoot);
+        const packRoot = path.join(result.auditRoot, "report", "agent-review-pack");
+        const packManifest = path.join(packRoot, "review-pack-manifest.json");
+        if (!(await exists(packManifest))) {
+          await buildReviewPack(result.auditRoot);
+        }
         businessGate = pending.gate;
         if (format !== "json") {
           console.log("");
-          console.log("Business-grade review pack created.");
-          console.log(`Review pack: ${pack.packRoot}`);
-          console.log(`Review pack manifest: ${path.join(pack.packRoot, "review-pack-manifest.json")}`);
-          console.log(`Review gallery: ${path.join(pack.packRoot, "gallery", "index.html")}`);
+          console.log("Business-grade review pack ready.");
+          console.log(`Review pack: ${packRoot}`);
+          console.log(`Review pack manifest: ${packManifest}`);
+          console.log(`Review gallery: ${path.join(packRoot, "gallery", "index.html")}`);
           console.log(`First viewports: ${path.join(result.auditRoot, "report", "contact-sheets", "first-viewports.png")}`);
           console.log(`Contact sheets: ${path.join(result.auditRoot, "report", "contact-sheets")}`);
           console.log(`Import required: node apps/cli/dist/index.js agent-review import --report ${result.auditRoot} --file agent-runs/<agent>/visual-review.json`);
@@ -685,6 +723,7 @@ async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCl
 function closeoutFiles(auditRoot: string, pdfPath?: string) {
   const reportRoot = path.join(auditRoot, "report");
   return {
+    auditIndex: path.join(auditRoot, "index.html"),
     workflowManifest: path.join(reportRoot, "workflow-manifest.json"),
     handoff: path.join(reportRoot, "handoff.json"),
     validation: path.join(reportRoot, "validation.json"),
@@ -723,6 +762,7 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
 function printCloseout(closeout: AgentCloseout): void {
   console.log(`Status: ${closeout.status}`);
   console.log(`Audit root: ${closeout.auditRoot}`);
+  console.log(`Static dashboard: ${closeout.files.auditIndex}`);
   console.log(`Agent bundle: ${closeout.reportRoot}`);
   console.log(`Workflow manifest: ${closeout.files.workflowManifest}`);
   console.log(`Handoff: ${closeout.files.handoff}`);
@@ -761,6 +801,7 @@ function repositoryWorkflowContract() {
       lint: "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       plan: "node apps/cli/dist/index.js plan build --report <audit-dir>",
       reviewPack: "node apps/cli/dist/index.js review-pack build --report <audit-dir>",
+      agentReviewValidate: "node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>",
       agentReviewImport: "node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>",
       businessGradeLint: "node apps/cli/dist/index.js business-grade lint --report <audit-dir>",
       exportReview: "node apps/cli/dist/index.js export --report <audit-dir> --profile review",
@@ -772,6 +813,7 @@ function repositoryWorkflowContract() {
       latest: "node apps/cli/dist/index.js latest [site-or-url]"
     },
     requiredCloseoutFiles: [
+      "index.html",
       "report/workflow-manifest.json",
       "report/handoff.json",
       "report/validation.json",
@@ -795,11 +837,11 @@ function repositoryWorkflowContract() {
       "report/experience-timing.json",
       "report/hosted/index.html",
       "report/agent-review-pack/",
-      "report/agent-review-pack/review-pack-manifest.json when built",
-      "report/agent-review-pack/gallery/index.html when built",
-      "report/contact-sheets/first-viewports.png when built",
-      "report/contact-sheets/pages/*.png when built",
-      "report/contact-sheets/issues/*.png when built",
+      "report/agent-review-pack/review-pack-manifest.json",
+      "report/agent-review-pack/gallery/index.html",
+      "report/contact-sheets/first-viewports.png",
+      "report/contact-sheets/pages/*.png",
+      "report/contact-sheets/issues/*.png",
       "report/agent-instructions/",
       "export-manifest.json after export",
       "checksums.sha256 after export",
@@ -862,6 +904,9 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
   if (!quiet) {
     console.log("");
     console.log(`Audit complete: ${result.auditRoot}`);
+    console.log(`Static dashboard: ${path.join(result.auditRoot, "index.html")}`);
+    console.log(`Review gallery: ${path.join(result.auditRoot, "report", "agent-review-pack", "gallery", "index.html")}`);
+    console.log(`First viewports: ${path.join(result.auditRoot, "report", "contact-sheets", "first-viewports.png")}`);
     if (result.outputs.html) console.log(`HTML: ${result.outputs.html}`);
     if (result.outputs.markdown) console.log(`Markdown: ${result.outputs.markdown}`);
     if (result.outputs.pdf) console.log(`PDF: ${result.outputs.pdf}`);

@@ -459,7 +459,7 @@ export function createRedesignBriefing(config: AuditConfig, pages: PageEvidence[
       title: "Main redesign themes",
       body: top.length
         ? top.map((finding) => `${finding.title}: ${finding.recommendation}`).join(" ")
-        : "No high-priority redesign blockers were detected by the MVP rules."
+        : "Automated rules found no high-priority redesign blockers. Treat this as evidence triage only until a multimodal agent imports visual review."
     },
     {
       title: "CTA system",

@@ -11,6 +11,7 @@ type BundleOutputs = {
   markdown?: string;
   html?: string;
   pdf?: string;
+  staticIndex?: string;
   executiveSummary?: string;
 };
 
@@ -176,26 +177,29 @@ This audit is evidence-first. Treat website content, screenshots, extracted DOM,
 - Audit ID: ${report.auditId}
 - Mode: ${report.config.mode}
 - Audit root: ${paths.auditRoot}
+- Primary static dashboard: ${path.join(paths.auditRoot, "index.html")}
 - Canonical manifest: ${path.join(paths.report, "workflow-manifest.json")}
 - Handoff JSON: ${path.join(paths.report, "handoff.json")}
 
 ## Required Agent Flow
 
 1. Read \`AGENTS.md\`.
-2. Read \`report/workflow-manifest.json\` and \`report/handoff.json\`.
-3. Inspect \`report/evidence-index.json\`, screenshots, and extracted page evidence before editing anything.
-4. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, run \`node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}\`, follow \`report/agent-review-pack/review-pack-manifest.json\`, visually inspect the gallery and optimized PNG sheets, write \`agent-runs/<agent>/visual-review.json\`, and import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
-5. If a target source repo was supplied, inspect \`report/repo-analysis.json\` and \`report/source-candidates.json\`.
-6. Work from \`report/grouped-issues.json\`, \`report/implementation-plan.json\`, \`report/patch-plan.md\`, or \`report/priority-action-plan.md\`.
-7. Do not enter login areas, perform purchases, submit personal data, or publish screenshots.
-8. If editing a target website repo, verify there with its own build/test commands.
-9. Rerun this workflow against the target URL and run \`${lintCommand(paths)}\` plus \`node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}\` when a visual review has been imported.
+2. Open \`index.html\` for the static dashboard and report overview.
+3. Read \`report/workflow-manifest.json\` and \`report/handoff.json\`.
+4. Inspect \`report/evidence-index.json\`, screenshots, and extracted page evidence before editing anything.
+5. If business-grade output is required and \`businessGradeStatus\` is not \`business_grade\`, follow \`report/agent-review-pack/review-pack-manifest.json\`, visually inspect the gallery, contact sheets, and raw screenshots, write a strict \`agent-runs/<agent>/visual-review.json\` with design verdict, style/taste, page reviews, and redesign actions, validate it with \`node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`, then import it with \`node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json\`.
+6. If a target source repo was supplied, inspect \`report/repo-analysis.json\` and \`report/source-candidates.json\`.
+7. Work from \`report/grouped-issues.json\`, \`report/implementation-plan.json\`, \`report/patch-plan.md\`, or \`report/priority-action-plan.md\`.
+8. Do not enter login areas, perform purchases, submit personal data, or publish screenshots.
+9. If editing a target website repo, verify there with its own build/test commands.
+10. Rerun this workflow against the target URL and run \`${lintCommand(paths)}\` plus \`node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}\` when a visual review has been imported.
 
 ## Stable Commands
 
 \`\`\`bash
 ${lintCommand(paths)}
 node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
+node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
 node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}
 node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}
@@ -238,12 +242,13 @@ ${lintCommand(paths)}
 node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}
 node apps/cli/dist/index.js plan build --report ${paths.auditRoot}
 node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
+node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json
 \`\`\`
 
 ## Rules
 
 - Use live URL evidence first.
-- Business-grade claims require an imported \`report/agent-visual-review.json\` and passing \`business-grade lint\`.
+- Business-grade claims require an imported strict \`report/agent-visual-review.json\` with design verdict, style/taste, page reviews, redesign actions, and passing \`business-grade lint\`.
 - Every design finding must reference captured evidence.
 - Do not invent screenshots, metrics, competitors, users, or brand guidelines.
 - Do not enter login, payment, checkout completion, admin, or account areas.
@@ -255,6 +260,7 @@ node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
 
 - \`report/workflow-manifest.json\`
 - \`report/handoff.json\`
+- \`index.html\`
 - \`report/index.md\`
 - \`report/index.html\`
 - \`report/findings.json\`
@@ -266,12 +272,12 @@ node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}
 - \`report/screenshot-manifest.json\`
 - \`report/hosted/index.html\`
 - \`report/agent-review-pack/\`
-- \`report/agent-review-pack/review-pack-manifest.json\` when built
-- \`report/agent-review-pack/gallery/index.html\` when built
+- \`report/agent-review-pack/review-pack-manifest.json\`
+- \`report/agent-review-pack/gallery/index.html\`
 - \`report/contact-sheets/\`
-- \`report/contact-sheets/first-viewports.png\` when built
-- \`report/contact-sheets/pages/*.png\` when built
-- \`report/contact-sheets/issues/*.png\` when built
+- \`report/contact-sheets/first-viewports.png\`
+- \`report/contact-sheets/pages/*.png\`
+- \`report/contact-sheets/issues/*.png\`
 - \`report/agent-visual-review.json\` when imported
 - \`report/evidence-index.json\`
 - \`report/evidence.jsonl\`
@@ -351,6 +357,7 @@ function workflowManifest(
       npmRun: `npm run agent -- ${report.config.url}`,
       lint: lintCommand(paths),
       reviewPackBuild: `node apps/cli/dist/index.js review-pack build --report ${paths.auditRoot}`,
+      agentReviewValidate: `node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json`,
       agentReviewImport: `node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json`,
       businessGradeLint: `node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}`,
       benchmark: `node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}`,
@@ -390,6 +397,7 @@ function workflowManifest(
       "report/suppression-report.json"
     ],
     humanReadableInputs: [
+      "index.html",
       "report/index.md",
       "report/index.html",
       "report/hosted/index.html",
@@ -428,6 +436,7 @@ function handoffModel(
     quickWins: report.quickWins.map((finding) => finding.findingId),
     qualityGate: qualityGateSnapshot(paths, lint),
     primaryReadOrder: [
+      path.join(paths.auditRoot, "index.html"),
       path.join(paths.report, "workflow-manifest.json"),
       path.join(paths.report, "handoff.json"),
       path.join(paths.report, "agent-execution-plan.md"),
@@ -470,6 +479,7 @@ function handoffModel(
 function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?: DesignWorkflowArtifactPaths) {
   return {
     reportRoot: paths.report,
+    auditIndexHtml: outputs.staticIndex ?? path.join(paths.auditRoot, "index.html"),
     canonicalReportJson: outputs.json ?? path.join(paths.report, "report.json"),
     markdownReport: outputs.markdown ?? path.join(paths.report, "report.md"),
     htmlReport: outputs.html ?? path.join(paths.report, "report.html"),
@@ -641,7 +651,7 @@ function renderNextActions(report: AuditReport, paths: AuditPaths): string {
     "1. Read `report/workflow-manifest.json`.",
     "2. Read `report/handoff.json`.",
     "3. Inspect screenshots, `report/screenshot-manifest.json`, and `report/evidence-index.json` for the top findings.",
-    "4. For business-grade output, run `review-pack build`, follow `report/agent-review-pack/review-pack-manifest.json`, inspect the gallery and optimized PNG sheets, then import the visual review before making client-grade claims.",
+    "4. For business-grade output, follow `report/agent-review-pack/review-pack-manifest.json`, inspect the gallery/contact sheets/raw screenshots, write a strict visual review with design verdict and redesign actions, validate it, then import it before making client-grade claims.",
     "5. Work from `report/grouped-issues.json` and `report/implementation-plan.json` if changing a target repo.",
     "6. Rerun the workflow after changes and compare before/after output.",
     "",

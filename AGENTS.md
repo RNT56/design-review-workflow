@@ -89,6 +89,7 @@ The implemented MVP is deterministic and local-first:
 - Visual-review import via `agent-review import`, with validation against captured screenshot IDs and unsupported-claim checks
 - `business-grade lint` for the business-grade gate separate from technical `report lint`
 - Grouped root-cause issues under `grouped-issues.json`
+- Top-level static audit dashboard under `index.html`; this is the canonical no-server report entrypoint for agents and handoff.
 - Standalone static hosted report under `report/hosted/index.html` with copied screenshot assets
 - Screenshot manifest with actual PNG dimensions, display roles, grouping metadata, and sheet references
 - Optimized review-pack contact sheets for first viewports, page flows split into readable chunks, and grouped issue evidence
@@ -158,6 +159,13 @@ Agents must not invent pages, competitors, metrics, screenshots, user behavior, 
 
 High-fidelity design judgment must come from the repo-capable multimodal agent running the workflow. The workflow may package screenshots and prompts, but it must not imply an AI model viewed the design until `agent-review import` has validated a completed `AgentVisualReview` artifact.
 
+Strict business-grade visual review requires:
+
+- A site-level `designVerdict` with readiness, style/taste, audience fit, brand fit, strongest qualities, weakest risks, redesign direction, rationale, confidence, and limitations.
+- A completed review for every captured page, including first viewport, hierarchy, composition, CTA clarity, trust/proof, mobile feel, visual-system coherence, accessibility basics, style/taste, and redesign advice.
+- At least 3 evidence-linked redesign actions, unless `designVerdict.readiness` is `no_major_redesign_needed` with a detailed evidence-backed rationale.
+- No TODO/template text, no unknown screenshot references, and no unsupported analytics/user/revenue/competitor claims.
+
 ## Agentic Workflow Contract
 
 Primary fresh-clone command:
@@ -196,8 +204,9 @@ audit-reports/
 
 Slug priority is `--audit-name`, then config `auditName`/`auditSlug`, then the target domain. Normal runs never overwrite prior audit folders. `--output <dir>` is an explicit advanced override and still fails if the directory already exists.
 
-Every completed audit must produce a self-contained agent bundle under `report/`:
+Every completed audit must produce a self-contained agent bundle under `report/`, plus a top-level `index.html` dashboard at the audit root:
 
+- `../index.html` as the primary human-readable entrypoint
 - `workflow-manifest.json`
 - `handoff.json`
 - `validation.json`
@@ -205,11 +214,11 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `business-grade-gate.json`
 - `grouped-issues.json`
 - `screenshot-manifest.json`
-- `agent-review-pack/review-pack-manifest.json` when a review pack has been built
-- `agent-review-pack/gallery/index.html` when a review pack has been built
-- `contact-sheets/first-viewports.png` when a review pack has been built
-- `contact-sheets/pages/*.png` when a review pack has been built
-- `contact-sheets/issues/*.png` when a review pack has been built
+- `agent-review-pack/review-pack-manifest.json`
+- `agent-review-pack/gallery/index.html`
+- `contact-sheets/first-viewports.png`
+- `contact-sheets/pages/*.png`
+- `contact-sheets/issues/*.png`
 - `agent-execution-plan.md`
 - `implementation-plan.json`
 - `evidence-index.json`
@@ -231,7 +240,7 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `report-dashboard.json`
 - `hosted/index.html`
 - `agent-review-pack/`
-- `contact-sheets/*.png` when a review pack has been built
+- `contact-sheets/*.png`
 - `agent-visual-review.json` when an agent visual review has been imported
 - `agent-instructions/README.md`
 - `agent-instructions/codex.md`
@@ -255,7 +264,8 @@ Stable closeout commands:
 
 ```bash
 node apps/cli/dist/index.js report lint <audit-dir> --strict
-node apps/cli/dist/index.js review-pack build --report <audit-dir>
+node apps/cli/dist/index.js review-pack build --report <audit-dir>   # refresh/backfill review-pack assets
+node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
 node apps/cli/dist/index.js benchmark --report <audit-dir>
@@ -308,9 +318,10 @@ projects/       Legacy audit output root. Read-compatible; do not use for new de
 - Suppressions are non-destructive. They must be recorded in `suppression-report.json` and must not remove entries from `findings.json`.
 - Every normal audit must write `validation.json` and `quality-gate.json`.
 - `report lint --strict` must fail unsupported report bundles.
-- `business-grade lint` must fail unless a validated `AgentVisualReview` has been imported.
+- `business-grade lint` must fail unless a strict validated `AgentVisualReview` has been imported.
 - `run --business-grade` must generate the review pack and leave the audit in `agent_review_pending` until import.
 - Automated scans must be labeled `automated_scan`, not `business_grade`.
+- Automated scans must not provide subjective style/taste verdicts; they must show that visual review is required.
 - Scores must remain capped when `businessGradeStatus !== business_grade`.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
 - Any future LLM reviewer must produce the same `Finding` or `AgentVisualReview` schema and pass the same deterministic QA/business-grade gates.
