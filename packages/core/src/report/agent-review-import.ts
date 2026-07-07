@@ -32,7 +32,7 @@ export async function markAgentReviewPending(auditDir: string): Promise<AgentRev
   const outputs = await writeReports(updatedReport.config, updatedReport, paths);
   const gate = evaluateBusinessGradeGate(updatedReport);
   await writeJson(path.join(paths.report, "business-grade-gate.json"), gate);
-  await updateProjectIndex(workspaceRootFromAuditDir(auditDir), updatedReport, auditDir, outputs).catch(() => undefined);
+  await updateProjectIndex(workspaceRootFromAuditDir(auditDir, updatedReport), updatedReport, auditDir, outputs).catch(() => undefined);
   return {
     auditId: updatedReport.auditId,
     auditRoot: auditDir,
@@ -61,7 +61,7 @@ export async function importAgentVisualReview(auditDir: string, filePath: string
   const outputs = await writeReports(updatedReport.config, updatedReport, paths);
   const gate = evaluateBusinessGradeGate(updatedReport);
   await writeJson(path.join(paths.report, "business-grade-gate.json"), gate);
-  await updateProjectIndex(workspaceRootFromAuditDir(auditDir), updatedReport, auditDir, outputs).catch(() => undefined);
+  await updateProjectIndex(workspaceRootFromAuditDir(auditDir, updatedReport), updatedReport, auditDir, outputs).catch(() => undefined);
 
   return {
     auditId: updatedReport.auditId,
@@ -74,12 +74,36 @@ export async function importAgentVisualReview(auditDir: string, filePath: string
   };
 }
 
-function workspaceRootFromAuditDir(auditDir: string): string {
+function workspaceRootFromAuditDir(auditDir: string, report: AuditReport): string {
+  if (report.config.outputDir) {
+    return path.isAbsolute(report.config.outputDir) ? process.cwd() : path.dirname(path.resolve(auditDir));
+  }
+  const configuredRootWorkspace = workspaceRootFromConfiguredAuditRoot(auditDir, report.config.auditRoot);
+  if (configuredRootWorkspace) {
+    return configuredRootWorkspace;
+  }
   const auditReportsRoot = auditReportsRootFromAuditDir(auditDir);
   if (auditReportsRoot) {
     return workspaceRootFromAuditReportsRoot(auditReportsRoot);
   }
-  return path.dirname(path.dirname(path.resolve(auditDir)));
+  return path.dirname(path.resolve(auditDir));
+}
+
+function workspaceRootFromConfiguredAuditRoot(auditDir: string, auditRoot?: string): string | undefined {
+  if (!auditRoot?.trim()) return undefined;
+  if (path.isAbsolute(auditRoot)) {
+    return path.dirname(path.resolve(auditRoot));
+  }
+  const rootParts = auditRoot.split(/[\\/]+/).filter(Boolean);
+  if (rootParts.length === 0) return undefined;
+  const auditParts = path.resolve(auditDir).split(path.sep);
+  for (let index = auditParts.length - rootParts.length - 2; index >= 0; index -= 1) {
+    const candidate = auditParts.slice(index, index + rootParts.length);
+    if (candidate.join("/") === rootParts.join("/")) {
+      return auditParts.slice(0, index).join(path.sep) || path.sep;
+    }
+  }
+  return undefined;
 }
 
 function slug(value: string): string {

@@ -33,7 +33,7 @@ export async function updateProjectIndex(workspaceRoot: string, report: AuditRep
   const indexRoot = configuredAuditRoot(report.config.auditRoot, workspaceRoot);
   const indexPath = path.join(indexRoot, "audit-index.json");
   await ensureDir(path.dirname(indexPath));
-  const current = await readProjectIndex(workspaceRoot);
+  const currentAudits = await readIndexRoot(indexRoot);
   const site = auditSlugForTarget(report.config.url, report.config.auditName, report.config.auditSlug);
   const entry: ProjectIndexEntry = {
     auditId: report.auditId,
@@ -54,7 +54,7 @@ export async function updateProjectIndex(workspaceRoot: string, report: AuditRep
     pages: report.pages.length
   };
 
-  const withoutCurrent = current.audits.filter((audit) => audit.auditRoot !== auditRoot && audit.auditId !== report.auditId);
+  const withoutCurrent = currentAudits.filter((audit) => audit.auditRoot !== auditRoot && audit.auditId !== report.auditId);
   const next: ProjectIndex = {
     updatedAt: new Date().toISOString(),
     audits: [entry, ...withoutCurrent].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt))
@@ -69,10 +69,8 @@ export async function readProjectIndex(workspaceRoot: string, auditRootInput?: s
   const auditRoot = configuredAuditRoot(auditRootInput, workspaceRoot);
   const legacyRoot = legacyProjectsRoot(workspaceRoot);
   const sources = await Promise.all([
-    readAuditIndexSqlite(auditRoot).catch(() => []),
-    readIndexJson(path.join(auditRoot, "audit-index.json")).catch(() => []),
-    readAuditIndexSqlite(legacyRoot, "index.sqlite").catch(() => []),
-    readIndexJson(path.join(legacyRoot, "index.json")).catch(() => [])
+    readIndexRoot(auditRoot),
+    readIndexRoot(legacyRoot, "index.sqlite", "index.json")
   ]);
   const audits = dedupeAudits(sources.flat()).sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
   return {
@@ -99,6 +97,14 @@ async function writeLatestPointers(indexRoot: string, entry: ProjectIndexEntry):
 async function readIndexJson(indexPath: string): Promise<ProjectIndexEntry[]> {
   const parsed = JSON.parse(await readFile(indexPath, "utf8")) as ProjectIndex;
   return Array.isArray(parsed.audits) ? parsed.audits : [];
+}
+
+async function readIndexRoot(indexRoot: string, sqliteName = "audit-index.sqlite", jsonName = "audit-index.json"): Promise<ProjectIndexEntry[]> {
+  const sources = await Promise.all([
+    readAuditIndexSqlite(indexRoot, sqliteName).catch(() => []),
+    readIndexJson(path.join(indexRoot, jsonName)).catch(() => [])
+  ]);
+  return dedupeAudits(sources.flat()).sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
 }
 
 function dedupeAudits(audits: ProjectIndexEntry[]): ProjectIndexEntry[] {

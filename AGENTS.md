@@ -63,7 +63,7 @@ The implemented MVP is deterministic and local-first:
 - TypeScript monorepo
 - CLI audit runner
 - Local web UI
-- Deterministic local audit storage under `audit-reports/<site-or-audit-name>/<timestamp>-<scan-id>/`
+- Deterministic local audit storage under `audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/`
 - Playwright capture for desktop and mobile screenshots
 - DOM, text, form, link, button, section, and CSS-signal extraction
 - Basic same-domain crawl and page selection
