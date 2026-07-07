@@ -1,14 +1,17 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { Command } from "commander";
 import * as yaml from "js-yaml";
 import {
   compareAuditDirs,
+  analyzeDesignSourceRepo,
   createAuditConfig,
   createModelRouterFromEnv,
+  defaultDesignStandardsRegistry,
   fetchFigmaEvidence,
   lintAuditReport,
+  readReportFromAuditDir,
   readProjectIndex,
   runAudit,
   runMonitorConfig,
@@ -37,6 +40,7 @@ program
   .option("--industry <text>", "Industry")
   .option("--brand-context <text>", "Brand context")
   .option("--competitor <url...>", "Competitor URL(s)")
+  .option("--repo <path>", "Target website source repository for read-only source candidates")
   .option("--no-pdf", "Disable PDF output")
   .option("--no-html", "Disable HTML output")
   .option("--no-json", "Disable JSON output")
@@ -53,6 +57,7 @@ program
   .command("quick")
   .argument("<url>", "Website URL")
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
+  .option("--repo <path>", "Target website source repository for read-only source candidates")
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "quick_scan" });
   });
@@ -62,6 +67,7 @@ program
   .argument("<url>", "Website URL")
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
   .option("--competitor <url...>", "Competitor URL(s)")
+  .option("--repo <path>", "Target website source repository for read-only source candidates")
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "full_audit" });
   });
@@ -148,8 +154,111 @@ plan
     console.log(`Agent execution plan: ${path.join(auditDir, "report", "agent-execution-plan.md")}`);
     console.log(`Implementation plan: ${path.join(auditDir, "report", "implementation-plan.json")}`);
     console.log(`Evidence index: ${path.join(auditDir, "report", "evidence-index.json")}`);
+    console.log(`Evidence JSONL: ${path.join(auditDir, "report", "evidence.jsonl")}`);
+    console.log(`Source candidates: ${path.join(auditDir, "report", "source-candidates.json")}`);
+    console.log(`Repo analysis: ${path.join(auditDir, "report", "repo-analysis.json")}`);
+    console.log(`Patch plan: ${path.join(auditDir, "report", "patch-plan.md")}`);
+    console.log(`Design benchmark: ${path.join(auditDir, "report", "design-benchmark.json")}`);
+    console.log(`Standards registry: ${path.join(auditDir, "report", "standards-registry.json")}`);
+    console.log(`Suppression report: ${path.join(auditDir, "report", "suppression-report.json")}`);
     console.log(`Priority action plan: ${path.join(auditDir, "report", "priority-action-plan.md")}`);
     console.log(`Agent instructions: ${path.join(auditDir, "report", "agent-instructions")}`);
+    console.log(`Quality gate: ${lint.status}`);
+  });
+
+program
+  .command("benchmark")
+  .description("Print or refresh the design workflow benchmark for an audit")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (options) => {
+    const auditDir = String(options.report);
+    const lint = await lintAuditReport(auditDir, false);
+    const benchmarkPath = path.join(auditDir, "report", "design-benchmark.json");
+    const benchmark = JSON.parse(await readFile(benchmarkPath, "utf8")) as {
+      score?: { overall?: number; evidenceCompleteness?: number; actionability?: number; reportCompleteness?: number };
+      gates?: Array<{ name: string; status: string }>;
+    };
+    if (options.format === "json") {
+      console.log(JSON.stringify({ lint, benchmark }, null, 2));
+    } else {
+      console.log(`Design benchmark: ${benchmark.score?.overall ?? "-"} / 100`);
+      console.log(`Evidence completeness: ${benchmark.score?.evidenceCompleteness ?? "-"}`);
+      console.log(`Actionability: ${benchmark.score?.actionability ?? "-"}`);
+      console.log(`Report completeness: ${benchmark.score?.reportCompleteness ?? "-"}`);
+      console.log(`Quality gate: ${lint.status}`);
+      console.log(`Benchmark JSON: ${benchmarkPath}`);
+      for (const gate of benchmark.gates ?? []) {
+        console.log(`- ${gate.status}: ${gate.name}`);
+      }
+    }
+    if (lint.status === "fail") {
+      process.exitCode = 1;
+    }
+  });
+
+const standards = program.command("standards").description("Design-review standards registry utilities");
+standards
+  .command("update")
+  .option("--report <auditDir>", "Audit directory to update")
+  .option("--output <path>", "Output registry path")
+  .action(async (options) => {
+    const report = options.report ? await readReportFromAuditDir(String(options.report)) : undefined;
+    const outputPath = String(options.output ?? (options.report ? path.join(String(options.report), "report", "standards-registry.json") : "design-standards-registry.json"));
+    await writeJsonFile(outputPath, defaultDesignStandardsRegistry(report));
+    console.log(`Standards registry: ${outputPath}`);
+    if (options.report) {
+      await lintAuditReport(String(options.report), false);
+      console.log(`Refreshed audit bundle: ${String(options.report)}`);
+    }
+  });
+
+const suppressions = program.command("suppressions").description("Non-destructive finding suppression utilities");
+suppressions
+  .command("init")
+  .argument("[path]", "Suppression file path", "design-review-suppressions.json")
+  .action(async (filePath) => {
+    await writeJsonFile(String(filePath), {
+      schemaVersion: "design-review-workflow.suppressions.v1",
+      suppressions: [
+        {
+          findingId: "finding_...",
+          reason: "Why this finding is accepted or intentionally deferred.",
+          owner: "name-or-team",
+          expiresAt: "2026-12-31"
+        }
+      ]
+    });
+    console.log(`Suppression template: ${String(filePath)}`);
+  });
+suppressions
+  .command("apply")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .requiredOption("--file <path>", "Suppression JSON file")
+  .action(async (options) => {
+    const auditDir = String(options.report);
+    const report = await readReportFromAuditDir(auditDir);
+    const raw = JSON.parse(await readFile(String(options.file), "utf8")) as { suppressions?: Array<Record<string, unknown>> };
+    const knownFindingIds = new Set(report.findings.map((finding) => finding.findingId));
+    const suppressionsList = Array.isArray(raw.suppressions) ? raw.suppressions : [];
+    const applied = suppressionsList.filter((item) => typeof item.findingId === "string" && knownFindingIds.has(item.findingId));
+    const ignored = suppressionsList.filter((item) => typeof item.findingId !== "string" || !knownFindingIds.has(item.findingId));
+    const outputPath = path.join(auditDir, "report", "suppression-report.json");
+    await writeJsonFile(outputPath, {
+      schemaVersion: "design-review-workflow.suppression-report.v1",
+      auditId: report.auditId,
+      generatedAt: new Date().toISOString(),
+      sourceFile: path.resolve(String(options.file)),
+      suppressionsApplied: applied.length,
+      suppressedFindingIds: applied.map((item) => item.findingId),
+      suppressions: applied,
+      ignored,
+      note: "Suppressions are non-destructive. Findings remain in findings.json and are marked only in this ledger."
+    });
+    const lint = await lintAuditReport(auditDir, false);
+    console.log(`Suppression report: ${outputPath}`);
+    console.log(`Applied: ${applied.length}`);
+    console.log(`Ignored: ${ignored.length}`);
     console.log(`Quality gate: ${lint.status}`);
   });
 
@@ -202,6 +311,8 @@ program
     checks.push(["Built CLI", await exists(path.join(process.cwd(), "apps", "cli", "dist", "index.js")), "apps/cli/dist/index.js"]);
     checks.push(["AGENTS source of truth", await exists(path.join(process.cwd(), "AGENTS.md")), "AGENTS.md"]);
     checks.push(["Agent runbook", await exists(path.join(process.cwd(), "AGENT-RUNBOOK.md")), "AGENT-RUNBOOK.md"]);
+    checks.push(["Architecture docs", await exists(path.join(process.cwd(), "docs", "architecture.md")), "docs/architecture.md"]);
+    checks.push(["Agent compatibility docs", await exists(path.join(process.cwd(), "docs", "agent-compatibility.md")), "docs/agent-compatibility.md"]);
     checks.push(["Agent runner script", await exists(path.join(process.cwd(), "scripts", "agent-run.sh")), "scripts/agent-run.sh"]);
     checks.push(["CI workflow", await exists(path.join(process.cwd(), ".github", "workflows", "ci.yml")), ".github/workflows/ci.yml"]);
     checks.push(["Generated output ignored", await gitignoreContains("projects/*/audits/"), ".gitignore"]);
@@ -331,6 +442,14 @@ type AgentCloseout = {
     agentExecutionPlan: string;
     implementationPlan: string;
     evidenceIndex: string;
+    evidenceJsonl: string;
+    sourceCandidates: string;
+    repoAnalysis: string;
+    patchPlan: string;
+    changedFiles: string;
+    designBenchmark: string;
+    standardsRegistry: string;
+    suppressionReport: string;
     agentInstructions: string;
   };
 };
@@ -345,6 +464,7 @@ function configureAgentRunCommand(command: Command): void {
     .option("--industry <text>", "Industry")
     .option("--brand-context <text>", "Brand context")
     .option("--competitor <url...>", "Competitor URL(s)")
+    .option("--repo <path>", "Target website source repository for read-only source candidates")
     .option("--config <path>", "Optional YAML or JSON config file")
     .option("--no-pdf", "Disable PDF output")
     .option("--no-html", "Disable full HTML report output")
@@ -423,6 +543,14 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     agentExecutionPlan: path.join(reportRoot, "agent-execution-plan.md"),
     implementationPlan: path.join(reportRoot, "implementation-plan.json"),
     evidenceIndex: path.join(reportRoot, "evidence-index.json"),
+    evidenceJsonl: path.join(reportRoot, "evidence.jsonl"),
+    sourceCandidates: path.join(reportRoot, "source-candidates.json"),
+    repoAnalysis: path.join(reportRoot, "repo-analysis.json"),
+    patchPlan: path.join(reportRoot, "patch-plan.md"),
+    changedFiles: path.join(reportRoot, "changed-files.json"),
+    designBenchmark: path.join(reportRoot, "design-benchmark.json"),
+    standardsRegistry: path.join(reportRoot, "standards-registry.json"),
+    suppressionReport: path.join(reportRoot, "suppression-report.json"),
     agentInstructions: path.join(reportRoot, "agent-instructions")
   };
 }
@@ -438,6 +566,8 @@ function printCloseout(closeout: AgentCloseout): void {
   console.log(`Score: ${closeout.score}`);
   console.log(`Findings: ${closeout.findings}`);
   console.log(`Read: ${closeout.files.agentExecutionPlan}`);
+  console.log(`Source candidates: ${closeout.files.sourceCandidates}`);
+  console.log(`Design benchmark: ${closeout.files.designBenchmark}`);
 }
 
 function selectLatestAudit(audits: ProjectIndexEntry[], siteOrUrl?: string): ProjectIndexEntry | undefined {
@@ -454,10 +584,13 @@ function repositoryWorkflowContract() {
     runbook: "AGENT-RUNBOOK.md",
     commands: {
       oneCommandRun: "bash scripts/agent-run.sh <url>",
-      primaryRun: "node apps/cli/dist/index.js run <url>",
-      npmRun: "npm run agent -- <url>",
+      primaryRun: "node apps/cli/dist/index.js run <url> [--repo <target-source-repo>]",
+      npmRun: "npm run agent -- <url> --repo <target-source-repo>",
       lint: "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       plan: "node apps/cli/dist/index.js plan build --report <audit-dir>",
+      benchmark: "node apps/cli/dist/index.js benchmark --report <audit-dir>",
+      standards: "node apps/cli/dist/index.js standards update --report <audit-dir>",
+      suppressions: "node apps/cli/dist/index.js suppressions init [file] && node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file <file>",
       latest: "node apps/cli/dist/index.js latest [site-or-url]"
     },
     requiredCloseoutFiles: [
@@ -468,6 +601,17 @@ function repositoryWorkflowContract() {
       "report/agent-execution-plan.md",
       "report/implementation-plan.json",
       "report/evidence-index.json",
+      "report/evidence.jsonl",
+      "report/source-candidates.json",
+      "report/repo-analysis.json",
+      "report/patch-plan.md",
+      "report/changed-files.json",
+      "report/design-benchmark.json",
+      "report/standards-registry.json",
+      "report/suppression-report.json",
+      "report/route-templates.json",
+      "report/visual-system.json",
+      "report/experience-timing.json",
       "report/agent-instructions/"
     ],
     safetyRules: [
@@ -508,6 +652,16 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
           console.log(`[${event.stage}] ${event.message}${count}`);
         }
   });
+
+  if (typeof options.repo === "string" && options.repo.trim()) {
+    if (!quiet) {
+      console.log(`[source] Analyzing target source repo: ${options.repo}`);
+    }
+    const analysis = await analyzeDesignSourceRepo(result.auditRoot, options.repo);
+    if (!quiet) {
+      console.log(`[source] Source candidates mapped from ${analysis.filesScanned} files`);
+    }
+  }
 
   if (!quiet) {
     console.log("");
@@ -578,6 +732,11 @@ async function readOptionalJson(filePath: string): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
+  await mkdir(path.dirname(path.resolve(filePath)), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
 function normalizeUrlForMatch(value: string): string {

@@ -123,6 +123,12 @@ async function listAudits() {
       handoffPath: `/projects/${audit.site}/audits/${audit.auditId}/report/handoff.json`,
       validationPath: `/projects/${audit.site}/audits/${audit.auditId}/report/validation.json`,
       agentPlanPath: `/projects/${audit.site}/audits/${audit.auditId}/report/agent-execution-plan.md`,
+      sourceCandidatesPath: `/projects/${audit.site}/audits/${audit.auditId}/report/source-candidates.json`,
+      repoAnalysisPath: `/projects/${audit.site}/audits/${audit.auditId}/report/repo-analysis.json`,
+      patchPlanPath: `/projects/${audit.site}/audits/${audit.auditId}/report/patch-plan.md`,
+      benchmarkPath: `/projects/${audit.site}/audits/${audit.auditId}/report/design-benchmark.json`,
+      standardsPath: `/projects/${audit.site}/audits/${audit.auditId}/report/standards-registry.json`,
+      visualSystemPath: `/projects/${audit.site}/audits/${audit.auditId}/report/visual-system.json`,
       generatedAt: audit.generatedAt,
       score: audit.overallScore,
       findings: audit.findings
@@ -141,6 +147,12 @@ async function listAudits() {
     handoffPath: string;
     validationPath: string;
     agentPlanPath: string;
+    sourceCandidatesPath: string;
+    repoAnalysisPath: string;
+    patchPlanPath: string;
+    benchmarkPath: string;
+    standardsPath: string;
+    visualSystemPath: string;
     generatedAt?: string;
     score?: number;
     findings?: number;
@@ -178,6 +190,12 @@ async function listAudits() {
         handoffPath: `/projects/${site}/audits/${audit}/report/handoff.json`,
         validationPath: `/projects/${site}/audits/${audit}/report/validation.json`,
         agentPlanPath: `/projects/${site}/audits/${audit}/report/agent-execution-plan.md`,
+        sourceCandidatesPath: `/projects/${site}/audits/${audit}/report/source-candidates.json`,
+        repoAnalysisPath: `/projects/${site}/audits/${audit}/report/repo-analysis.json`,
+        patchPlanPath: `/projects/${site}/audits/${audit}/report/patch-plan.md`,
+        benchmarkPath: `/projects/${site}/audits/${audit}/report/design-benchmark.json`,
+        standardsPath: `/projects/${site}/audits/${audit}/report/standards-registry.json`,
+        visualSystemPath: `/projects/${site}/audits/${audit}/report/visual-system.json`,
         generatedAt,
         score,
         findings

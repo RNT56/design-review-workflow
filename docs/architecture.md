@@ -12,6 +12,8 @@ CLI / Local Web UI
   -> QA Gate
   -> Report Export
   -> Report Lint
+  -> Design Workflow Artifacts
+  -> Optional Source Repo Mapping
   -> Agent Handoff Bundle
 ```
 
@@ -47,6 +49,36 @@ The report layer writes:
 - `report/report.pdf`
 - `report/executive-summary.md`
 
+### Design Workflow Artifacts
+
+The design-review bundle adds stable operational artifacts:
+
+- `report/evidence.jsonl`
+- `report/route-templates.json`
+- `report/visual-system.json`
+- `report/experience-timing.json`
+- `report/standards-registry.json`
+- `report/suppression-report.json`
+- `report/design-benchmark.json`
+- `report/design-benchmark.md`
+- `report/patch-plan.md`
+- `report/changed-files.json`
+- `report/manual-actions.md`
+- `report/remaining-user-decisions.md`
+
+These are design-review equivalents of a robust agentic workflow bundle. They do not copy SEO-specific checks; they expose evidence, UI system signals, implementation planning, standards, suppression state, and benchmark readiness for downstream agents.
+
+### Optional Source Repo Mapping
+
+`--repo <path>` attaches a target website source repository explicitly. The mapper is read-only, bounded to frontend/design-relevant files, skips generated folders, and writes:
+
+- `report/repo-analysis.json`
+- `report/source-candidates.json`
+- `report/patch-plan.md`
+- `report/changed-files.json`
+
+The workflow must not silently assume the current directory is the website source repository.
+
 ### Validation And Handoff
 
 Every completed audit runs report lint and writes a stable agent bundle:
@@ -56,7 +88,18 @@ Every completed audit runs report lint and writes a stable agent bundle:
 - `report/validation.json`
 - `report/quality-gate.json`
 - `report/evidence-index.json`
+- `report/evidence.jsonl`
 - `report/implementation-plan.json`
+- `report/repo-analysis.json`
+- `report/source-candidates.json`
+- `report/patch-plan.md`
+- `report/changed-files.json`
+- `report/route-templates.json`
+- `report/visual-system.json`
+- `report/experience-timing.json`
+- `report/design-benchmark.json`
+- `report/standards-registry.json`
+- `report/suppression-report.json`
 - `report/agent-execution-plan.md`
 - `report/agent-instructions/*.md`
 
@@ -92,6 +135,8 @@ projects/<site>/latest-audit.json
 
 - `ModelRouter` and `LlmProvider` interfaces for future provider-backed agents
 - Criteria library for review rules and scoring calibration
+- Design standards registry for workflow-level rules
+- Read-only source repo analyzer for implementation candidate mapping
 - Report generator boundaries for external document exports
 - Project storage boundary for future SQLite/cloud indexing
 - Agent bundle JSON files for downstream coding-agent execution

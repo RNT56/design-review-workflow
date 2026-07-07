@@ -31,6 +31,8 @@ export * from "./storage/index.js";
 export * from "./integrations/figma.js";
 export * from "./monitoring/monitor.js";
 export * from "./validation/report-lint.js";
+export * from "./report/design-artifacts.js";
+export * from "./source/repo-analysis.js";
 
 export type RunAuditOptions = {
   workspaceRoot?: string;

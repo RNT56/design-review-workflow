@@ -30,6 +30,11 @@ Implemented or targeted in the current codebase:
 - Read-only Figma evidence fetch seam
 - Environment-configured model provider adapters
 - Markdown, HTML, PDF, and JSON exports
+- Agent-native report bundle with manifest, handoff, validation, quality gate, actionability, implementation plan, and agent-specific instructions
+- Design workflow artifacts: evidence JSONL, route templates, visual-system inventory, experience timing, standards registry, suppression ledger, benchmark, patch plan, changed-file proposal, manual actions, and remaining user decisions
+- Read-only `--repo` source mapping for candidate files and source-backed implementation planning
+- Existing-audit utilities: `report lint`, `plan build`, `benchmark`, `standards update`, and non-destructive `suppressions`
+- Local web UI cockpit for overview, findings, implementation queue, evidence, and agent bundle links
 
 ## MVP Gaps To Close Before Internal Production Use
 
@@ -40,15 +45,15 @@ Implemented or targeted in the current codebase:
 - Add more criteria-library coverage for website and page types.
 - Wire model-backed reviewers into the QA gate after provider-specific evals exist.
 - Promote local monitor configs into a scheduled service or CI workflow.
+- Add a curated cross-framework fixture set for source candidate calibration.
 
 ## Planned V1
 
 - LLM provider adapters used for specialized reviewers
 - Prompt versioning and model comparison
 - Competitor benchmark hardening
-- Regression compare with screenshot diffs
 - External ticket/document exports
-- SQLite project index
+- Scheduled monitor service or CI launch gate
 
 ## Planned V2+
 

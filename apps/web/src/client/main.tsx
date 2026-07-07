@@ -12,6 +12,12 @@ type AuditSummary = {
   handoffPath: string;
   validationPath: string;
   agentPlanPath: string;
+  sourceCandidatesPath: string;
+  repoAnalysisPath: string;
+  patchPlanPath: string;
+  benchmarkPath: string;
+  standardsPath: string;
+  visualSystemPath: string;
   generatedAt?: string;
   score?: number;
   findings?: number;
@@ -29,7 +35,7 @@ type Job = {
 type AuditReport = {
   auditId: string;
   generatedAt: string;
-  config: { url: string; mode: string };
+  config: { url: string; mode: string; outputs?: { pdf?: boolean; html?: boolean; markdown?: boolean; json?: boolean } };
   websiteType: string;
   websiteTypeConfidence: string;
   pages: Array<{ pageId: string; url: string; pageType: string; businessImportance: string; title?: string }>;
@@ -47,6 +53,19 @@ type AuditReport = {
     evidence: { url: string; section?: string; screenshotRefs: string[] };
   }>;
   quickWins: Array<{ findingId: string; title: string; recommendation: string }>;
+  tickets: Array<{
+    title: string;
+    role: string[];
+    priority: string;
+    effort: string;
+    sourceFindingIds: string[];
+    problem: string;
+    goal: string;
+    scope: string[];
+    acceptanceCriteria: string[];
+    definitionOfDone: string[];
+    evidenceRefs: string[];
+  }>;
   screenshotAnnotations: Array<{ annotationId: string; label: string; annotatedScreenshot: { path: string } }>;
   competitorBenchmarks: Array<{ competitorUrl: string; pagesReviewed: number; scorecard: { overallScore: number }; relativeWeaknesses: string[]; differentiationOpportunities: string[] }>;
   ticketExports?: Record<string, string>;
@@ -66,6 +85,7 @@ function App() {
   const [job, setJob] = useState<Job | null>(null);
   const [history, setHistory] = useState<AuditSummary[]>([]);
   const [selected, setSelected] = useState<AuditReport | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "findings" | "implementation" | "evidence" | "agent">("overview");
   const latestProgress = job?.progress[job.progress.length - 1];
 
   useEffect(() => {
@@ -81,6 +101,7 @@ function App() {
         setJob(next);
         if (next.report) {
           setSelected(next.report);
+          setActiveTab("overview");
           await refreshHistory();
         }
         if (next.status !== "running") {
@@ -121,6 +142,7 @@ function App() {
     const response = await fetch(`/api/audits/${item.site}/${item.audit}/report`);
     if (response.ok) {
       setSelected((await response.json()) as AuditReport);
+      setActiveTab("overview");
     }
   }
 
@@ -189,7 +211,7 @@ function App() {
             </div>
             <div className="exports">
               <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.html`} target="_blank" rel="noreferrer">HTML</a>
-              <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.pdf`} target="_blank" rel="noreferrer">PDF</a>
+              {selected.config.outputs?.pdf !== false ? <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.pdf`} target="_blank" rel="noreferrer">PDF</a> : null}
               <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/report.json`} target="_blank" rel="noreferrer">JSON</a>
               <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/handoff.json`} target="_blank" rel="noreferrer">Handoff</a>
               <a href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/report/workflow-manifest.json`} target="_blank" rel="noreferrer">Manifest</a>
@@ -204,98 +226,233 @@ function App() {
             ))}
           </div>
 
-          <div className="report-grid">
+          <nav className="tabs" aria-label="Report sections">
+            {(["overview", "findings", "implementation", "evidence", "agent"] as const).map((tab) => (
+              <button key={tab} type="button" className={activeTab === tab ? "active" : ""} onClick={() => setActiveTab(tab)}>
+                {label(tab)}
+              </button>
+            ))}
+          </nav>
+
+          {activeTab === "overview" ? (
+            <div className="report-grid">
+              <section>
+                <h3>Priority Findings</h3>
+                <div className="findings">
+                  {sortedFindings.slice(0, 5).map((finding) => (
+                    <FindingCard finding={finding} key={finding.findingId} />
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3>Redesign Briefing</h3>
+                <div className="briefing">
+                  {selected.redesignBriefing.map((section) => (
+                    <section key={section.title}>
+                      <h4>{section.title}</h4>
+                      <p>{section.body}</p>
+                    </section>
+                  ))}
+                </div>
+
+                <h3>Quick Wins</h3>
+                <div className="annotation-list">
+                  {selected.quickWins.slice(0, 6).map((finding) => (
+                    <span className="note-row" key={finding.findingId}>{finding.title}</span>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === "findings" ? (
             <section>
               <h3>Findings</h3>
               <div className="findings">
                 {sortedFindings.map((finding) => (
-                  <article className="finding" key={finding.findingId}>
-                    <div className="finding-meta">
-                      <span>{finding.severity}</span>
-                      <span>{finding.category}</span>
-                      <span>{finding.priorityScore}</span>
-                    </div>
-                    <h4>{finding.title}</h4>
-                    <p>{finding.observation}</p>
-                    <p><strong>Recommendation:</strong> {finding.recommendation}</p>
-                    <small>{finding.evidence.url} / {finding.evidence.section ?? "section unspecified"}</small>
-                  </article>
+                  <FindingCard finding={finding} key={finding.findingId} />
                 ))}
               </div>
             </section>
+          ) : null}
 
-            <section>
-              {selected.competitorBenchmarks.length > 0 ? (
-                <>
-                  <h3>Competitors</h3>
-                  <table>
-                    <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
-                    <tbody>
-                      {selected.competitorBenchmarks.map((competitor) => (
-                        <tr key={competitor.competitorUrl}>
-                          <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{new URL(competitor.competitorUrl).hostname}</a></td>
-                          <td>{competitor.scorecard.overallScore}</td>
-                          <td>{competitor.pagesReviewed}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              ) : null}
+          {activeTab === "implementation" ? (
+            <div className="report-grid">
+              <section>
+                <h3>Implementation Queue</h3>
+                <div className="queue">
+                  {selected.tickets.map((ticket, index) => (
+                    <article className="queue-item" key={`${ticket.title}-${index}`}>
+                      <div className="finding-meta">
+                        <span>{ticket.priority}</span>
+                        <span>{ticket.effort} effort</span>
+                        <span>{ticket.role.join(", ")}</span>
+                      </div>
+                      <h4>{ticket.title}</h4>
+                      <p>{ticket.goal}</p>
+                      <ul>
+                        {ticket.acceptanceCriteria.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                      <small>{ticket.sourceFindingIds.join(", ")}</small>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
-              {selected.screenshotAnnotations.length > 0 ? (
-                <>
-                  <h3>Annotations</h3>
-                  <div className="annotation-list">
-                    {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
-                      <a key={annotation.annotationId} href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/${annotation.annotatedScreenshot.path}`} target="_blank" rel="noreferrer">
-                        {annotation.label}
-                      </a>
+              <section>
+                <h3>Implementation Files</h3>
+                <div className="artifact-grid">
+                  {artifactLinks(selected).filter((item) => ["Implementation Plan", "Patch Plan", "Changed Files", "Source Candidates", "Repo Analysis"].includes(item.label)).map((item) => (
+                    <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+                  ))}
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === "evidence" ? (
+            <div className="report-grid">
+              <section>
+                <h3>Pages</h3>
+                <table>
+                  <thead><tr><th>Type</th><th>Page</th><th>Importance</th></tr></thead>
+                  <tbody>
+                    {selected.pages.map((page) => (
+                      <tr key={page.pageId}>
+                        <td>{page.pageType}</td>
+                        <td><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></td>
+                        <td>{page.businessImportance}</td>
+                      </tr>
                     ))}
-                  </div>
-                </>
-              ) : null}
+                  </tbody>
+                </table>
 
-              {selected.ticketExports ? (
-                <>
-                  <h3>Exports</h3>
-                  <div className="annotation-list">
+                {selected.competitorBenchmarks.length > 0 ? (
+                  <>
+                    <h3>Competitors</h3>
+                    <table>
+                      <thead><tr><th>Competitor</th><th>Score</th><th>Pages</th></tr></thead>
+                      <tbody>
+                        {selected.competitorBenchmarks.map((competitor) => (
+                          <tr key={competitor.competitorUrl}>
+                            <td><a href={competitor.competitorUrl} target="_blank" rel="noreferrer">{new URL(competitor.competitorUrl).hostname}</a></td>
+                            <td>{competitor.scorecard.overallScore}</td>
+                            <td>{competitor.pagesReviewed}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                ) : null}
+              </section>
+
+              <section>
+                <h3>Evidence Files</h3>
+                <div className="artifact-grid">
+                  {artifactLinks(selected).filter((item) => ["Evidence Index", "Evidence JSONL", "Visual System", "Route Templates", "Experience Timing", "Annotations"].includes(item.label)).map((item) => (
+                    <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+                  ))}
+                </div>
+
+                {selected.screenshotAnnotations.length > 0 ? (
+                  <>
+                    <h3>Annotations</h3>
+                    <div className="annotation-list">
+                      {selected.screenshotAnnotations.slice(0, 8).map((annotation) => (
+                        <a key={annotation.annotationId} href={`/projects/${siteSlug(selected.config.url)}/audits/${selected.auditId}/${annotation.annotatedScreenshot.path}`} target="_blank" rel="noreferrer">
+                          {annotation.label}
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === "agent" ? (
+            <div className="report-grid">
+              <section>
+                <h3>Agent Bundle</h3>
+                <div className="artifact-grid">
+                  {artifactLinks(selected).map((item) => (
+                    <a key={item.label} href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3>Exports</h3>
+                {selected.ticketExports ? (
+                  <div className="artifact-grid">
                     {Object.entries(selected.ticketExports).map(([key, value]) => (
                       <a key={key} href={toProjectHref(value, selected)} target="_blank" rel="noreferrer">{label(key)}</a>
                     ))}
                   </div>
-                </>
-              ) : null}
+                ) : <p>No ticket exports found.</p>}
 
-              <h3>Pages</h3>
-              <table>
-                <thead><tr><th>Type</th><th>Page</th><th>Importance</th></tr></thead>
-                <tbody>
-                  {selected.pages.map((page) => (
-                    <tr key={page.pageId}>
-                      <td>{page.pageType}</td>
-                      <td><a href={page.url} target="_blank" rel="noreferrer">{page.title ?? page.url}</a></td>
-                      <td>{page.businessImportance}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <h3>Redesign Briefing</h3>
-              <div className="briefing">
-                {selected.redesignBriefing.map((section) => (
-                  <section key={section.title}>
-                    <h4>{section.title}</h4>
-                    <p>{section.body}</p>
-                  </section>
-                ))}
-              </div>
-            </section>
-          </div>
+                <h3>Closeout Commands</h3>
+                <pre className="command-block">{`node apps/cli/dist/index.js report lint ${auditRootFor(selected)} --strict
+node apps/cli/dist/index.js benchmark --report ${auditRootFor(selected)}
+node apps/cli/dist/index.js plan build --report ${auditRootFor(selected)}`}</pre>
+              </section>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </main>
   );
+}
+
+function FindingCard({ finding }: { finding: AuditReport["findings"][number] }) {
+  return (
+    <article className="finding">
+      <div className="finding-meta">
+        <span>{finding.severity}</span>
+        <span>{finding.category}</span>
+        <span>{finding.priorityScore}</span>
+      </div>
+      <h4>{finding.title}</h4>
+      <p>{finding.observation}</p>
+      <p><strong>Recommendation:</strong> {finding.recommendation}</p>
+      <small>{finding.evidence.url} / {finding.evidence.section ?? "section unspecified"}</small>
+    </article>
+  );
+}
+
+function artifactLinks(report: AuditReport) {
+  return [
+    ["Manifest", "workflow-manifest.json"],
+    ["Handoff", "handoff.json"],
+    ["Validation", "validation.json"],
+    ["Quality Gate", "quality-gate.json"],
+    ["HTML Report", "report.html"],
+    ["Markdown Report", "report.md"],
+    ["JSON Report", "report.json"],
+    ["Agent Plan", "agent-execution-plan.md"],
+    ["Implementation Plan", "implementation-plan.json"],
+    ["Patch Plan", "patch-plan.md"],
+    ["Changed Files", "changed-files.json"],
+    ["Source Candidates", "source-candidates.json"],
+    ["Repo Analysis", "repo-analysis.json"],
+    ["Evidence Index", "evidence-index.json"],
+    ["Evidence JSONL", "evidence.jsonl"],
+    ["Visual System", "visual-system.json"],
+    ["Route Templates", "route-templates.json"],
+    ["Experience Timing", "experience-timing.json"],
+    ["Design Benchmark", "design-benchmark.json"],
+    ["Standards", "standards-registry.json"],
+    ["Suppressions", "suppression-report.json"]
+  ].map(([labelText, file]) => ({ label: labelText, href: reportFileHref(report, file) }));
+}
+
+function reportFileHref(report: AuditReport, file: string) {
+  return `/projects/${siteSlug(report.config.url)}/audits/${report.auditId}/report/${file}`;
+}
+
+function auditRootFor(report: AuditReport) {
+  return `projects/${siteSlug(report.config.url)}/audits/${report.auditId}`;
 }
 
 function label(value: string) {

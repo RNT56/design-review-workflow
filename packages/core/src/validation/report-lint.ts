@@ -31,8 +31,10 @@ export async function lintAuditReport(auditDir: string, strict = false): Promise
     errors.push(`Report schema failed: ${parsed.error.message}`);
   }
 
+  await refreshAgentBundle(report, auditDir);
   await checkBundleFiles(report, auditDir, errors, warnings);
   await checkEvidence(report, auditDir, errors, warnings);
+  await checkSafety(report, errors, warnings);
 
   if (strict && warnings.length > 0) {
     errors.push("Strict mode treats warnings as failures.");
@@ -77,7 +79,21 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
     "report/report-dashboard.json",
     "report/actionability.json",
     "report/evidence-index.json",
+    "report/evidence.jsonl",
     "report/implementation-plan.json",
+    "report/repo-analysis.json",
+    "report/source-candidates.json",
+    "report/route-templates.json",
+    "report/visual-system.json",
+    "report/experience-timing.json",
+    "report/standards-registry.json",
+    "report/suppression-report.json",
+    "report/design-benchmark.json",
+    "report/design-benchmark.md",
+    "report/patch-plan.md",
+    "report/changed-files.json",
+    "report/manual-actions.md",
+    "report/remaining-user-decisions.md",
     "report/agent-execution-plan.md",
     "report/next-actions.md",
     "report/agent-instructions/README.md",
@@ -115,6 +131,15 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
   await checkJsonShape(auditDir, "report/handoff.json", "schemaVersion", errors);
   await checkJsonShape(auditDir, "report/evidence-index.json", "pages", errors);
   await checkJsonShape(auditDir, "report/implementation-plan.json", "items", errors);
+  await checkJsonShape(auditDir, "report/repo-analysis.json", "schemaVersion", errors);
+  await checkJsonShape(auditDir, "report/source-candidates.json", "byFinding", errors);
+  await checkJsonShape(auditDir, "report/route-templates.json", "templates", errors);
+  await checkJsonShape(auditDir, "report/visual-system.json", "schemaVersion", errors);
+  await checkJsonShape(auditDir, "report/experience-timing.json", "pages", errors);
+  await checkJsonShape(auditDir, "report/standards-registry.json", "rules", errors);
+  await checkJsonShape(auditDir, "report/suppression-report.json", "suppressionsApplied", errors);
+  await checkJsonShape(auditDir, "report/design-benchmark.json", "score", errors);
+  await checkJsonShape(auditDir, "report/changed-files.json", "changedFiles", errors);
 }
 
 async function checkEvidence(report: AuditReport, auditDir: string, errors: string[], warnings: string[]) {
@@ -147,6 +172,47 @@ async function checkEvidence(report: AuditReport, auditDir: string, errors: stri
   }
 }
 
+async function checkSafety(report: AuditReport, errors: string[], warnings: string[]) {
+  const blockedUrlPattern = /\/(login|log-in|signin|sign-in|admin|account|billing|payment|checkout\/complete|order-confirmation|orders?\/)/i;
+  const cautionUrlPattern = /\/(checkout|cart|profile|settings)/i;
+  const secretPattern = /(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|BEGIN (?:RSA |EC |OPENSSH |)?PRIVATE KEY|password\s*=|api[_-]?key\s*=)/i;
+
+  const urls = new Set<string>([
+    report.config.url,
+    ...report.pages.map((page) => page.url),
+    ...report.findings.map((finding) => finding.evidence.url)
+  ]);
+  for (const url of urls) {
+    let pathname = url;
+    try {
+      pathname = new URL(url).pathname;
+    } catch {
+      // Keep the original value for pattern checks.
+    }
+    if (blockedUrlPattern.test(pathname)) {
+      errors.push(`Unsafe private/auth/payment URL appears in report artifacts: ${url}`);
+    } else if (cautionUrlPattern.test(pathname)) {
+      warnings.push(`Review checkout/account-adjacent URL before implementation: ${url}`);
+    }
+  }
+
+  for (const finding of report.findings) {
+    const text = [
+      finding.title,
+      finding.observation,
+      finding.whyItMatters,
+      finding.recommendation,
+      ...finding.evidence.textQuotes,
+      finding.businessRisk ?? "",
+      finding.expectedKpiImpact ?? "",
+      finding.suggestedExperiment ?? ""
+    ].join("\n");
+    if (secretPattern.test(text)) {
+      errors.push(`Secret-looking value appears in finding text: ${finding.findingId}`);
+    }
+  }
+}
+
 async function exists(filePath: string): Promise<boolean> {
   return access(filePath).then(
     () => true,
@@ -166,7 +232,7 @@ async function checkJsonShape(auditDir: string, file: string, requiredKey: strin
   }
 }
 
-async function refreshAgentBundle(report: AuditReport, auditDir: string, result: ReportLintResult): Promise<void> {
+async function refreshAgentBundle(report: AuditReport, auditDir: string, result?: ReportLintResult): Promise<void> {
   const paths = await createNestedAuditPaths(auditDir);
   await writeAgentBundle(
     report,

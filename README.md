@@ -21,6 +21,12 @@ npm run build
 node apps/cli/dist/index.js run https://example.com
 ```
 
+With read-only source mapping for an implementation agent:
+
+```bash
+node apps/cli/dist/index.js run https://example.com --repo /path/to/target-website-repo
+```
+
 Audit outputs are written to `projects/<site>/audits/<timestamp>-<mode>/`.
 
 Each completed audit writes:
@@ -32,6 +38,17 @@ Each completed audit writes:
 - `report/agent-execution-plan.md`
 - `report/implementation-plan.json`
 - `report/evidence-index.json`
+- `report/evidence.jsonl`
+- `report/source-candidates.json`
+- `report/repo-analysis.json`
+- `report/patch-plan.md`
+- `report/changed-files.json`
+- `report/route-templates.json`
+- `report/visual-system.json`
+- `report/experience-timing.json`
+- `report/design-benchmark.json`
+- `report/standards-registry.json`
+- `report/suppression-report.json`
 - `report/agent-instructions/*.md`
 - `report/index.md` and `report/index.html`
 
@@ -59,6 +76,10 @@ node apps/cli/dist/index.js providers status
 node apps/cli/dist/index.js workflow --format json
 node apps/cli/dist/index.js report lint ./projects/example-com/audits/<audit-id> --strict
 node apps/cli/dist/index.js plan build --report ./projects/example-com/audits/<audit-id>
+node apps/cli/dist/index.js benchmark --report ./projects/example-com/audits/<audit-id>
+node apps/cli/dist/index.js standards update --report ./projects/example-com/audits/<audit-id>
+node apps/cli/dist/index.js suppressions init design-review-suppressions.json
+node apps/cli/dist/index.js suppressions apply --report ./projects/example-com/audits/<audit-id> --file design-review-suppressions.json
 npm run doctor
 ```
 
@@ -86,8 +107,10 @@ npm run doctor
 - One-command agent runner for repo-capable agents
 - Repository-level workflow contract via `workflow`
 - Strict report lint and quality-gate files
+- Design workflow benchmark, standards registry, and non-destructive suppression ledger
+- Optional `--repo` source analysis that emits candidate files, patch plan, and changed-file proposal without modifying the target repo
 - Latest-audit pointers for timestamp-free handoff
-- Agent execution plan, machine-readable handoff, implementation plan, evidence index, and agent-specific instructions
+- Agent execution plan, machine-readable handoff, implementation plan, evidence index, evidence JSONL, and agent-specific instructions
 
 ## Safety Boundary
 
@@ -97,6 +120,7 @@ npm run doctor
 - No production LLM provider calls yet
 - No true Lighthouse report yet
 - No Figma or external ticketing integrations yet
+- No automatic target-repo edits from `--repo`; it is read-only source mapping
 - No live writes to external ticketing systems without explicit credentials and a dedicated command
 - No model call is made unless both provider API key and model env vars are configured
 

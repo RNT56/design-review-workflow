@@ -109,8 +109,7 @@ button.primary:disabled {
 }
 
 .audit-form,
-.history,
-.report {
+.history {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -196,6 +195,7 @@ input {
 
 .report {
   margin-top: 20px;
+  padding: 0;
 }
 
 .report-header,
@@ -238,6 +238,28 @@ input {
   color: var(--muted);
   font-size: 12px;
   min-height: 32px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.tabs button {
+  min-width: 104px;
+  min-height: 36px;
+  background: transparent;
+}
+
+.tabs button.active {
+  background: #18242b;
+  border-color: #18242b;
+  color: #fff;
+  font-weight: 700;
 }
 
 .report-grid {
@@ -298,6 +320,11 @@ td {
   gap: 10px;
 }
 
+.queue {
+  display: grid;
+  gap: 12px;
+}
+
 .annotation-list {
   display: grid;
   gap: 8px;
@@ -313,6 +340,30 @@ td {
   text-decoration: none;
 }
 
+.artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.artifact-grid a,
+.note-row {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff;
+  color: #243940;
+  text-decoration: none;
+}
+
+.artifact-grid a:hover {
+  border-color: var(--accent);
+}
+
 .briefing section {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -322,6 +373,33 @@ td {
 
 .briefing h4 {
   margin-bottom: 6px;
+}
+
+.queue-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+}
+
+.queue-item h4 {
+  margin: 8px 0;
+}
+
+.queue-item ul {
+  margin: 8px 0;
+  padding-left: 20px;
+  color: #344950;
+}
+
+.command-block {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101820;
+  color: #e7f2ee;
+  padding: 14px;
+  line-height: 1.5;
 }
 
 @media (max-width: 900px) {

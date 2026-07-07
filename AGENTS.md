@@ -19,12 +19,18 @@ Optional input:
 - Competitor URLs
 - Audit mode
 - Language
+- Target website source repository via `--repo <path>`
+- Suppression file
+- Baseline audit for compare/monitor workflows
 
 Required outputs for the MVP:
 
 - Workflow manifest
 - Agent handoff JSON
 - Validation and quality-gate JSON
+- Design workflow benchmark
+- Standards registry
+- Suppression ledger
 - Markdown report
 - HTML report
 - PDF report
@@ -32,6 +38,12 @@ Required outputs for the MVP:
 - Scorecard
 - Prioritized findings
 - Screenshot references
+- Evidence JSONL
+- Route template inventory
+- Visual system inventory
+- Experience timing summary
+- Source candidate map when a target repo is explicitly supplied
+- Patch plan and changed-file proposal
 - Redesign briefing
 - Ticket-ready recommendations
 
@@ -62,6 +74,7 @@ The implemented MVP is deterministic and local-first:
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
 - Primary `run` command for audit, validation, and agent handoff
 - Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
+- Design-native parity mechanics: `benchmark`, `standards update`, non-destructive `suppressions`, `--repo` source mapping, patch-plan proposals, changed-file proposals, evidence JSONL, route templates, visual-system inventory, and experience-timing artifacts
 - Latest-audit pointers under `projects/latest-audit.json` and `projects/<site>/latest-audit.json`
 - axe-core accessibility basics where injection succeeds
 - Browser navigation-timing performance basics; Lighthouse-grade audits are intentionally external to this dependency-light workflow
@@ -132,6 +145,7 @@ Primary built CLI command:
 
 ```bash
 node apps/cli/dist/index.js run <public-url>
+node apps/cli/dist/index.js run <public-url> --repo <target-website-source-repo>
 ```
 
 Every completed audit must produce a self-contained agent bundle under `report/`:
@@ -143,6 +157,18 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `agent-execution-plan.md`
 - `implementation-plan.json`
 - `evidence-index.json`
+- `evidence.jsonl`
+- `repo-analysis.json`
+- `source-candidates.json`
+- `patch-plan.md`
+- `changed-files.json`
+- `route-templates.json`
+- `visual-system.json`
+- `experience-timing.json`
+- `design-benchmark.json`
+- `design-benchmark.md`
+- `standards-registry.json`
+- `suppression-report.json`
 - `actionability.json`
 - `findings.json`
 - `score.json`
@@ -155,6 +181,19 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `agent-instructions/hermes.md`
 
 The report bundle is the stable interface for downstream agents. Agents should read `workflow-manifest.json` first, then `handoff.json`, then `agent-execution-plan.md`.
+
+Stable closeout commands:
+
+```bash
+node apps/cli/dist/index.js report lint <audit-dir> --strict
+node apps/cli/dist/index.js benchmark --report <audit-dir>
+node apps/cli/dist/index.js plan build --report <audit-dir>
+node apps/cli/dist/index.js standards update --report <audit-dir>
+node apps/cli/dist/index.js suppressions init design-review-suppressions.json
+node apps/cli/dist/index.js suppressions apply --report <audit-dir> --file design-review-suppressions.json
+```
+
+`--repo` is read-only. It may generate `repo-analysis.json`, `source-candidates.json`, `patch-plan.md`, and `changed-files.json`, but it must not modify the target website repository. Implementation agents must verify candidate files before editing and must run the target repo's own tests/build after any changes.
 
 ## Repository Layout
 
@@ -177,6 +216,8 @@ projects/       Local audit outputs. Keep generated audit folders untracked.
 - Reports must reference existing screenshot/evidence files only.
 - Agent handoff files must be generated under `report/agent-instructions/`.
 - `workflow-manifest.json` and `handoff.json` must be machine-readable and must not require scraping Markdown.
+- `source-candidates.json`, `patch-plan.md`, and `changed-files.json` are proposal artifacts, not proof that edits were made.
+- Suppressions are non-destructive. They must be recorded in `suppression-report.json` and must not remove entries from `findings.json`.
 - Every normal audit must write `validation.json` and `quality-gate.json`.
 - `report lint --strict` must fail unsupported report bundles.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
