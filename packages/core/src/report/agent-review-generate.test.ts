@@ -169,6 +169,7 @@ function samplePage(url: string): PageEvidence {
         height: 600
       }
     },
+    interactionStates: [],
     text: {
       headings: [{ text: "Operational reviews for launch teams", tag: "h1", visible: true }],
       buttons: [{ text: "Book demo", tag: "button", visible: true }],

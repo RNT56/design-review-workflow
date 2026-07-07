@@ -1,4 +1,4 @@
-import { AuditConfig, AuditConfigSchema, AuditMode, CaptureSettings, ViewportConfig } from "../schemas/audit.js";
+import { AuditConfig, AuditConfigSchema, AuditMode, CaptureSettings, InteractionSettings, ViewportConfig } from "../schemas/audit.js";
 import { AUDIT_ROOT_ENV, DEFAULT_AUDIT_ROOT } from "../storage/audit-output.js";
 import { createAuditId } from "../utils/id.js";
 
@@ -39,6 +39,7 @@ export type AuditInput = {
   outputJson?: boolean;
   outputMarkdown?: boolean;
   capture?: Partial<CaptureSettings>;
+  interactions?: Partial<InteractionSettings>;
 };
 
 export function createAuditConfig(input: AuditInput): AuditConfig {
@@ -71,10 +72,14 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
     },
     interactions: {
       level: 2,
+      captureStates: true,
+      maxStateCapturesPerPage: 8,
+      maxStateCapturesPerViewport: 5,
       allowCheckoutStart: true,
       allowFormErrorChecks: false,
       allowPurchase: false,
-      allowLogin: false
+      allowLogin: false,
+      ...(input.interactions ?? {})
     },
     outputs: {
       markdown: input.outputMarkdown ?? true,

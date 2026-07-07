@@ -12,6 +12,7 @@ import { discoverPages } from "./discovery.js";
 import { extractPage } from "./extraction.js";
 import { capturePerformanceSummary } from "./performance.js";
 import { classifyPage } from "../review/classification.js";
+import { captureInteractionStates } from "./interaction-states.js";
 import { buildPageReviewSignals } from "./review-signals.js";
 import { resetScrollPosition, settlePageForCapture } from "./render-readiness.js";
 
@@ -69,6 +70,7 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
   const pageId = stableId("page", normalizedUrl, index);
   const slug = slugFromUrl(normalizedUrl);
   const screenshots: Record<string, ScreenshotRef> = {};
+  const interactionStates: PageEvidence["interactionStates"] = [];
   const extractions: Partial<Record<ViewportName, Awaited<ReturnType<typeof extractPage>>>> = {};
   let accessibility: PageEvidence["accessibility"];
   let performance: PageEvidence["performance"];
@@ -93,11 +95,12 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
         performance = await capturePerformanceSummary(page, normalizedUrl, paths.auditRoot, pageId);
       }
 
-      if (viewport.name === "mobile" && config.interactions.level >= 1) {
-        const state = await captureMobileNavigationState(page, paths.screenshotsStates, pageId, slug, viewport);
-        if (state) {
-          screenshots[state.id] = state;
+      if (config.interactions.level >= 1 && config.interactions.captureStates) {
+        const states = await captureInteractionStates(page, paths.screenshotsStates, pageId, slug, viewport, config);
+        for (const screenshot of states.screenshots) {
+          screenshots[screenshot.id] = screenshot;
         }
+        interactionStates.push(...states.states);
       }
     } finally {
       await page.context().close();
@@ -123,6 +126,7 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
     businessImportance: classification.businessImportance,
     primaryUserGoal: classification.primaryUserGoal,
     screenshots,
+    interactionStates,
     text: {
       headings: desktopExtraction.headings,
       buttons: desktopExtraction.buttons,
@@ -197,44 +201,6 @@ async function saveScreenshot(
     width: dimensions.width,
     height: dimensions.height
   };
-}
-
-async function captureMobileNavigationState(
-  page: Page,
-  folder: string,
-  pageId: string,
-  slug: string,
-  viewport: ViewportConfig
-): Promise<ScreenshotRef | null> {
-  await resetScrollPosition(page);
-  const candidates = [
-    page.getByRole("button", { name: /menu|navigation|nav|open|hamburger|menü/i }).first(),
-    page.locator("button[aria-expanded='false']").first(),
-    page.locator("button").filter({ hasText: /^(\s*|menu|menü)$/i }).first()
-  ];
-
-  for (const candidate of candidates) {
-    if (!(await candidate.isVisible({ timeout: 700 }).catch(() => false))) {
-      continue;
-    }
-    await candidate.click({ timeout: 1_000 }).catch(() => undefined);
-    await page.waitForTimeout(350);
-    const id = `${pageId}_mobile_nav_state`;
-    const filePath = path.join(folder, `${slug}_mobile_nav_open.png`);
-    await page.screenshot({ path: filePath, fullPage: false });
-    const dimensions = await readPngDimensions(filePath, { width: viewport.width, height: viewport.height });
-    return {
-      id,
-      viewport: "mobile",
-      kind: "state",
-      state: "mobile_nav_open",
-      path: path.relative(path.dirname(path.dirname(folder)), filePath),
-      width: dimensions.width,
-      height: dimensions.height
-    };
-  }
-
-  return null;
 }
 
 async function readPngDimensions(filePath: string, fallback: { width: number; height: number }): Promise<{ width: number; height: number }> {

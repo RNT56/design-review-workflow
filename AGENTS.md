@@ -43,6 +43,7 @@ Required outputs for the MVP:
 - Grouped issue inventory
 - Prioritized findings
 - Screenshot references
+- Safe interaction-state references for captured menus, dialogs, popovers, accordions, tabs, filters, drawers, and disclosures
 - Evidence brief
 - Screenshot manifest and optimized review-pack contact sheets
 - Static review-pack gallery
@@ -67,6 +68,7 @@ The implemented MVP is deterministic and local-first:
 - Deterministic local audit storage under `audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/`
 - Playwright capture for desktop and mobile screenshots
 - Scroll-reveal-aware screenshot capture with reduced-motion contexts, asset readiness waits, viewport-step page settling, and final top-of-page reset before evidence extraction
+- Safe bounded interaction-state capture for visible read-only UI states such as menus, dialogs, popovers, accordions, tabs, filters, drawers, and disclosures
 - DOM, text, form, link, button, section, and CSS-signal extraction
 - Basic same-domain crawl and page selection
 - Rule-based page classification and website-type inference
@@ -94,6 +96,7 @@ The implemented MVP is deterministic and local-first:
 - Top-level static audit dashboard under `index.html`; this is the canonical no-server report entrypoint for agents and handoff.
 - Standalone static hosted report under `report/hosted/index.html` with copied screenshot assets
 - Screenshot manifest with actual PNG dimensions, display roles, grouping metadata, and sheet references
+- Interaction state evidence linked from page evidence, screenshot manifests, evidence briefs, evidence JSONL, and review-pack guidance
 - Optimized review-pack contact sheets for first viewports, page flows split into readable chunks, and grouped issue evidence
 - Static review-pack gallery under `report/agent-review-pack/gallery/index.html`
 - Issue evidence sheets with numbered markers and side legends for agent visual review
@@ -259,7 +262,8 @@ When business-grade review is required, agents must use the review-pack order fr
 1. First viewports: `contact-sheets/first-viewports.png` plus per-page `contact-sheets/pages/*-first-viewports.png`.
 2. Grouped issue evidence: `contact-sheets/issues/*.png`.
 3. Page flows: `contact-sheets/pages/*-flow.png`.
-4. Raw screenshots listed in `screenshot-manifest.json` for dispute resolution or closer inspection.
+4. Captured interaction states listed in `screenshot-manifest.json` with display role `state_capture`.
+5. Raw screenshots listed in `screenshot-manifest.json` for dispute resolution or closer inspection.
 
 `contact-sheets/all-pages.png` remains a compatibility overview, not the primary visual review artifact.
 
@@ -313,6 +317,7 @@ projects/       Legacy audit output root. Read-compatible; do not use for new de
 - Save intermediate artifacts in the audit folder so failures are inspectable.
 - Reports must reference existing screenshot/evidence files only.
 - Raw screenshots must remain unchanged; generated contact sheets and gallery files are derived review surfaces.
+- Interaction capture must stay read-only and bounded. It may open visible menus, dialogs, popovers, accordions, tabs, filters, drawers, and disclosures, but must not submit forms, authenticate, start payment, mutate accounts, save, delete, upload, download, or trigger external handoffs.
 - `screenshot-manifest.json` must include actual PNG pixel dimensions, display roles, group memberships, and derived sheet references when the review pack is built.
 - `agent-review-pack/review-pack-manifest.json` is the source of truth for visual review order and sheet mappings.
 - Local UI and hosted reports should keep raw screenshot drawers collapsed by default while linking optimized issue/page evidence sheets.

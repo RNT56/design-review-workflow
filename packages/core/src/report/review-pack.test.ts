@@ -45,11 +45,17 @@ describe("buildReviewPack", () => {
     });
     expect(manifest.screenshots.find((screenshot) => screenshot.id === "page_1_desktop_above_fold")?.sheetRefs).toContain("contact-sheets/first-viewports.png");
     expect(manifest.screenshots.find((screenshot) => screenshot.id === "page_1_desktop_above_fold")?.groups).toContain("issue:issue_1");
+    expect(manifest.screenshots.find((screenshot) => screenshot.id === "page_1_mobile_nav_state")).toMatchObject({
+      displayRole: "state_capture",
+      state: "mobile_nav_open",
+      interactionState: { category: "navigation", label: "Menu" }
+    });
     expect(reviewPackManifest.gallery.path).toBe("agent-review-pack/gallery/index.html");
     expect(reviewPackManifest.evidenceBrief.path).toBe("evidence-brief.json");
     expect(reviewPackManifest.evidenceBrief.absolutePath).toBe(path.join(auditRoot, "report", "evidence-brief.json"));
     expect(packEvidenceBrief.generatedAt).toBe(reportEvidenceBrief.generatedAt);
-    expect(reviewPackManifest.recommendedReviewOrder.map((step) => step.step)).toEqual(["first_viewports", "issue_evidence", "page_flows", "raw_screenshots"]);
+    expect(reviewPackManifest.recommendedReviewOrder.map((step) => step.step)).toEqual(["first_viewports", "issue_evidence", "page_flows", "interaction_states", "raw_screenshots"]);
+    expect(reviewPackManifest.recommendedReviewOrder.find((step) => step.step === "interaction_states")?.paths).toContain("screenshots/states/page_1_mobile_nav_open.png");
     expect(reviewPackManifest.sheets.some((sheet) => sheet.type === "page_flow" && sheet.path === "contact-sheets/pages/page_1-flow.png")).toBe(true);
     expect(reviewPackManifest.sheets.some((sheet) => sheet.type === "issue_evidence" && sheet.path === "contact-sheets/issues/issue_1.png")).toBe(true);
     expect(galleryHtml).toContain("data-filter=\"page\"");
@@ -234,7 +240,16 @@ function sampleReport(): AuditReport {
       viewports: [{ name: "desktop", width: 1440, height: 1000, deviceScaleFactor: 1, isMobile: false }],
       capture: { settleScroll: true, reducedMotion: true, waitForImages: true, maxScrollPasses: 2, scrollStepRatio: 0.75, stepDelayMs: 180, settleTimeoutMs: 4000 },
       crawl: { sameDomainOnly: true, includeSubdomains: false, maxDepth: 1, excludePatterns: [] },
-      interactions: { level: 1, allowCheckoutStart: false, allowFormErrorChecks: false, allowPurchase: false, allowLogin: false },
+      interactions: {
+        level: 1,
+        captureStates: true,
+        maxStateCapturesPerPage: 8,
+        maxStateCapturesPerViewport: 5,
+        allowCheckoutStart: false,
+        allowFormErrorChecks: false,
+        allowPurchase: false,
+        allowLogin: false
+      },
       outputs: { markdown: true, html: true, pdf: false, json: true, screenshotAnnotations: "basic" },
       modelRouter: { qualityProfile: "balanced", allowOpenRouter: false, allowOpenAI: false, allowAnthropic: false, allowGemini: false },
       scoring: { strictness: "enterprise", tone: "client_ready" }
@@ -302,6 +317,24 @@ function samplePage(): PageEvidence {
         height: 844
       }
     },
+    interactionStates: [
+      {
+        id: "state_mobile_nav",
+        viewport: "mobile",
+        category: "navigation",
+        label: "Menu",
+        triggerSelector: "[aria-controls='site-menu']",
+        triggerRole: "button",
+        triggerText: "Menu",
+        action: "click",
+        state: "mobile_nav_open",
+        screenshotId: "page_1_mobile_nav_state",
+        beforeUrl: "https://example.com/",
+        afterUrl: "https://example.com/",
+        urlChanged: false,
+        notes: []
+      }
+    ],
     text: {
       headings: [{ text: "Example", tag: "h1", visible: true }],
       buttons: [],

@@ -63,6 +63,9 @@ program
   .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
   .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
   .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+  .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
+  .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
+  .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
   .option("--config <path>", "Optional YAML or JSON config file")
   .action(async (url, options) => {
     await runFromOptions(url, options);
@@ -83,6 +86,9 @@ program
   .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
   .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
   .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+  .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
+  .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
+  .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "quick_scan" });
   });
@@ -100,6 +106,9 @@ program
   .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
   .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
   .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+  .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
+  .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
+  .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
   .action(async (url, options) => {
     await runFromOptions(url, { ...options, mode: "full_audit" });
   });
@@ -681,6 +690,9 @@ function configureAgentRunCommand(command: Command): void {
     .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
     .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
     .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+    .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
+    .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
+    .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
     .option("--no-pdf", "Disable PDF output")
     .option("--no-html", "Disable full HTML report output")
     .option("--no-markdown", "Disable full Markdown report output")
@@ -955,6 +967,21 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
         typeof options.captureSettleTimeout === "number"
           ? Number(options.captureSettleTimeout)
           : fileInput.capture?.settleTimeoutMs
+    },
+    interactions: {
+      ...(fileInput.interactions ?? {}),
+      captureStates:
+        typeof options.interactionStateCapture === "boolean"
+          ? options.interactionStateCapture
+          : fileInput.interactions?.captureStates,
+      maxStateCapturesPerPage:
+        typeof options.maxInteractionStates === "number"
+          ? Number(options.maxInteractionStates)
+          : fileInput.interactions?.maxStateCapturesPerPage,
+      maxStateCapturesPerViewport:
+        typeof options.maxInteractionStatesPerViewport === "number"
+          ? Number(options.maxInteractionStatesPerViewport)
+          : fileInput.interactions?.maxStateCapturesPerViewport
     }
   };
 
@@ -1006,6 +1033,7 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
   const value = parsed as Record<string, unknown>;
   const audit = value.audit && typeof value.audit === "object" ? (value.audit as Record<string, unknown>) : value;
   const capture = audit.capture && typeof audit.capture === "object" ? (audit.capture as Record<string, unknown>) : {};
+  const interactions = audit.interactions && typeof audit.interactions === "object" ? (audit.interactions as Record<string, unknown>) : {};
   return {
     mode: normalizeMode(String(audit.mode ?? "quick_scan")),
     url: typeof audit.url === "string" ? audit.url : undefined,
@@ -1029,6 +1057,18 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
       scrollStepRatio: numberOption(capture.scrollStepRatio) ?? numberOption(capture.scroll_step_ratio),
       stepDelayMs: numberOption(capture.stepDelayMs) ?? numberOption(capture.step_delay_ms),
       settleTimeoutMs: numberOption(capture.settleTimeoutMs) ?? numberOption(capture.settle_timeout_ms)
+    },
+    interactions: {
+      level: numberOption(interactions.level),
+      captureStates: booleanOption(interactions.captureStates) ?? booleanOption(interactions.capture_states),
+      maxStateCapturesPerPage:
+        numberOption(interactions.maxStateCapturesPerPage) ?? numberOption(interactions.max_state_captures_per_page),
+      maxStateCapturesPerViewport:
+        numberOption(interactions.maxStateCapturesPerViewport) ?? numberOption(interactions.max_state_captures_per_viewport),
+      allowCheckoutStart: booleanOption(interactions.allowCheckoutStart) ?? booleanOption(interactions.allow_checkout_start),
+      allowFormErrorChecks: booleanOption(interactions.allowFormErrorChecks) ?? booleanOption(interactions.allow_form_error_checks),
+      allowPurchase: booleanOption(interactions.allowPurchase) ?? booleanOption(interactions.allow_purchase),
+      allowLogin: booleanOption(interactions.allowLogin) ?? booleanOption(interactions.allow_login)
     }
   };
 }

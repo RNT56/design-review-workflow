@@ -92,6 +92,7 @@ function pageFixture(overrides: Partial<PageEvidence> = {}): PageEvidence {
       [screenshot.id]: screenshot,
       [mobileScreenshot.id]: mobileScreenshot
     },
+    interactionStates: [],
     text: {
       headings: [{ text: "Products", tag: "h1", visible: true }],
       buttons: [{ text: "Learn more", tag: "button", visible: true }],

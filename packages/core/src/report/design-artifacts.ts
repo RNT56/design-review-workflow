@@ -134,8 +134,34 @@ function renderEvidenceJsonl(report: AuditReport): string {
       pageType: page.pageType,
       title: page.title,
       screenshots: Object.values(page.screenshots).map((screenshot) => screenshot.path),
+      interactionStates: page.interactionStates.map((state) => ({
+        id: state.id,
+        viewport: state.viewport,
+        category: state.category,
+        label: state.label,
+        state: state.state,
+        screenshotId: state.screenshotId
+      })),
       extractedEvidencePath: `extracted/pages/${page.pageId}.json`
     });
+    for (const state of page.interactionStates) {
+      rows.push({
+        type: "interaction_state",
+        pageId: page.pageId,
+        url: page.url,
+        id: state.id,
+        viewport: state.viewport,
+        category: state.category,
+        label: state.label,
+        state: state.state,
+        screenshotId: state.screenshotId,
+        screenshotPath: page.screenshots[state.screenshotId]?.path,
+        triggerSelector: state.triggerSelector,
+        triggerRole: state.triggerRole,
+        urlChanged: state.urlChanged,
+        notes: state.notes
+      });
+    }
   }
   for (const finding of report.findings) {
     rows.push({

@@ -47,7 +47,7 @@ type ReviewPackManifest = {
     absolutePath: string;
   };
   recommendedReviewOrder: Array<{
-    step: "first_viewports" | "issue_evidence" | "page_flows" | "raw_screenshots";
+    step: "first_viewports" | "issue_evidence" | "page_flows" | "interaction_states" | "raw_screenshots";
     title: string;
     paths: string[];
   }>;
@@ -58,6 +58,7 @@ type ReviewPackManifest = {
     firstViewportSheets: number;
     pageFlowSheets: number;
     issueSheets: number;
+    interactionStateScreenshots: number;
   };
 };
 
@@ -340,7 +341,7 @@ This pack is for the repo-capable multimodal agent running the workflow. It inte
 
 1. Open \`review-pack-manifest.json\`.
 2. Read \`evidence-brief.json\` for structured copy, CTA, proof, mobile, and visual-system signals.
-3. Follow the recommended order: first viewports, issue evidence, page flows, then raw screenshots.
+3. Follow the recommended order: first viewports, issue evidence, page flows, interaction states, then raw screenshots.
 4. Use \`gallery/index.html\` for filtering by page, viewport, issue, screenshot kind, and source.
 5. Inspect the optimized PNG sheets under \`../contact-sheets/\`.
 6. Use \`agent-review-template.json\` as the starting shape.
@@ -360,6 +361,8 @@ node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}
 ## Review Rules
 
 - Reference only screenshot IDs or screenshot paths listed in \`screenshot-manifest.json\`.
+- Inspect state captures for menus, dialogs, popovers, accordions, tabs, drawers, and filters before judging hidden navigation or interaction design.
+- If you use a live browser for additional review, only open safe read-only UI states. Do not submit forms, authenticate, purchase, mutate accounts, save, delete, upload, download, or trigger external handoffs.
 - Do not leave TODO/template text anywhere in the review artifact.
 - Do not claim analytics, heatmaps, users, revenue, competitor performance, or brand rules unless they are explicitly supplied as evidence.
 - Prefer grouped, root-cause issues over repeated page-level symptoms.
@@ -393,6 +396,7 @@ async function writePagePrompts(report: AuditReport, manifest: ScreenshotManifes
         "- First viewport: does the page immediately communicate what it is, who it is for, and what to do next?",
         "- Hierarchy: do typography, spacing, contrast, and layout make the important content dominant?",
         "- Composition: does the page feel intentionally arranged, balanced, and scannable?",
+        "- Navigation and hidden states: do captured menus, drawers, dialogs, popovers, accordions, tabs, and filters remain clear and visually coherent?",
         "- CTA clarity: is the primary next action visually and verbally clear?",
         "- Messaging and copy: is the headline, support copy, tone, proof, and CTA wording specific, audience-fit, and persuasive?",
         "- Trust/proof: are credibility signals present, specific, and close to decision points?",
@@ -810,6 +814,11 @@ function buildReviewPackManifest(
       { step: "first_viewports", title: "Review first viewports before detailed flows.", paths: byType("first_viewports") },
       { step: "issue_evidence", title: "Review grouped issue evidence sheets.", paths: byType("issue_evidence") },
       { step: "page_flows", title: "Review full page flows split into readable chunks.", paths: byType("page_flow") },
+      {
+        step: "interaction_states",
+        title: "Review captured interaction states such as menus, dialogs, popovers, accordions, tabs, drawers, and filters.",
+        paths: manifest.screenshots.filter((screenshot) => screenshot.displayRole === "state_capture").map((screenshot) => screenshot.path)
+      },
       { step: "raw_screenshots", title: "Use raw screenshots for any disputed evidence.", paths: manifest.screenshots.map((screenshot) => screenshot.path) }
     ],
     sheets,
@@ -818,7 +827,8 @@ function buildReviewPackManifest(
       screenshots: manifest.screenshots.length,
       firstViewportSheets: sheets.filter((sheet) => sheet.type === "first_viewports" || sheet.type === "page_first_viewports").length,
       pageFlowSheets: sheets.filter((sheet) => sheet.type === "page_flow").length,
-      issueSheets: sheets.filter((sheet) => sheet.type === "issue_evidence").length
+      issueSheets: sheets.filter((sheet) => sheet.type === "issue_evidence").length,
+      interactionStateScreenshots: manifest.screenshots.filter((screenshot) => screenshot.displayRole === "state_capture").length
     }
   };
 }

@@ -9,6 +9,8 @@ import {
   AuditReport,
   AuditReportSchema,
   FindingSchema,
+  InteractionSettingsSchema,
+  InteractionStateEvidenceSchema,
   PageEvidenceSchema,
   ProgressEvent,
   ScorecardSchema
@@ -131,6 +133,8 @@ export const schemas = {
   AuditConfigSchema,
   AuditReportSchema,
   FindingSchema,
+  InteractionSettingsSchema,
+  InteractionStateEvidenceSchema,
   PageEvidenceSchema,
   ScorecardSchema
 };

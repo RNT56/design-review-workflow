@@ -18,6 +18,12 @@ export type ScreenshotManifestEntry = {
   pixelHeight: number;
   aspectRatio: number;
   displayRole: "first_viewport" | "full_page_flow" | "state_capture" | "annotated" | "raw";
+  state?: string;
+  interactionState?: {
+    id: string;
+    category: string;
+    label: string;
+  };
   pageTitle?: string;
   pageType: string;
   groups: string[];
@@ -53,25 +59,36 @@ export function buildScreenshotManifest(report: AuditReport, paths: AuditPaths):
     auditId: report.auditId,
     generatedAt: new Date().toISOString(),
     screenshots: report.pages.flatMap((page) =>
-      Object.values(page.screenshots).map((screenshot) => ({
-        id: screenshot.id,
-        pageId: page.pageId,
-        url: page.url,
-        viewport: screenshot.viewport,
-        kind: screenshot.kind,
-        path: screenshot.path,
-        width: screenshot.width,
-        height: screenshot.height,
-        pixelWidth: screenshot.width,
-        pixelHeight: screenshot.height,
-        aspectRatio: screenshot.width / Math.max(1, screenshot.height),
-        displayRole: displayRoleFor(screenshot.kind),
-        pageTitle: page.title,
-        pageType: page.pageType,
-        groups: groupsFor(page.pageId, screenshot.viewport, screenshot.kind),
-        sheetRefs: [],
-        absolutePath: path.join(paths.auditRoot, screenshot.path)
-      }))
+      Object.values(page.screenshots).map((screenshot) => {
+        const interactionState = page.interactionStates.find((state) => state.screenshotId === screenshot.id);
+        return {
+          id: screenshot.id,
+          pageId: page.pageId,
+          url: page.url,
+          viewport: screenshot.viewport,
+          kind: screenshot.kind,
+          state: screenshot.state,
+          interactionState: interactionState
+            ? {
+                id: interactionState.id,
+                category: interactionState.category,
+                label: interactionState.label
+              }
+            : undefined,
+          path: screenshot.path,
+          width: screenshot.width,
+          height: screenshot.height,
+          pixelWidth: screenshot.width,
+          pixelHeight: screenshot.height,
+          aspectRatio: screenshot.width / Math.max(1, screenshot.height),
+          displayRole: displayRoleFor(screenshot.kind),
+          pageTitle: page.title,
+          pageType: page.pageType,
+          groups: groupsFor(page.pageId, screenshot.viewport, screenshot.kind, screenshot.state, interactionState?.category),
+          sheetRefs: [],
+          absolutePath: path.join(paths.auditRoot, screenshot.path)
+        };
+      })
     ),
     pages: report.pages.map((page) => ({
       pageId: page.pageId,
@@ -128,6 +145,13 @@ function displayRoleFor(kind: string): ScreenshotManifestEntry["displayRole"] {
   return "raw";
 }
 
-function groupsFor(pageId: string, viewport: string, kind: string): string[] {
-  return [`page:${pageId}`, `viewport:${viewport}`, `kind:${kind}`, displayRoleFor(kind)];
+function groupsFor(pageId: string, viewport: string, kind: string, state?: string, interactionCategory?: string): string[] {
+  return [
+    `page:${pageId}`,
+    `viewport:${viewport}`,
+    `kind:${kind}`,
+    displayRoleFor(kind),
+    ...(state ? [`state:${state}`] : []),
+    ...(interactionCategory ? [`interaction:${interactionCategory}`] : [])
+  ];
 }

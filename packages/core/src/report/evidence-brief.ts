@@ -33,6 +33,16 @@ export type EvidenceBrief = {
     topHeadings: string[];
     navigationLabels: string[];
     screenshotIds: string[];
+    interactionStates: Array<{
+      id: string;
+      viewport: string;
+      category: string;
+      label: string;
+      state: string;
+      screenshotId: string;
+      urlChanged: boolean;
+      notes: string[];
+    }>;
   }>;
   deterministicFindings: Array<{
     findingId: string;
@@ -85,7 +95,17 @@ export function buildEvidenceBrief(report: AuditReport): EvidenceBrief {
       visualSystem: page.reviewSignals?.visualSystem,
       topHeadings: page.text.headings.slice(0, 8).map((heading) => heading.text),
       navigationLabels: page.structure.navigation.slice(0, 12).map((item) => item.text),
-      screenshotIds: Object.keys(page.screenshots)
+      screenshotIds: Object.keys(page.screenshots),
+      interactionStates: page.interactionStates.map((state) => ({
+        id: state.id,
+        viewport: state.viewport,
+        category: state.category,
+        label: state.label,
+        state: state.state,
+        screenshotId: state.screenshotId,
+        urlChanged: state.urlChanged,
+        notes: state.notes
+      }))
     })),
     deterministicFindings: report.findings.slice(0, 20).map((finding) => ({
       findingId: finding.findingId,
@@ -102,6 +122,7 @@ export function buildEvidenceBrief(report: AuditReport): EvidenceBrief {
     reviewGuidance: [
       "Use this brief as structured context, not as a substitute for screenshot inspection.",
       "Business-grade judgment must be based on captured screenshots and evidence references.",
+      "Inspect interaction state screenshots for captured menus, dialogs, popovers, accordions, tabs, and other safe UI states before judging navigation or hidden content.",
       "Do not claim analytics, user behavior, revenue, competitor performance, or private brand rules unless supplied as explicit evidence."
     ]
   };

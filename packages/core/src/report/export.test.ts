@@ -148,6 +148,7 @@ function sampleReport(config: AuditConfig): AuditReport {
         businessImportance: "high",
         primaryUserGoal: "Understand the offer",
         screenshots: { [screenshot.id]: screenshot },
+        interactionStates: [],
         text: {
           headings: [{ text: "Example Domain", tag: "h1", visible: true }],
           buttons: [],

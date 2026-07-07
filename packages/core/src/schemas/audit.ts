@@ -101,6 +101,18 @@ export const CaptureSettingsSchema = z
   .default({});
 export type CaptureSettings = z.infer<typeof CaptureSettingsSchema>;
 
+export const InteractionSettingsSchema = z.object({
+  level: z.number().int().min(0).max(3).default(2),
+  captureStates: z.boolean().default(true),
+  maxStateCapturesPerPage: z.number().int().min(0).max(24).default(8),
+  maxStateCapturesPerViewport: z.number().int().min(0).max(12).default(5),
+  allowCheckoutStart: z.boolean().default(true),
+  allowFormErrorChecks: z.boolean().default(false),
+  allowPurchase: z.boolean().default(false),
+  allowLogin: z.boolean().default(false)
+});
+export type InteractionSettings = z.infer<typeof InteractionSettingsSchema>;
+
 export const AuditConfigSchema = z.object({
   auditId: z.string().min(1),
   mode: AuditModeSchema,
@@ -125,13 +137,7 @@ export const AuditConfigSchema = z.object({
     maxDepth: z.number().int().min(0).max(5).default(2),
     excludePatterns: z.array(z.string()).default([])
   }),
-  interactions: z.object({
-    level: z.number().int().min(0).max(3).default(2),
-    allowCheckoutStart: z.boolean().default(true),
-    allowFormErrorChecks: z.boolean().default(false),
-    allowPurchase: z.boolean().default(false),
-    allowLogin: z.boolean().default(false)
-  }),
+  interactions: InteractionSettingsSchema,
   outputs: z.object({
     markdown: z.boolean().default(true),
     html: z.boolean().default(true),
@@ -172,6 +178,38 @@ export const ScreenshotRefSchema = z.object({
   state: z.string().optional()
 });
 export type ScreenshotRef = z.infer<typeof ScreenshotRefSchema>;
+
+export const InteractionStateCategorySchema = z.enum([
+  "navigation",
+  "menu",
+  "dialog",
+  "popover",
+  "accordion",
+  "tab",
+  "carousel",
+  "filter",
+  "disclosure",
+  "other"
+]);
+export type InteractionStateCategory = z.infer<typeof InteractionStateCategorySchema>;
+
+export const InteractionStateEvidenceSchema = z.object({
+  id: z.string(),
+  viewport: ViewportNameSchema,
+  category: InteractionStateCategorySchema,
+  label: z.string(),
+  triggerSelector: z.string().optional(),
+  triggerRole: z.string().optional(),
+  triggerText: z.string().optional(),
+  action: z.enum(["click"]).default("click"),
+  state: z.string(),
+  screenshotId: z.string(),
+  beforeUrl: z.string().url(),
+  afterUrl: z.string().url(),
+  urlChanged: z.boolean().default(false),
+  notes: z.array(z.string()).default([])
+});
+export type InteractionStateEvidence = z.infer<typeof InteractionStateEvidenceSchema>;
 
 export const SectionEvidenceSchema = z.object({
   id: z.string(),
@@ -350,6 +388,7 @@ export const PageEvidenceSchema = z.object({
   businessImportance: z.enum(["high", "medium", "low"]),
   primaryUserGoal: z.string().optional(),
   screenshots: z.record(z.string(), ScreenshotRefSchema),
+  interactionStates: z.array(InteractionStateEvidenceSchema).default([]),
   text: z.object({
     headings: z.array(TextNodeSchema),
     buttons: z.array(TextNodeSchema),
