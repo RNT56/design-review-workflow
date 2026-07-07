@@ -58,6 +58,19 @@ Required outputs for the MVP:
 - Local export manifest and checksums when an export profile is generated
 - Local export ZIPs or directories under `exports/` when requested
 
+## Agent Chat Contract
+
+When a user asks an agent to run this workflow, the agent must execute quietly and return a final closeout only.
+
+- Do not post step-by-step progress narration, routine command logs, raw JSON dumps, or partial findings in chat.
+- Do not stop at a plan when the URL is sufficient to run the workflow.
+- Do not ask for confirmation unless required input is missing, credentials are needed, a safety boundary would be crossed, or a command is blocked.
+- Use `bash scripts/agent-run.sh <public-url>` or `npm run agent -- <public-url>` for the default quiet JSON closeout path, then summarize the generated deliverables from the closeout and report files.
+- Store intermediate state, screenshots, evidence, review-pack assets, validation output, and logs in the audit folder, not in chat.
+- If the user explicitly asks for status while the workflow is running, reply with one short status sentence and continue.
+- If blocked, report the blocker, the exact last successful artifact or command, and the smallest needed user decision.
+- Final chat output must include the audit root, static dashboard, workflow manifest, handoff JSON, validation and gate statuses, review-pack paths when applicable, score/findings count, top evidence-backed findings, and any limitations or failed checks.
+
 ## Current Implementation Boundary
 
 The implemented MVP is deterministic and local-first:
@@ -86,6 +99,7 @@ The implemented MVP is deterministic and local-first:
 - Local monitor runs from YAML/JSON configuration
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
 - Primary `run` command for audit, validation, and agent handoff
+- Quiet agent execution by default for `scripts/agent-run.sh` and `npm run agent`, which emit machine-readable JSON closeout for agents to summarize once at the end
 - `--audit-root`, `--audit-name`, and explicit `--output` storage controls
 - Local export profiles via `export --profile review|full|repo-import`
 - Strict business-grade gate with `automated_scan`, `agent_review_pending`, and `business_grade` statuses
@@ -182,6 +196,7 @@ bash scripts/agent-run.sh <public-url>
 Primary built CLI command:
 
 ```bash
+node apps/cli/dist/index.js run <public-url> --business-grade --format json  # quiet agent closeout path
 node apps/cli/dist/index.js run <public-url> --business-grade
 node apps/cli/dist/index.js run <public-url> --business-grade --repo <target-website-source-repo>
 node apps/cli/dist/index.js run <public-url> --business-grade --audit-root /path/to/design-review-workflow/audit-reports

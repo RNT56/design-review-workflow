@@ -866,7 +866,7 @@ function repositoryWorkflowContract() {
     runbook: "AGENT-RUNBOOK.md",
     commands: {
       oneCommandRun: "bash scripts/agent-run.sh <url>",
-      primaryRun: "node apps/cli/dist/index.js run <url> [--repo <target-source-repo>] [--audit-root ./audit-reports]",
+      primaryRun: "node apps/cli/dist/index.js run <url> --business-grade --format json [--repo <target-source-repo>] [--audit-root ./audit-reports]",
       npmRun: "npm run agent -- <url> --repo <target-source-repo> --audit-root ./audit-reports",
       lint: "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       plan: "node apps/cli/dist/index.js plan build --report <audit-dir>",
@@ -917,6 +917,16 @@ function repositoryWorkflowContract() {
       "checksums.sha256 after export",
       "exports/*.zip after export"
     ],
+    agentCommunication: {
+      mode: "quiet_execution_final_closeout",
+      noIntermediateChatter: true,
+      rules: [
+        "Use the JSON closeout path for agent-run work.",
+        "Do not send routine progress narration, command logs, raw JSON dumps, or partial findings in chat.",
+        "Send interim chat only when blocked, when user approval is required, or when the user explicitly asks for status.",
+        "Final chat should summarize deliverable paths, gate statuses, score/findings count, top evidence-backed findings, and limitations."
+      ]
+    },
     safetyRules: [
       "No login, admin, account, payment, or checkout completion areas.",
       "No purchases or personal data submission.",

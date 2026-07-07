@@ -9,7 +9,7 @@ Clone or open this workflow repo, then run a design review for:
 
 <URL>
 
-Use the repo instructions. Run the primary business-grade agentic workflow. Do not enter login, checkout completion, account, admin, or payment areas. Produce the final audit bundle path, quality-gate status, business-grade gate status, and top evidence-backed findings.
+Use the repo instructions. Run the primary business-grade agentic workflow. Do not enter login, checkout completion, account, admin, or payment areas. Execute quietly: do not narrate progress, paste logs, or send partial findings in chat. Produce the final audit bundle path, quality-gate status, business-grade gate status, and top evidence-backed findings.
 ```
 
 For source-backed implementation planning:
@@ -23,7 +23,7 @@ Also use this target website source repo for read-only source candidates:
 
 <TARGET_REPO_PATH>
 
-Generate the audit bundle, source-candidate map, patch plan, quality gate, benchmark, and closeout paths. Do not modify the target repo unless separately asked to implement changes.
+Generate the audit bundle, source-candidate map, patch plan, quality gate, benchmark, and closeout paths. Execute quietly: do not narrate progress, paste logs, or send partial findings in chat. Do not modify the target repo unless separately asked to implement changes.
 ```
 
 For business-grade review depth:
@@ -33,8 +33,18 @@ Clone or open this workflow repo, then run a business-grade design review for:
 
 <URL>
 
-Run the business-grade lane. Inspect the generated evidence brief, contact sheets, gallery, and raw screenshots yourself, write a strict AgentVisualReview JSON with design verdict, style/taste, messaging/copy, page reviews, and redesign actions, validate it, import it, run both report lint and business-grade lint, then report the final bundle path and business-grade gate status. Do not claim business-grade quality until the visual review import passes.
+Run the business-grade lane. Inspect the generated evidence brief, contact sheets, gallery, and raw screenshots yourself, write a strict AgentVisualReview JSON with design verdict, style/taste, messaging/copy, page reviews, and redesign actions, validate it, import it, run both report lint and business-grade lint, then report the final bundle path and business-grade gate status. Execute quietly: do not narrate progress, paste logs, or send partial findings in chat. Do not claim business-grade quality until the visual review import passes.
 ```
+
+## Chat Discipline
+
+Workflow-running agents must be quiet by default:
+
+- Run the workflow end to end before responding with results.
+- Do not send step-by-step narration, command logs, raw JSON dumps, or partial findings to the user.
+- Use the JSON closeout from `bash scripts/agent-run.sh <url>` or `npm run agent -- <url>` as the source for the final response.
+- Send an interim chat message only if blocked, if a safety boundary requires user approval, or if the user explicitly asks for status.
+- Final chat output should be concise and include paths, gates, score/findings count, top evidence-backed findings, and limitations.
 
 ## One Command
 
@@ -56,7 +66,7 @@ npm run agent -- https://example.com
 Low-level automated-only scan for smoke tests and CI:
 
 ```bash
-node apps/cli/dist/index.js run https://example.com
+node apps/cli/dist/index.js run https://example.com --format json
 ```
 
 With read-only source mapping:
@@ -70,13 +80,14 @@ When an agent launches the workflow while its shell is inside another website re
 ```bash
 node /path/to/design-review-workflow/apps/cli/dist/index.js run https://example.com \
   --business-grade \
+  --format json \
   --audit-root /path/to/design-review-workflow/audit-reports
 ```
 
 Business-grade lane:
 
 ```bash
-node apps/cli/dist/index.js run https://example.com --business-grade
+node apps/cli/dist/index.js run https://example.com --business-grade --format json
 # Agent follows report/agent-review-pack/review-pack-manifest.json,
 # inspects the gallery and optimized PNG sheets, then writes agent-runs/<agent>/visual-review.json.
 node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file agent-runs/<agent>/visual-review.json
@@ -225,7 +236,8 @@ Read `report/evidence-brief.json` before the screenshot pass for structured copy
 1. First viewports: `report/contact-sheets/first-viewports.png` and per-page `*-first-viewports.png` sheets.
 2. Grouped issue evidence: `report/contact-sheets/issues/*.png`.
 3. Full page flows: `report/contact-sheets/pages/*-flow.png`.
-4. Raw screenshots listed in `report/screenshot-manifest.json`.
+4. Captured interaction states listed in `report/screenshot-manifest.json` with display role `state_capture`.
+5. Raw screenshots listed in `report/screenshot-manifest.json`.
 
 `report/contact-sheets/all-pages.png` is retained as an overview/index for older agents. It is not the primary inspection surface.
 

@@ -55,6 +55,7 @@ Every successful audit writes:
 ```bash
 bash scripts/agent-run.sh <url>
 npm run agent -- <url>
+node apps/cli/dist/index.js run <url> --business-grade --format json
 node apps/cli/dist/index.js run <url> --business-grade
 node apps/cli/dist/index.js run <url> --business-grade --repo <target-website-source-repo>
 node apps/cli/dist/index.js run <url> --business-grade --audit-root /path/to/design-review-workflow/audit-reports
@@ -78,6 +79,8 @@ node apps/cli/dist/index.js export --report <audit-dir> --profile full
 node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import
 node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
 ```
+
+For agent handoff, prefer `bash scripts/agent-run.sh <url>`, `npm run agent -- <url>`, or `run --business-grade --format json`. Agents should keep routine progress, command logs, and partial findings out of chat, then summarize the final closeout and generated deliverable paths once the workflow has finished.
 
 ## Stable Bundle Files
 
