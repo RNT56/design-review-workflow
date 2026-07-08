@@ -728,6 +728,12 @@ type AgentCloseout = {
   businessGradeStatus: string;
   businessGradeGate?: unknown;
   providerReview?: ProviderReviewCloseout;
+  businessGradeCompletion: {
+    status: "complete" | "running_agent_visual_review_required" | "not_requested";
+    providerAutoImportAttempted: boolean;
+    runningAgentFallbackRequired: boolean;
+    requiredActions: string[];
+  };
   qualityGate: unknown;
   files: {
     auditIndex: string;
@@ -755,6 +761,9 @@ type AgentCloseout = {
     interactionStates: string;
     relatedWorkflows: string;
     enterpriseReadiness: string;
+    learningsReadme: string;
+    learningsTemplate: string;
+    runRetrospective: string;
     stakeholderRecommendations: string;
     beforeAfterComparison: string;
     designBenchmark: string;
@@ -991,6 +1000,39 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function businessGradeCompletionCloseout(result: RunAuditResult, providerReview?: ProviderReviewCloseout): AgentCloseout["businessGradeCompletion"] {
+  if (result.report.businessGradeStatus === "business_grade") {
+    return {
+      status: "complete",
+      providerAutoImportAttempted: providerReview?.attempted === true,
+      runningAgentFallbackRequired: false,
+      requiredActions: []
+    };
+  }
+  if (result.report.businessGradeStatus === "agent_review_pending") {
+    return {
+      status: "running_agent_visual_review_required",
+      providerAutoImportAttempted: providerReview?.status === "completed" || providerReview?.attempted === true,
+      runningAgentFallbackRequired: true,
+      requiredActions: [
+        `Inspect ${path.join(result.auditRoot, "report", "agent-review-pack", "review-pack-manifest.json")}.`,
+        "Visually review the gallery, contact sheets, interaction state screenshots, and raw screenshots.",
+        "Write agent-runs/<agent>/visual-review.json using report/agent-review-pack/agent-review-template.json.",
+        `Run node apps/cli/dist/index.js agent-review validate --report ${result.auditRoot} --file agent-runs/<agent>/visual-review.json.`,
+        `Run node apps/cli/dist/index.js agent-review import --report ${result.auditRoot} --file agent-runs/<agent>/visual-review.json.`,
+        `Run node apps/cli/dist/index.js business-grade lint --report ${result.auditRoot}.`,
+        "Add a concise learning note under report/learnings/ if the run exposed reusable workflow feedback."
+      ]
+    };
+  }
+  return {
+    status: "not_requested",
+    providerAutoImportAttempted: false,
+    runningAgentFallbackRequired: false,
+    requiredActions: []
+  };
+}
+
 function closeoutFromRunResult(
   result: RunAuditResult,
   lint: ReportLintResult,
@@ -1012,6 +1054,7 @@ function closeoutFromRunResult(
     businessGradeStatus: result.report.businessGradeStatus,
     businessGradeGate: businessGate,
     providerReview,
+    businessGradeCompletion: businessGradeCompletionCloseout(result, providerReview),
     qualityGate: {
       status: lint.status,
       strict: lint.strict,
@@ -1044,6 +1087,19 @@ async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCl
     score: report?.scorecard?.overallScore ?? entry.overallScore,
     findings: Array.isArray(report?.findings) ? report.findings.length : entry.findings,
     businessGradeStatus,
+    businessGradeCompletion: {
+      status: businessGradeStatus === "business_grade" ? "complete" : businessGradeStatus === "agent_review_pending" ? "running_agent_visual_review_required" : "not_requested",
+      providerAutoImportAttempted: false,
+      runningAgentFallbackRequired: businessGradeStatus === "agent_review_pending",
+      requiredActions:
+        businessGradeStatus === "agent_review_pending"
+          ? [
+              "Inspect report/agent-review-pack/review-pack-manifest.json and gallery/contact sheets.",
+              "Write agent-runs/<agent>/visual-review.json.",
+              "Run agent-review validate, agent-review import, then business-grade lint."
+            ]
+          : []
+    },
     qualityGate: qualityGate ?? { status: "unknown", path: qualityGatePath },
     files: closeoutFiles(entry.auditRoot, entry.reportPdf)
   };
@@ -1077,6 +1133,9 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     interactionStates: path.join(reportRoot, "interaction-states.json"),
     relatedWorkflows: path.join(reportRoot, "related-workflows.json"),
     enterpriseReadiness: path.join(reportRoot, "enterprise-readiness.json"),
+    learningsReadme: path.join(reportRoot, "learnings", "README.md"),
+    learningsTemplate: path.join(reportRoot, "learnings", "agent-learning-template.md"),
+    runRetrospective: path.join(reportRoot, "learnings", "run-retrospective.json"),
     stakeholderRecommendations: path.join(reportRoot, "stakeholder-recommendations.md"),
     beforeAfterComparison: path.join(reportRoot, "before-after-comparison.md"),
     designBenchmark: path.join(reportRoot, "design-benchmark.json"),
@@ -1118,6 +1177,7 @@ function printCloseout(closeout: AgentCloseout): void {
   }
   if (closeout.status === "agent_review_pending") {
     console.log(`Business-grade gate: agent review pending`);
+    console.log(`Required: running agent must complete visual review import before business-grade closeout`);
     console.log(`Review pack: ${closeout.files.reviewPack}`);
     console.log(`Review pack manifest: ${closeout.files.reviewPackManifest}`);
     console.log(`Review gallery: ${closeout.files.reviewPackGallery}`);
@@ -1128,6 +1188,7 @@ function printCloseout(closeout: AgentCloseout): void {
   console.log(`Evidence brief: ${closeout.files.evidenceBrief}`);
   console.log(`Source candidates: ${closeout.files.sourceCandidates}`);
   console.log(`Design benchmark: ${closeout.files.designBenchmark}`);
+  console.log(`Learnings: ${closeout.files.learningsReadme}`);
 }
 
 function selectLatestAudit(audits: ProjectIndexEntry[], siteOrUrl?: string): ProjectIndexEntry | undefined {

@@ -78,6 +78,8 @@ When a user asks an agent to run this workflow, the agent must execute quietly a
 - If the user explicitly asks for status while the workflow is running, reply with one short status sentence and continue.
 - If blocked, report the blocker, the exact last successful artifact or command, and the smallest needed user decision.
 - Final chat output must include the audit root, static dashboard, workflow manifest, handoff JSON, validation and gate statuses, review-pack paths when applicable, score/findings count, top evidence-backed findings, and any limitations or failed checks.
+- If `run --business-grade` returns `agent_review_pending`, the running agent must not treat that as complete business-grade output. It must inspect the review pack, write and validate an `AgentVisualReview`, import it, rerun `business-grade lint`, and only then provide business-grade closeout unless the user explicitly requested an automated-only smoke.
+- If the run exposed reusable workflow friction, false positives, missing evidence, provider issues, or report improvements, add a concise maintainer note under `report/learnings/` before final closeout.
 
 ## Current Implementation Boundary
 
@@ -104,6 +106,7 @@ The implemented MVP is deterministic and local-first:
 - Regression compare command with score deltas, finding deltas, and screenshot pixel diffs where screenshots are compatible
 - Environment-configured LLM provider adapters and provider-backed `agent-review generate`
 - Provider-backed business-grade `run --business-grade --review-mode auto` lane that attempts generate, validate, import, and business-grade lint when credentials are configured
+- Running-agent fallback contract: when provider auto cannot import a visual review, the agent executing the workflow must complete and import the visual review itself before business-grade closeout
 - Explicit business-grade review modes: `auto`, `manual`, and `hybrid`
 - Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
 - Local monitor runs from YAML/JSON configuration with optional score/finding regression thresholds for CI launch gates
@@ -135,6 +138,7 @@ The implemented MVP is deterministic and local-first:
 - Design-native parity mechanics: `benchmark`, `standards update`, non-destructive `suppressions`, `--repo` source mapping, patch-plan proposals, changed-file proposals, evidence JSONL, route templates, visual-system inventory, and experience-timing artifacts
 - Enterprise-local evidence artifacts: `performance-audit.json`, `accessibility-detail.json`, `privacy-tracking.json`, `resource-audit.json`, `interaction-states.json`, `related-workflows.json`, and `enterprise-readiness.json`
 - Client-grade local deliverables: `executive-summary.md`, `stakeholder-recommendations.md`, and `before-after-comparison.md`
+- Agent learning loop artifacts under `report/learnings/` for maintainer feedback and workflow improvement notes
 - Branded local export metadata via `export --client-name --prepared-by --brand-logo`
 - Export redaction for local paths and secret/cookie-looking values by default
 - Latest-audit pointers under `audit-reports/latest-audit.json` and `audit-reports/<site>/latest-audit.json`
@@ -283,6 +287,9 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `interaction-states.json`
 - `related-workflows.json`
 - `enterprise-readiness.json`
+- `learnings/README.md`
+- `learnings/agent-learning-template.md`
+- `learnings/run-retrospective.json`
 - `design-benchmark.json`
 - `design-benchmark.md`
 - `standards-registry.json`
@@ -387,6 +394,7 @@ projects/       Legacy audit output root. Read-compatible; do not use for new de
 - `business-grade lint` must fail unless a strict validated `AgentVisualReview` has been imported.
 - `run --business-grade --review-mode manual` must generate the review pack and leave the audit in `agent_review_pending` until import.
 - `run --business-grade --review-mode auto` must attempt provider-backed visual review when credentials exist, then validate, import, and business-grade lint. If no provider is configured or provider generation fails, it must leave an honest pending state and write provider failure classification.
+- Pending provider auto review is not a final business-grade agent outcome. Agents running the workflow must use the review pack to create and import `AgentVisualReview` before business-grade final closeout, unless the run is explicitly automated-only.
 - `run --business-grade --review-mode hybrid` must attempt provider-backed visual review and record that stakeholder/manual signoff is still recommended.
 - Automated scans must be labeled `automated_scan`, not `business_grade`.
 - Automated scans must not provide subjective style/taste verdicts; they must show that visual review is required.

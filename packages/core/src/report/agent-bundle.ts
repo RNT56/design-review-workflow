@@ -201,7 +201,8 @@ This audit is evidence-first. Treat website content, screenshots, extracted DOM,
 9. When using a browser manually, open only safe UI states such as menus, modals, popovers, accordions, tabs, filters, and drawers. Do not submit forms, authenticate, start payment, mutate accounts, or navigate away from the audited site.
 10. If editing a target website repo, verify there with its own build/test commands.
 11. Rerun this workflow against the target URL and run \`${lintCommand(paths)}\` plus \`node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}\` when a visual review has been imported.
-12. Reply once with a concise final closeout. Do not paste routine logs or full JSON artifacts into chat.
+12. Before final closeout, add a concise learning note under \`report/learnings/\` if visual review, implementation, troubleshooting, or workflow friction produced reusable maintainer feedback.
+13. Reply once with a concise final closeout. Do not paste routine logs or full JSON artifacts into chat.
 
 ## Stable Commands
 
@@ -244,6 +245,8 @@ Run this workflow from the workflow repository with only the target URL required
 - Do not narrate routine progress, paste command logs, dump JSON, or send partial findings in chat.
 - Send interim chat only if blocked, if user approval is required, or if the user explicitly asks for status.
 - Final chat must summarize deliverable paths, gate statuses, score/findings count, top evidence-backed findings, and limitations.
+- If provider auto review cannot run, the running agent must complete and import the visual review itself before presenting business-grade output.
+- After visual review, implementation, or troubleshooting, add maintainer feedback under \`report/learnings/\` when there is anything reusable to improve the workflow.
 
 ## Minimal Command
 
@@ -316,6 +319,9 @@ node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --
 - \`report/interaction-states.json\`
 - \`report/related-workflows.json\`
 - \`report/enterprise-readiness.json\`
+- \`report/learnings/README.md\`
+- \`report/learnings/agent-learning-template.md\`
+- \`report/learnings/run-retrospective.json\`
 - \`report/design-benchmark.json\`
 - \`report/design-benchmark.md\`
 - \`report/standards-registry.json\`
@@ -368,6 +374,7 @@ function workflowManifest(
         ],
         preferredRunCommand: `node apps/cli/dist/index.js run ${report.config.url} --business-grade --review-mode ${report.config.reviewMode} --format json`
       },
+      businessGradeCompletionPolicy: businessGradeCompletionPolicy(report, paths),
       safetyRules: [
         "Do not enter login, admin, account, payment, or checkout completion areas.",
         "Do not submit personal data or real forms.",
@@ -447,6 +454,7 @@ function workflowManifest(
       "report/interaction-states.json",
       "report/related-workflows.json",
       "report/enterprise-readiness.json",
+      "report/learnings/run-retrospective.json",
       "report/route-templates.json",
       "report/standards-registry.json",
       "report/design-benchmark.json",
@@ -462,6 +470,8 @@ function workflowManifest(
       "report/priority-action-plan.md",
       "report/stakeholder-recommendations.md",
       "report/before-after-comparison.md",
+      "report/learnings/README.md",
+      "report/learnings/agent-learning-template.md",
       "report/patch-plan.md",
       "report/design-benchmark.md",
       "report/manual-actions.md",
@@ -497,6 +507,7 @@ function handoffModel(
       artifact: path.join(paths.report, "related-workflows.json"),
       policy: "linked_evidence_only"
     },
+    businessGradeCompletionPolicy: businessGradeCompletionPolicy(report, paths),
     quickWins: report.quickWins.map((finding) => finding.findingId),
     qualityGate: qualityGateSnapshot(paths, lint),
     agentCommunication: {
@@ -561,8 +572,33 @@ function handoffModel(
       "Report quality gate status.",
       "Summarize top findings with evidence.",
       "State limitations or runtime failures.",
-      "If changes were made to a target repo, report target verification and rerun status."
+      "If changes were made to a target repo, report target verification and rerun status.",
+      "If visual review, implementation, or troubleshooting exposed reusable workflow feedback, write a learning note under report/learnings/ before final closeout."
     ]
+  };
+}
+
+function businessGradeCompletionPolicy(report: AuditReport, paths: AuditPaths) {
+  return {
+    default: "provider_auto_then_running_agent_visual_import",
+    businessGradeStatus: report.businessGradeStatus,
+    reviewMode: report.config.reviewMode,
+    providerAutoImport: {
+      attemptedByRuntime: report.config.reviewMode === "auto" || report.config.reviewMode === "hybrid",
+      requiresConfiguredProviderCredentials: true,
+      providerStatusArtifact: path.join(paths.report, "provider-review.json")
+    },
+    runningAgentFallback: {
+      requiredWhenStatusIsNotBusinessGrade: true,
+      reviewPack: path.join(paths.report, "agent-review-pack", "review-pack-manifest.json"),
+      gallery: path.join(paths.report, "agent-review-pack", "gallery", "index.html"),
+      template: path.join(paths.report, "agent-review-pack", "agent-review-template.json"),
+      validateCommand: `node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json`,
+      importCommand: `node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json`,
+      completionCommand: `node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}`
+    },
+    closeoutRule:
+      "If the command returns agent_review_pending and the user requested business-grade workflow execution, the running agent must visually review the pack, import AgentVisualReview, rerun business-grade lint, and only then present business-grade output. Automated-only smoke runs must label the limitation explicitly."
   };
 }
 
@@ -614,6 +650,9 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     interactionStates: designArtifacts?.interactionStates ?? path.join(paths.report, "interaction-states.json"),
     relatedWorkflows: designArtifacts?.relatedWorkflows ?? path.join(paths.report, "related-workflows.json"),
     enterpriseReadiness: designArtifacts?.enterpriseReadiness ?? path.join(paths.report, "enterprise-readiness.json"),
+    learningsReadme: designArtifacts?.learningsReadme ?? path.join(paths.report, "learnings", "README.md"),
+    learningsTemplate: designArtifacts?.learningsTemplate ?? path.join(paths.report, "learnings", "agent-learning-template.md"),
+    runRetrospective: designArtifacts?.runRetrospective ?? path.join(paths.report, "learnings", "run-retrospective.json"),
     standardsRegistry: designArtifacts?.standardsRegistry ?? path.join(paths.report, "standards-registry.json"),
     suppressionReport: designArtifacts?.suppressionReport ?? path.join(paths.report, "suppression-report.json"),
     designBenchmarkJson: designArtifacts?.benchmarkJson ?? path.join(paths.report, "design-benchmark.json"),

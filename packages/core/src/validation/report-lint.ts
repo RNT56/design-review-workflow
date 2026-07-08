@@ -100,6 +100,9 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
     "report/interaction-states.json",
     "report/related-workflows.json",
     "report/enterprise-readiness.json",
+    "report/learnings/README.md",
+    "report/learnings/agent-learning-template.md",
+    "report/learnings/run-retrospective.json",
     "report/standards-registry.json",
     "report/suppression-report.json",
     "report/design-benchmark.json",
@@ -166,6 +169,7 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
   await checkJsonShape(auditDir, "report/interaction-states.json", "states", errors);
   await checkJsonShape(auditDir, "report/related-workflows.json", "workflows", errors);
   await checkJsonShape(auditDir, "report/enterprise-readiness.json", "gates", errors);
+  await checkJsonShape(auditDir, "report/learnings/run-retrospective.json", "counts", errors);
   await checkJsonShape(auditDir, "report/standards-registry.json", "rules", errors);
   await checkJsonShape(auditDir, "report/suppression-report.json", "suppressionsApplied", errors);
   await checkJsonShape(auditDir, "report/design-benchmark.json", "score", errors);
