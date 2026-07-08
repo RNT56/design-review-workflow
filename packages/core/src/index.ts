@@ -44,7 +44,11 @@ export * from "./report/agent-review-import.js";
 export * from "./report/agent-review-generate.js";
 export * from "./report/evidence-brief.js";
 export * from "./report/export.js";
+export * from "./report/related-workflows.js";
 export * from "./source/repo-analysis.js";
+export * from "./enterprise/verify.js";
+export * from "./enterprise/retention.js";
+export * from "./enterprise/fixtures.js";
 
 export type RunAuditOptions = {
   workspaceRoot?: string;
@@ -76,53 +80,71 @@ export async function runAudit(input: AuditInput | AuditConfig, options: RunAudi
   });
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const paths = await createAuditPaths(config, workspaceRoot);
-
-  options.onProgress?.({ stage: "start", message: `Audit ${config.auditId} created` });
-  await writeJson(path.join(paths.auditRoot, "audit-state.json"), {
-    auditId: config.auditId,
-    status: "capturing",
-    updatedAt: new Date().toISOString()
-  });
-
-  const capture = await captureEvidence(config, paths, options.onProgress);
-
-  await writeJson(path.join(paths.auditRoot, "audit-state.json"), {
-    auditId: config.auditId,
-    status: "reviewing",
-    updatedAt: new Date().toISOString(),
-    capturedPages: capture.pages.length
-  });
-
-  options.onProgress?.({ stage: "review", message: "Generating structured findings" });
-  const report = AuditReportSchema.parse(await reviewEvidence(config, capture.pages, paths));
-
-  if (config.competitors.length > 0) {
-    report.competitorBenchmarks = await runCompetitorBenchmarks(config, report.scorecard.overallScore, paths, options.onProgress);
-  }
-
-  options.onProgress?.({ stage: "report", message: "Writing reports and static visual pack" });
-  const outputs = await writeReports(config, report, paths, { reviewPack: true });
-  options.onProgress?.({ stage: "validate", message: "Validating report bundle" });
-  const validation = await lintAuditReport(paths.auditRoot, false);
-  await updateProjectIndex(workspaceRoot, report, paths.auditRoot, outputs);
-
-  await writeJson(path.join(paths.auditRoot, "audit-state.json"), {
-    auditId: config.auditId,
-    status: "completed",
-    updatedAt: new Date().toISOString(),
-    report: outputs,
-    validation
-  });
-
-  options.onProgress?.({ stage: "done", message: `Audit completed at ${paths.auditRoot}` });
-
-  return {
-    config,
-    auditRoot: paths.auditRoot,
-    report,
-    outputs,
-    validation
+  const completedSteps: string[] = [];
+  const writeAuditState = async (state: Record<string, unknown>) => {
+    await writeJson(path.join(paths.auditRoot, "audit-state.json"), {
+      auditId: config.auditId,
+      updatedAt: new Date().toISOString(),
+      retries: config.retries,
+      resumability: {
+        supported: true,
+        completedSteps,
+        note: "Safe deterministic steps can be replayed by rerunning the audit. Raw screenshots remain immutable evidence once report generation completes."
+      },
+      ...state
+    });
   };
+
+  try {
+    options.onProgress?.({ stage: "start", message: `Audit ${config.auditId} created` });
+    await writeAuditState({ status: "capturing", step: "capture" });
+
+    const capture = await captureEvidence(config, paths, options.onProgress);
+    completedSteps.push("capture");
+
+    await writeAuditState({ status: "reviewing", step: "review", capturedPages: capture.pages.length });
+
+    options.onProgress?.({ stage: "review", message: "Generating structured findings" });
+    const report = AuditReportSchema.parse(await reviewEvidence(config, capture.pages, paths));
+    completedSteps.push("review");
+
+    if (config.competitors.length > 0) {
+      report.competitorBenchmarks = await runCompetitorBenchmarks(config, report.scorecard.overallScore, paths, options.onProgress);
+      completedSteps.push("competitor_benchmark");
+    }
+
+    options.onProgress?.({ stage: "report", message: "Writing reports and static visual pack" });
+    const outputs = await writeReports(config, report, paths, { reviewPack: true });
+    completedSteps.push("report");
+    options.onProgress?.({ stage: "validate", message: "Validating report bundle" });
+    const validation = await lintAuditReport(paths.auditRoot, false);
+    completedSteps.push("validate");
+    await updateProjectIndex(workspaceRoot, report, paths.auditRoot, outputs);
+    completedSteps.push("index");
+
+    await writeAuditState({
+      status: "completed",
+      step: "done",
+      report: outputs,
+      validation
+    });
+
+    options.onProgress?.({ stage: "done", message: `Audit completed at ${paths.auditRoot}` });
+
+    return {
+      config,
+      auditRoot: paths.auditRoot,
+      report,
+      outputs,
+      validation
+    };
+  } catch (error) {
+    await writeAuditState({
+      status: "failed",
+      failure: classifyAuditFailure(error)
+    }).catch(() => undefined);
+    throw error;
+  }
 }
 
 export function validateReport(data: unknown): AuditReport {
@@ -138,3 +160,21 @@ export const schemas = {
   PageEvidenceSchema,
   ScorecardSchema
 };
+
+function classifyAuditFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  let category = "unknown";
+  if (/timeout|timed out/i.test(message)) category = "timeout";
+  else if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|EAI_AGAIN|DNS/i.test(message)) category = "navigation_dns";
+  else if (/ERR_SSL|certificate|TLS/i.test(message)) category = "navigation_tls";
+  else if (/net::ERR|ECONN|socket|network|fetch/i.test(message)) category = "network";
+  else if (/screenshot/i.test(message)) category = "screenshot";
+  else if (/schema|zod|parse/i.test(message)) category = "schema";
+  else if (/report|html|pdf|write|EACCES|ENOENT/i.test(message)) category = "artifact_write";
+  return {
+    category,
+    message,
+    retryable: category === "timeout" || category === "navigation_dns" || category === "network",
+    failedAt: new Date().toISOString()
+  };
+}

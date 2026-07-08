@@ -288,6 +288,7 @@ node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --
 - \`report/evidence-brief.json\`
 - \`report/grouped-issues.json\`
 - \`report/business-grade-gate.json\`
+- \`report/provider-review.json\` when business-grade mode runs
 - \`report/screenshot-manifest.json\`
 - \`report/hosted/index.html\`
 - \`report/agent-review-pack/\`
@@ -308,10 +309,19 @@ node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --
 - \`report/route-templates.json\`
 - \`report/visual-system.json\`
 - \`report/experience-timing.json\`
+- \`report/performance-audit.json\`
+- \`report/accessibility-detail.json\`
+- \`report/privacy-tracking.json\`
+- \`report/resource-audit.json\`
+- \`report/interaction-states.json\`
+- \`report/related-workflows.json\`
+- \`report/enterprise-readiness.json\`
 - \`report/design-benchmark.json\`
 - \`report/design-benchmark.md\`
 - \`report/standards-registry.json\`
 - \`report/suppression-report.json\`
+- \`report/stakeholder-recommendations.md\`
+- \`report/before-after-comparison.md\`
 - \`report/validation.json\`
 - \`report/agent-execution-plan.md\`
 - \`report/agent-instructions/${agentFile(agentName)}\`
@@ -339,7 +349,9 @@ function workflowManifest(
         "brand context",
         "competitor URLs",
         "audit mode",
+        "business-grade review mode",
         "target website source repo",
+        "related workflow artifact paths",
         "suppression file",
         "baseline audit"
       ],
@@ -354,7 +366,7 @@ function workflowManifest(
           "Store intermediate evidence and diagnostics in the audit folder, not in chat.",
           "Final chat must summarize deliverable paths, gate statuses, score/findings count, top evidence-backed findings, and limitations."
         ],
-        preferredRunCommand: `node apps/cli/dist/index.js run ${report.config.url} --business-grade --format json`
+        preferredRunCommand: `node apps/cli/dist/index.js run ${report.config.url} --business-grade --review-mode ${report.config.reviewMode} --format json`
       },
       safetyRules: [
         "Do not enter login, admin, account, payment, or checkout completion areas.",
@@ -370,7 +382,9 @@ function workflowManifest(
       websiteGoal: report.config.websiteGoal,
       targetAudience: report.config.targetAudience,
       industry: report.config.industry,
-      competitors: report.config.competitors
+      competitors: report.config.competitors,
+      relatedWorkflows: report.config.relatedWorkflows,
+      reviewMode: report.config.reviewMode
     },
     audit: {
       auditId: report.auditId,
@@ -393,6 +407,7 @@ function workflowManifest(
       agentReviewImport: `node apps/cli/dist/index.js agent-review import --report ${paths.auditRoot} --file agent-runs/<agent>/visual-review.json`,
       businessGradeLint: `node apps/cli/dist/index.js business-grade lint --report ${paths.auditRoot}`,
       benchmark: `node apps/cli/dist/index.js benchmark --report ${paths.auditRoot}`,
+      enterpriseVerify: `node apps/cli/dist/index.js enterprise verify --report ${paths.auditRoot}`,
       standards: `node apps/cli/dist/index.js standards update --report ${paths.auditRoot}`,
       plan: `node apps/cli/dist/index.js plan build --report ${paths.auditRoot}`,
       latest: `node apps/cli/dist/index.js latest ${report.config.url}`
@@ -418,12 +433,20 @@ function workflowManifest(
       "report/score.json",
       "report/grouped-issues.json",
       "report/business-grade-gate.json",
+      "report/provider-review.json",
       "report/screenshot-manifest.json",
       "report/agent-review-pack/review-pack-manifest.json",
       "report/agent-visual-review.json",
       "report/source-candidates.json",
       "report/repo-analysis.json",
       "report/visual-system.json",
+      "report/performance-audit.json",
+      "report/accessibility-detail.json",
+      "report/privacy-tracking.json",
+      "report/resource-audit.json",
+      "report/interaction-states.json",
+      "report/related-workflows.json",
+      "report/enterprise-readiness.json",
       "report/route-templates.json",
       "report/standards-registry.json",
       "report/design-benchmark.json",
@@ -437,6 +460,8 @@ function workflowManifest(
       "report/agent-review-pack/gallery/index.html",
       "report/agent-execution-plan.md",
       "report/priority-action-plan.md",
+      "report/stakeholder-recommendations.md",
+      "report/before-after-comparison.md",
       "report/patch-plan.md",
       "report/design-benchmark.md",
       "report/manual-actions.md",
@@ -465,13 +490,19 @@ function handoffModel(
     findings: report.findings.length,
     groupedIssues: report.groupedIssues.length,
     businessGradeStatus: report.businessGradeStatus,
+    reviewMode: report.config.reviewMode,
     agentVisualReviewImported: Boolean(report.agentVisualReview),
+    relatedWorkflows: {
+      configured: report.config.relatedWorkflows.length,
+      artifact: path.join(paths.report, "related-workflows.json"),
+      policy: "linked_evidence_only"
+    },
     quickWins: report.quickWins.map((finding) => finding.findingId),
     qualityGate: qualityGateSnapshot(paths, lint),
     agentCommunication: {
       mode: "quiet_execution_final_closeout",
       noIntermediateChatter: true,
-      preferredRunCommand: `node apps/cli/dist/index.js run ${report.config.url} --business-grade --format json`,
+      preferredRunCommand: `node apps/cli/dist/index.js run ${report.config.url} --business-grade --review-mode ${report.config.reviewMode} --format json`,
       interimChatAllowedOnlyFor: ["blocked execution", "required approval", "explicit user status request"],
       finalResponseShouldInclude: [
         "audit root",
@@ -493,7 +524,15 @@ function handoffModel(
       path.join(paths.report, "screenshot-manifest.json"),
       path.join(paths.report, "grouped-issues.json"),
       path.join(paths.report, "business-grade-gate.json"),
+      path.join(paths.report, "provider-review.json"),
+      path.join(paths.report, "enterprise-readiness.json"),
       path.join(paths.report, "evidence-index.json"),
+      path.join(paths.report, "performance-audit.json"),
+      path.join(paths.report, "accessibility-detail.json"),
+      path.join(paths.report, "privacy-tracking.json"),
+      path.join(paths.report, "resource-audit.json"),
+      path.join(paths.report, "interaction-states.json"),
+      path.join(paths.report, "related-workflows.json"),
       path.join(paths.report, "implementation-plan.json"),
       path.join(paths.report, "actionability.json"),
       path.join(paths.report, "source-candidates.json"),
@@ -549,6 +588,7 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     evidenceBrief: path.join(paths.report, "evidence-brief.json"),
     groupedIssues: path.join(paths.report, "grouped-issues.json"),
     businessGradeGate: path.join(paths.report, "business-grade-gate.json"),
+    providerReview: path.join(paths.report, "provider-review.json"),
     screenshotManifest: path.join(paths.report, "screenshot-manifest.json"),
     hostedReport: path.join(paths.report, "hosted", "index.html"),
     agentReviewPack: path.join(paths.report, "agent-review-pack"),
@@ -567,12 +607,21 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     routeTemplates: designArtifacts?.routeTemplates ?? path.join(paths.report, "route-templates.json"),
     visualSystem: designArtifacts?.visualSystem ?? path.join(paths.report, "visual-system.json"),
     experienceTiming: designArtifacts?.experienceTiming ?? path.join(paths.report, "experience-timing.json"),
+    performanceAudit: designArtifacts?.performanceAudit ?? path.join(paths.report, "performance-audit.json"),
+    accessibilityDetail: designArtifacts?.accessibilityDetail ?? path.join(paths.report, "accessibility-detail.json"),
+    privacyTracking: designArtifacts?.privacyTracking ?? path.join(paths.report, "privacy-tracking.json"),
+    resourceAudit: designArtifacts?.resourceAudit ?? path.join(paths.report, "resource-audit.json"),
+    interactionStates: designArtifacts?.interactionStates ?? path.join(paths.report, "interaction-states.json"),
+    relatedWorkflows: designArtifacts?.relatedWorkflows ?? path.join(paths.report, "related-workflows.json"),
+    enterpriseReadiness: designArtifacts?.enterpriseReadiness ?? path.join(paths.report, "enterprise-readiness.json"),
     standardsRegistry: designArtifacts?.standardsRegistry ?? path.join(paths.report, "standards-registry.json"),
     suppressionReport: designArtifacts?.suppressionReport ?? path.join(paths.report, "suppression-report.json"),
     designBenchmarkJson: designArtifacts?.benchmarkJson ?? path.join(paths.report, "design-benchmark.json"),
     designBenchmarkMarkdown: designArtifacts?.benchmarkMarkdown ?? path.join(paths.report, "design-benchmark.md"),
     patchPlan: designArtifacts?.patchPlan ?? path.join(paths.report, "patch-plan.md"),
     changedFiles: designArtifacts?.changedFiles ?? path.join(paths.report, "changed-files.json"),
+    stakeholderRecommendations: designArtifacts?.stakeholderRecommendations ?? path.join(paths.report, "stakeholder-recommendations.md"),
+    beforeAfterComparison: designArtifacts?.beforeAfterComparison ?? path.join(paths.report, "before-after-comparison.md"),
     manualActions: designArtifacts?.manualActions ?? path.join(paths.report, "manual-actions.md"),
     remainingUserDecisions: designArtifacts?.remainingUserDecisions ?? path.join(paths.report, "remaining-user-decisions.md"),
     priorityActionPlan: path.join(paths.report, "priority-action-plan.md"),

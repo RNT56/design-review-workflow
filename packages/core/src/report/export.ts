@@ -15,7 +15,11 @@ export type AuditExportOptions = {
   format?: AuditExportFormat;
   outputPath?: string;
   includePrivatePaths?: boolean;
+  includeSensitiveValues?: boolean;
   overwrite?: boolean;
+  clientName?: string;
+  preparedBy?: string;
+  brandLogoPath?: string;
 };
 
 export type AuditExportSummary = {
@@ -28,6 +32,7 @@ export type AuditExportSummary = {
   manifestPath: string;
   checksumsPath: string;
   localPathsRedacted: boolean;
+  sensitiveValuesRedacted: boolean;
 };
 
 type ExportEntry = {
@@ -57,15 +62,25 @@ const REVIEW_FILES = new Set([
   "report/findings.json",
   "report/grouped-issues.json",
   "report/score.json",
+  "report/performance-audit.json",
+  "report/accessibility-detail.json",
+  "report/privacy-tracking.json",
+  "report/resource-audit.json",
+  "report/interaction-states.json",
+  "report/related-workflows.json",
+  "report/enterprise-readiness.json",
   "report/validation.json",
   "report/quality-gate.json",
   "report/business-grade-gate.json",
+  "report/provider-review.json",
   "report/design-benchmark.json",
   "report/design-benchmark.md",
   "report/standards-registry.json",
   "report/suppression-report.json",
   "report/actionability.json",
   "report/priority-action-plan.md",
+  "report/stakeholder-recommendations.md",
+  "report/before-after-comparison.md",
   "report/redesign-briefing.md",
   "report/screenshot-manifest.json",
   "report/agent-visual-review.json"
@@ -98,16 +113,26 @@ const REPO_IMPORT_FILES = new Set([
   "report/route-templates.json",
   "report/visual-system.json",
   "report/experience-timing.json",
+  "report/performance-audit.json",
+  "report/accessibility-detail.json",
+  "report/privacy-tracking.json",
+  "report/resource-audit.json",
+  "report/interaction-states.json",
+  "report/related-workflows.json",
+  "report/enterprise-readiness.json",
   "report/design-benchmark.json",
   "report/standards-registry.json",
   "report/suppression-report.json",
   "report/actionability.json",
+  "report/stakeholder-recommendations.md",
+  "report/before-after-comparison.md",
   "report/findings.json",
   "report/grouped-issues.json",
   "report/score.json",
   "report/validation.json",
   "report/quality-gate.json",
   "report/business-grade-gate.json",
+  "report/provider-review.json",
   "report/screenshot-manifest.json",
   "report/agent-visual-review.json"
 ]);
@@ -137,8 +162,12 @@ export async function exportAudit(options: AuditExportOptions): Promise<AuditExp
     options.outputPath ??
     path.join(auditDir, "exports", format === "zip" ? `${exportBaseName}.zip` : exportBaseName);
   const localPathsRedacted = options.includePrivatePaths !== true;
+  const sensitiveValuesRedacted = options.includeSensitiveValues !== true;
   const selectedFiles = await selectAuditFiles(auditDir, profile);
-  const entries = await buildExportEntries(auditDir, selectedFiles, localPathsRedacted);
+  const entries = await buildExportEntries(auditDir, selectedFiles, {
+    redactLocalPaths: localPathsRedacted,
+    redactSensitiveValues: sensitiveValuesRedacted
+  });
   entries.push({ path: "LICENSE-NOTICE.md", content: Buffer.from(renderLicenseNotice(), "utf8") });
 
   const manifest = buildExportManifest({
@@ -149,7 +178,13 @@ export async function exportAudit(options: AuditExportOptions): Promise<AuditExp
     format,
     report,
     entries,
-    localPathsRedacted
+    localPathsRedacted,
+    sensitiveValuesRedacted,
+    branding: {
+      clientName: options.clientName,
+      preparedBy: options.preparedBy,
+      brandLogoPath: options.brandLogoPath
+    }
   });
   entries.push({
     path: "export-manifest.json",
@@ -178,7 +213,8 @@ export async function exportAudit(options: AuditExportOptions): Promise<AuditExp
     bytes: entries.reduce((sum, entry) => sum + entry.content.byteLength, 0),
     manifestPath: format === "directory" ? path.join(outputPath, "export-manifest.json") : path.join(auditDir, "export-manifest.json"),
     checksumsPath: format === "directory" ? path.join(outputPath, "checksums.sha256") : path.join(auditDir, "checksums.sha256"),
-    localPathsRedacted
+    localPathsRedacted,
+    sensitiveValuesRedacted
   };
 }
 
@@ -218,13 +254,18 @@ async function listFiles(root: string, current = root): Promise<string[]> {
   return files.sort();
 }
 
-async function buildExportEntries(auditDir: string, files: string[], redactLocalPaths: boolean): Promise<ExportEntry[]> {
+async function buildExportEntries(
+  auditDir: string,
+  files: string[],
+  redaction: { redactLocalPaths: boolean; redactSensitiveValues: boolean }
+): Promise<ExportEntry[]> {
   const entries: ExportEntry[] = [];
   for (const file of files) {
     const content = await readFile(path.join(auditDir, file));
+    const redactedContent = isLikelyText(file, content) ? sanitizeTextArtifact(content, redaction) : content;
     entries.push({
       path: file,
-      content: redactLocalPaths && isLikelyText(file, content) ? sanitizeLocalPaths(content) : content
+      content: redactedContent
     });
   }
   return entries;
@@ -239,6 +280,12 @@ function buildExportManifest(input: {
   report: AuditReport;
   entries: ExportEntry[];
   localPathsRedacted: boolean;
+  sensitiveValuesRedacted: boolean;
+  branding: {
+    clientName?: string;
+    preparedBy?: string;
+    brandLogoPath?: string;
+  };
 }) {
   const artifacts: ExportManifestArtifact[] = input.entries.map((entry) => ({
     path: entry.path,
@@ -262,10 +309,19 @@ function buildExportManifest(input: {
       businessGradeStatus: input.report.businessGradeStatus,
       qualityGate: readArtifactStatus(input.entries, "report/quality-gate.json"),
       validation: readArtifactStatus(input.entries, "report/validation.json"),
-      businessGradeGate: readArtifactStatus(input.entries, "report/business-grade-gate.json")
+      businessGradeGate: readArtifactStatus(input.entries, "report/business-grade-gate.json"),
+      enterpriseReadiness: readArtifactStatus(input.entries, "report/enterprise-readiness.json")
+    },
+    relatedWorkflows: readRelatedWorkflowSummary(input.entries),
+    branding: {
+      clientName: input.branding.clientName,
+      preparedBy: input.branding.preparedBy,
+      brandLogoPath: input.localPathsRedacted && input.branding.brandLogoPath ? "[redacted-local-path]" : input.branding.brandLogoPath,
+      note: "Branding metadata is local export metadata only. It does not imply hosted/team product behavior."
     },
     privacy: {
       localPathsRedacted: input.localPathsRedacted,
+      sensitiveValuesRedacted: input.sensitiveValuesRedacted,
       cloudUploadIncluded: false,
       note:
         "Exports are deterministic local packages. Upload to Google Drive, Dropbox, S3, or similar storage should be performed only by an explicitly authorized external agent connector."
@@ -286,6 +342,38 @@ function readArtifactStatus(entries: ExportEntry[], file: string): string | unde
     return parsed.status;
   } catch {
     return undefined;
+  }
+}
+
+function readRelatedWorkflowSummary(entries: ExportEntry[]) {
+  const entry = entries.find((candidate) => candidate.path === "report/related-workflows.json");
+  if (!entry) {
+    return {
+      count: 0,
+      policy: "not_included"
+    };
+  }
+  try {
+    const parsed = JSON.parse(entry.content.toString("utf8")) as {
+      workflows?: Array<{ kind?: string; status?: string; score?: number; qualityGateStatus?: string }>;
+      policy?: { note?: string };
+    };
+    const workflows = Array.isArray(parsed.workflows) ? parsed.workflows : [];
+    return {
+      count: workflows.length,
+      workflows: workflows.map((workflow) => ({
+        kind: workflow.kind,
+        status: workflow.status,
+        score: workflow.score,
+        qualityGateStatus: workflow.qualityGateStatus
+      })),
+      policy: parsed.policy?.note ?? "Related workflow metadata is linked evidence only."
+    };
+  } catch {
+    return {
+      count: 0,
+      policy: "unreadable"
+    };
   }
 }
 
@@ -330,13 +418,30 @@ async function writeDirectoryExport(outputPath: string, entries: ExportEntry[]):
   }
 }
 
-function sanitizeLocalPaths(content: Buffer): Buffer {
-  const sanitized = content
-    .toString("utf8")
+function sanitizeTextArtifact(content: Buffer, redaction: { redactLocalPaths: boolean; redactSensitiveValues: boolean }): Buffer {
+  let sanitized = content.toString("utf8");
+  if (redaction.redactLocalPaths) {
+    sanitized = sanitizeLocalPaths(sanitized);
+  }
+  if (redaction.redactSensitiveValues) {
+    sanitized = sanitizeSensitiveValues(sanitized);
+  }
+  return Buffer.from(sanitized, "utf8");
+}
+
+function sanitizeLocalPaths(content: string): string {
+  return content
     .replace(/\/Users\/[A-Za-z0-9._-]+\/[^\s"')<>,]+/g, "[redacted-local-path]")
     .replace(/\/home\/[A-Za-z0-9._-]+\/[^\s"')<>,]+/g, "[redacted-local-path]")
     .replace(/[A-Za-z]:\\Users\\[A-Za-z0-9._-]+\\[^\s"')<>,]+/g, "[redacted-local-path]");
-  return Buffer.from(sanitized, "utf8");
+}
+
+function sanitizeSensitiveValues(content: string): string {
+  return content
+    .replace(/(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{20,})/g, "[redacted-secret]")
+    .replace(/((?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*)(["']?)[^\s"',}]+/gi, "$1$2[redacted]")
+    .replace(/((?:set-cookie|cookie)\s*:\s*)[^\n\r]+/gi, "$1[redacted-cookie]")
+    .replace(/("?(?:api[_-]?key|token|secret|password|authorization|cookie)"?\s*:\s*")([^"]+)(")/gi, "$1[redacted]$3");
 }
 
 function isLikelyText(file: string, content: Buffer): boolean {

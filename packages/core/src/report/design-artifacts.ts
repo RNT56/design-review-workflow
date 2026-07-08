@@ -3,12 +3,22 @@ import * as path from "node:path";
 import { AuditReport, Finding } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
 import { writeJson, writeText } from "../utils/fs.js";
+import { buildRelatedWorkflowsArtifact } from "./related-workflows.js";
 
 export type DesignWorkflowArtifactPaths = {
   evidenceJsonl: string;
   routeTemplates: string;
   visualSystem: string;
   experienceTiming: string;
+  performanceAudit: string;
+  accessibilityDetail: string;
+  privacyTracking: string;
+  resourceAudit: string;
+  interactionStates: string;
+  relatedWorkflows: string;
+  enterpriseReadiness: string;
+  stakeholderRecommendations: string;
+  beforeAfterComparison: string;
   standardsRegistry: string;
   suppressionReport: string;
   repoAnalysis: string;
@@ -27,6 +37,15 @@ export async function writeDesignWorkflowArtifacts(report: AuditReport, paths: A
     routeTemplates: path.join(paths.report, "route-templates.json"),
     visualSystem: path.join(paths.report, "visual-system.json"),
     experienceTiming: path.join(paths.report, "experience-timing.json"),
+    performanceAudit: path.join(paths.report, "performance-audit.json"),
+    accessibilityDetail: path.join(paths.report, "accessibility-detail.json"),
+    privacyTracking: path.join(paths.report, "privacy-tracking.json"),
+    resourceAudit: path.join(paths.report, "resource-audit.json"),
+    interactionStates: path.join(paths.report, "interaction-states.json"),
+    relatedWorkflows: path.join(paths.report, "related-workflows.json"),
+    enterpriseReadiness: path.join(paths.report, "enterprise-readiness.json"),
+    stakeholderRecommendations: path.join(paths.report, "stakeholder-recommendations.md"),
+    beforeAfterComparison: path.join(paths.report, "before-after-comparison.md"),
     standardsRegistry: path.join(paths.report, "standards-registry.json"),
     suppressionReport: path.join(paths.report, "suppression-report.json"),
     repoAnalysis: path.join(paths.report, "repo-analysis.json"),
@@ -43,6 +62,13 @@ export async function writeDesignWorkflowArtifacts(report: AuditReport, paths: A
   await writeJson(outputs.routeTemplates, routeTemplateModel(report));
   await writeJson(outputs.visualSystem, visualSystemModel(report));
   await writeJson(outputs.experienceTiming, experienceTimingModel(report));
+  await writeJson(outputs.performanceAudit, performanceAuditModel(report));
+  await writeJson(outputs.accessibilityDetail, accessibilityDetailModel(report));
+  await writeJson(outputs.privacyTracking, privacyTrackingModel(report));
+  await writeJson(outputs.resourceAudit, resourceAuditModel(report));
+  await writeJson(outputs.interactionStates, interactionStatesModel(report));
+  await writeJson(outputs.relatedWorkflows, await buildRelatedWorkflowsArtifact(report));
+  await writeJson(outputs.enterpriseReadiness, enterpriseReadinessModel(report));
   await writeJsonIfMissing(outputs.standardsRegistry, defaultDesignStandardsRegistry(report));
   await writeJsonIfMissing(outputs.suppressionReport, emptySuppressionReport(report));
   await writeJsonIfMissing(outputs.repoAnalysis, repoAnalysisPlaceholder(report));
@@ -51,6 +77,8 @@ export async function writeDesignWorkflowArtifacts(report: AuditReport, paths: A
   await writeText(outputs.benchmarkMarkdown, renderDesignBenchmarkMarkdown(report));
   await writeTextIfMissing(outputs.patchPlan, renderPatchPlan(report));
   await writeJsonIfMissing(outputs.changedFiles, changedFilesPlaceholder(report));
+  await writeText(outputs.stakeholderRecommendations, renderStakeholderRecommendations(report));
+  await writeText(outputs.beforeAfterComparison, renderBeforeAfterComparison(report));
   await writeText(outputs.manualActions, renderManualActions(report));
   await writeText(outputs.remainingUserDecisions, renderRemainingUserDecisions(report));
 
@@ -257,6 +285,238 @@ function experienceTimingModel(report: AuditReport) {
   };
 }
 
+function performanceAuditModel(report: AuditReport) {
+  const pages = report.pages.map((page) => {
+    const resourceSummary = page.performance?.resourceSummary;
+    return {
+      pageId: page.pageId,
+      url: page.url,
+      status: page.performance?.status ?? "skipped",
+      source: page.performance?.source ?? "browser_navigation_timing",
+      timings: {
+        domContentLoadedMs: page.performance?.domContentLoadedMs,
+        loadEventMs: page.performance?.loadEventMs,
+        firstPaintMs: page.performance?.firstPaintMs,
+        firstContentfulPaintMs: page.performance?.firstContentfulPaintMs,
+        transferSizeKb: page.performance?.transferSizeKb
+      },
+      coreWebVitalsCandidates: {
+        firstContentfulPaintMs: page.performance?.firstContentfulPaintMs,
+        largestContentfulPaintMs: page.performance?.lighthouse?.largestContentfulPaintMs,
+        totalBlockingTimeMs: page.performance?.lighthouse?.totalBlockingTimeMs,
+        cumulativeLayoutShift: page.performance?.lighthouse?.cumulativeLayoutShift,
+        note: "Navigation timing is captured by the local browser. Lighthouse metrics appear only when a Lighthouse result exists."
+      },
+      resources: resourceSummary,
+      largestResources: resourceSummary?.largestResources ?? [],
+      risks: performanceRisks(page.performance)
+    };
+  });
+  return {
+    schemaVersion: "design-review-workflow.performance-audit.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    status: pages.some((page) => page.status === "completed") ? "completed" : "limited",
+    lighthouse: {
+      status: report.pages.some((page) => page.performance?.lighthouse?.status === "completed") ? "completed" : "not_run",
+      note:
+        "This artifact is Lighthouse-compatible in shape but does not claim a Lighthouse run unless page.performance.lighthouse.status is completed."
+    },
+    pages,
+    summary: {
+      pagesMeasured: pages.filter((page) => page.status === "completed").length,
+      totalPages: pages.length,
+      slowLoadPages: pages.filter((page) => typeof page.timings.loadEventMs === "number" && page.timings.loadEventMs > 3500).length,
+      thirdPartyOrigins: unique(
+        report.pages.flatMap((page) => page.performance?.resourceSummary?.thirdPartyOrigins ?? [])
+      ).slice(0, 50)
+    },
+    limitations: [
+      "Browser navigation timing and resource timing are local evidence, not backend profiling.",
+      "Use a dedicated Lighthouse or RUM workflow for lab-grade or field performance claims.",
+      "SEO scoring is intentionally out of scope for this design workflow."
+    ]
+  };
+}
+
+function accessibilityDetailModel(report: AuditReport) {
+  return {
+    schemaVersion: "design-review-workflow.accessibility-detail.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    status: report.pages.some((page) => page.accessibility?.status === "completed") ? "completed" : "limited",
+    pages: report.pages.map((page) => ({
+      pageId: page.pageId,
+      url: page.url,
+      axe: page.accessibility,
+      forms: page.text.forms.map((form) => ({
+        selector: form.selector,
+        inputCount: form.inputCount,
+        missingLabelCount: form.missingLabelCount,
+        submitText: form.submitText
+      })),
+      images: {
+        total: page.text.imageCount,
+        missingAlt: page.text.imagesMissingAlt
+      },
+      contrastCandidates: (page.cssSignals?.contrastPairs ?? [])
+        .filter((pair) => pair.ratio > 0 && pair.ratio < 4.5)
+        .slice(0, 25)
+    })),
+    totals: {
+      violations: report.pages.reduce((sum, page) => sum + (page.accessibility?.violationCount ?? 0), 0),
+      critical: report.pages.reduce((sum, page) => sum + (page.accessibility?.critical ?? 0), 0),
+      serious: report.pages.reduce((sum, page) => sum + (page.accessibility?.serious ?? 0), 0),
+      imagesMissingAlt: report.pages.reduce((sum, page) => sum + page.text.imagesMissingAlt, 0),
+      missingFormLabels: report.pages.reduce((sum, page) => sum + page.text.forms.reduce((formSum, form) => formSum + form.missingLabelCount, 0), 0)
+    },
+    limitations: [
+      "This is an accessibility basics artifact based on automated checks and DOM signals.",
+      "It is not a WCAG certification, legal accessibility audit, or substitute for manual assistive technology testing."
+    ]
+  };
+}
+
+function privacyTrackingModel(report: AuditReport) {
+  const firstPartyOrigin = originOf(report.config.url);
+  const externalLinks = report.pages.flatMap((page) =>
+    page.text.links
+      .map((link) => link.href)
+      .filter((href): href is string => Boolean(href))
+      .flatMap((href) => {
+        const origin = originOf(href);
+        if (!origin || origin === firstPartyOrigin) return [];
+        return [{ pageId: page.pageId, url: page.url, href, origin }];
+      })
+  );
+  const thirdPartyOrigins = unique(report.pages.flatMap((page) => page.performance?.resourceSummary?.thirdPartyOrigins ?? []));
+  return {
+    schemaVersion: "design-review-workflow.privacy-tracking.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    status: "signals_only",
+    firstPartyOrigin,
+    thirdPartyResourceOrigins: thirdPartyOrigins,
+    externalLinks: externalLinks.slice(0, 120),
+    cookies: {
+      status: "not_collected",
+      note: "Cookie values are not collected or exported by default. Cookie banner dismissal may occur only to reveal page content for screenshots."
+    },
+    storage: {
+      status: "not_collected",
+      note: "Local/session storage values are not collected in this local-first design audit artifact."
+    },
+    riskSignals: [
+      ...(thirdPartyOrigins.length > 0 ? [`${thirdPartyOrigins.length} third-party resource origin(s) observed through browser resource timing.`] : []),
+      ...(externalLinks.length > 0 ? [`${externalLinks.length} external link(s) observed in visible page content.`] : []),
+      ...report.pages.flatMap((page) => page.text.forms.length > 0 ? [`${page.text.forms.length} visible form(s) on ${page.url}.`] : [])
+    ],
+    limitations: [
+      "This is privacy/tracking evidence for design review context only.",
+      "It does not claim legal privacy compliance, consent compliance, tracker classification completeness, or server-side logging analysis."
+    ]
+  };
+}
+
+function resourceAuditModel(report: AuditReport) {
+  const pages = report.pages.map((page) => ({
+    pageId: page.pageId,
+    url: page.url,
+    resourceSummary: page.performance?.resourceSummary,
+    largestResources: page.performance?.resourceSummary?.largestResources ?? [],
+    renderBlockingCandidates: (page.performance?.resourceSummary?.largestResources ?? []).filter((resource) =>
+      resource.initiatorType === "script" || resource.initiatorType === "link" || resource.initiatorType === "css"
+    )
+  }));
+  return {
+    schemaVersion: "design-review-workflow.resource-audit.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    pages,
+    totals: {
+      resources: report.pages.reduce((sum, page) => sum + (page.performance?.resourceSummary?.totalResources ?? 0), 0),
+      scripts: report.pages.reduce((sum, page) => sum + (page.performance?.resourceSummary?.scripts ?? 0), 0),
+      stylesheets: report.pages.reduce((sum, page) => sum + (page.performance?.resourceSummary?.stylesheets ?? 0), 0),
+      images: report.pages.reduce((sum, page) => sum + (page.performance?.resourceSummary?.images ?? 0), 0),
+      fonts: report.pages.reduce((sum, page) => sum + (page.performance?.resourceSummary?.fonts ?? 0), 0),
+      thirdPartyResources: report.pages.reduce((sum, page) => sum + (page.performance?.resourceSummary?.thirdPartyResources ?? 0), 0)
+    },
+    limitations: [
+      "Resource timing is browser-captured evidence. Bundle internals, source maps, and server waterfall diagnostics are out of scope unless explicitly supplied.",
+      "Largest resource candidates are hints for implementation review, not proof of production bottlenecks."
+    ]
+  };
+}
+
+function interactionStatesModel(report: AuditReport) {
+  const states = report.pages.flatMap((page) =>
+    page.interactionStates.map((state) => ({
+      pageId: page.pageId,
+      url: page.url,
+      ...state,
+      screenshotPath: page.screenshots[state.screenshotId]?.path
+    }))
+  );
+  const byCategory = new Map<string, number>();
+  for (const state of states) increment(byCategory, state.category);
+  return {
+    schemaVersion: "design-review-workflow.interaction-states.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    status: states.length > 0 ? "completed" : "none_captured",
+    settings: report.config.interactions,
+    coverage: {
+      totalStates: states.length,
+      byCategory: ranked(byCategory),
+      pagesWithStates: new Set(states.map((state) => state.pageId)).size,
+      pagesCaptured: report.pages.length
+    },
+    states,
+    safetyPolicy: {
+      mutatingActionsAllowed: false,
+      formSubmissionAllowed: report.config.interactions.allowFormErrorChecks,
+      loginAllowed: report.config.interactions.allowLogin,
+      purchaseAllowed: report.config.interactions.allowPurchase,
+      note: "Captured states are intended for safe read-only UI surfaces such as menus, dialogs, tabs, accordions, filters, carousels, and popovers."
+    }
+  };
+}
+
+function enterpriseReadinessModel(report: AuditReport) {
+  const hasVisualReview = Boolean(report.agentVisualReview);
+  const requiredArtifactFiles = [
+    "performance-audit.json",
+    "accessibility-detail.json",
+    "privacy-tracking.json",
+    "resource-audit.json",
+    "interaction-states.json",
+    "related-workflows.json"
+  ];
+  return {
+    schemaVersion: "design-review-workflow.enterprise-readiness.v1",
+    auditId: report.auditId,
+    generatedAt: new Date().toISOString(),
+    status: report.businessGradeStatus === "business_grade" && hasVisualReview ? "business_grade_ready" : "agent_review_pending",
+    businessGradeStatus: report.businessGradeStatus,
+    reviewMode: report.config.reviewMode,
+    gates: [
+      { name: "Captured pages", status: report.pages.length > 0 ? "pass" : "fail" },
+      { name: "Screenshot evidence", status: report.pages.some((page) => Object.keys(page.screenshots).length > 0) ? "pass" : "fail" },
+      { name: "Safe interaction evidence", status: report.pages.some((page) => page.interactionStates.length > 0) ? "pass" : "warn" },
+      { name: "Business-grade visual review", status: hasVisualReview ? "pass" : "pending" },
+      { name: "Related workflow seam", status: "pass" }
+    ],
+    requiredArtifacts: requiredArtifactFiles.map((file) => ({ file: `report/${file}`, status: "written_by_report_bundle" })),
+    limitations:
+      report.businessGradeStatus === "business_grade"
+        ? report.limitations
+        : [
+            ...report.limitations,
+            "Enterprise local evidence is present, but subjective business-grade design judgment requires a validated AgentVisualReview import."
+          ]
+  };
+}
+
 function emptySuppressionReport(report: AuditReport) {
   return {
     schemaVersion: "design-review-workflow.suppression-report.v1",
@@ -324,6 +584,61 @@ function renderPatchPlan(report: AuditReport): string {
   return `${lines.join("\n")}\n`;
 }
 
+function renderStakeholderRecommendations(report: AuditReport): string {
+  const lines = [
+    "# Stakeholder Recommendations",
+    "",
+    `Target: ${report.config.url}`,
+    `Audit: ${report.auditId}`,
+    `Business-grade status: ${report.businessGradeStatus}`,
+    "",
+    "## Recommended Sequence",
+    "",
+    "1. Resolve high-priority clarity, trust, mobile, and conversion blockers with evidence-backed acceptance criteria.",
+    "2. Validate risky public-facing changes with the accountable stakeholder before implementation.",
+    "3. Rerun the audit and compare against the baseline after changes land.",
+    ""
+  ];
+  if (report.businessGradeStatus !== "business_grade") {
+    lines.push("## Review Limitation");
+    lines.push("");
+    lines.push("This audit has not imported a validated multimodal visual review. Treat subjective style, taste, and redesign direction as pending until `business-grade lint` passes.");
+    lines.push("");
+  }
+  lines.push("## Priority Recommendations");
+  lines.push("");
+  for (const finding of report.findings.slice(0, 12)) {
+    lines.push(`### ${finding.title}`);
+    lines.push(`- Priority: ${finding.priorityScore}`);
+    lines.push(`- Severity: ${finding.severity}`);
+    lines.push(`- Owner: ${finding.implementation.owner.join(", ")}`);
+    lines.push(`- Evidence URL: ${finding.evidence.url}`);
+    lines.push(`- Evidence refs: ${finding.evidence.screenshotRefs.join(", ") || "page evidence only"}`);
+    lines.push(`- Recommendation: ${finding.recommendation}`);
+    lines.push(`- Acceptance: ${finding.implementation.acceptanceCriteria.join("; ")}`);
+    lines.push("");
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function renderBeforeAfterComparison(report: AuditReport): string {
+  return `# Before / After Comparison
+
+Target: ${report.config.url}
+Audit: ${report.auditId}
+
+No baseline audit was supplied to this report bundle, so before/after deltas are not computed here.
+
+When a compatible baseline exists, run:
+
+\`\`\`bash
+node apps/cli/dist/index.js compare <baseline-audit-dir> <candidate-audit-dir>
+\`\`\`
+
+Use the generated comparison JSON for score deltas, finding deltas, and screenshot pixel diffs where screenshots are compatible.
+`;
+}
+
 function renderManualActions(report: AuditReport): string {
   const gated = report.findings.filter(approvalRequiredForFinding);
   const lines = ["# Manual Actions", "", "Human approval is required before implementing risky public-facing changes.", ""];
@@ -380,6 +695,28 @@ function approvalRequiredForFinding(finding: Finding): boolean {
 
 function percent(numerator: number, denominator: number): number {
   return Math.round((numerator / denominator) * 100);
+}
+
+function performanceRisks(performance: AuditReport["pages"][number]["performance"]): string[] {
+  if (!performance || performance.status !== "completed") return ["Performance evidence was not completed for this page."];
+  const risks: string[] = [];
+  if (typeof performance.loadEventMs === "number" && performance.loadEventMs > 3500) risks.push("Load event exceeded 3500ms in local capture.");
+  if (typeof performance.firstContentfulPaintMs === "number" && performance.firstContentfulPaintMs > 2500) risks.push("First contentful paint exceeded 2500ms in local capture.");
+  if ((performance.resourceSummary?.thirdPartyResources ?? 0) > 12) risks.push("Multiple third-party resources were observed.");
+  if ((performance.resourceSummary?.largestResources ?? []).some((resource) => (resource.transferSizeKb ?? 0) > 1024)) risks.push("At least one resource exceeded 1MB transfer size.");
+  return risks;
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))].sort();
+}
+
+function originOf(value: string): string | undefined {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
 }
 
 function increment(map: Map<string, number>, value: string): void {

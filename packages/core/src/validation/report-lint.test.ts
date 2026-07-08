@@ -83,6 +83,8 @@ function sampleReport(): AuditReport {
       maxPages: 1,
       language: "auto",
       competitors: [],
+      relatedWorkflows: [],
+      reviewMode: "auto",
       viewports: [{ name: "desktop", width: 1440, height: 1000, deviceScaleFactor: 1, isMobile: false }],
       capture: { settleScroll: true, reducedMotion: true, waitForImages: true, maxScrollPasses: 2, scrollStepRatio: 0.75, stepDelayMs: 180, settleTimeoutMs: 4000 },
       crawl: { sameDomainOnly: true, includeSubdomains: false, maxDepth: 1, excludePatterns: [] },
@@ -96,6 +98,9 @@ function sampleReport(): AuditReport {
         allowPurchase: false,
         allowLogin: false
       },
+      retries: { capture: 1, provider: 1, export: 0 },
+      privacy: { redactLocalPathsInExports: true, redactSecretsInExports: true, redactCookiesInReports: true },
+      retention: { screenshots: "keep", providerPayloads: "keep", exports: "keep", dryRunOnly: true },
       outputs: { markdown: true, html: true, pdf: false, json: true, screenshotAnnotations: "basic" },
       modelRouter: { qualityProfile: "balanced", allowOpenRouter: false, allowOpenAI: false, allowAnthropic: false, allowGemini: false },
       scoring: { strictness: "enterprise", tone: "client_ready" }

@@ -1,4 +1,16 @@
-import { AuditConfig, AuditConfigSchema, AuditMode, CaptureSettings, InteractionSettings, ViewportConfig } from "../schemas/audit.js";
+import {
+  AuditConfig,
+  AuditConfigSchema,
+  AuditMode,
+  CaptureSettings,
+  InteractionSettings,
+  PrivacySettings,
+  RelatedWorkflowSpec,
+  RetentionSettings,
+  RetrySettings,
+  ReviewMode,
+  ViewportConfig
+} from "../schemas/audit.js";
 import { AUDIT_ROOT_ENV, DEFAULT_AUDIT_ROOT } from "../storage/audit-output.js";
 import { createAuditId } from "../utils/id.js";
 
@@ -29,6 +41,8 @@ export type AuditInput = {
   industry?: string;
   brandContext?: string;
   competitors?: string[];
+  relatedWorkflows?: RelatedWorkflowSpec[];
+  reviewMode?: ReviewMode;
   auditRoot?: string;
   auditName?: string;
   auditSlug?: string;
@@ -40,6 +54,9 @@ export type AuditInput = {
   outputMarkdown?: boolean;
   capture?: Partial<CaptureSettings>;
   interactions?: Partial<InteractionSettings>;
+  retries?: Partial<RetrySettings>;
+  privacy?: Partial<PrivacySettings>;
+  retention?: Partial<RetentionSettings>;
 };
 
 export function createAuditConfig(input: AuditInput): AuditConfig {
@@ -57,6 +74,8 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
     industry: input.industry,
     brandContext: input.brandContext,
     competitors: input.competitors ?? [],
+    relatedWorkflows: input.relatedWorkflows ?? [],
+    reviewMode: input.reviewMode ?? "auto",
     auditRoot: input.auditRoot ?? process.env[AUDIT_ROOT_ENV] ?? DEFAULT_AUDIT_ROOT,
     auditName: input.auditName,
     auditSlug: input.auditSlug,
@@ -80,6 +99,25 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
       allowPurchase: false,
       allowLogin: false,
       ...(input.interactions ?? {})
+    },
+    retries: {
+      capture: 1,
+      provider: 1,
+      export: 0,
+      ...(input.retries ?? {})
+    },
+    privacy: {
+      redactLocalPathsInExports: true,
+      redactSecretsInExports: true,
+      redactCookiesInReports: true,
+      ...(input.privacy ?? {})
+    },
+    retention: {
+      screenshots: "keep",
+      providerPayloads: "keep",
+      exports: "keep",
+      dryRunOnly: true,
+      ...(input.retention ?? {})
     },
     outputs: {
       markdown: input.outputMarkdown ?? true,

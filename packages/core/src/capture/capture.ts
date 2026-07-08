@@ -43,7 +43,7 @@ export async function captureEvidence(
         current: index + 1,
         total: candidates.length
       });
-      const pageEvidence = await capturePage(browser, config, paths, candidate.url, index + 1);
+      const pageEvidence = await capturePageWithRetry(browser, config, paths, candidate.url, index + 1, onProgress);
       pages.push(pageEvidence);
       await writeJson(path.join(paths.extractedPages, `${pageEvidence.pageId}.json`), pageEvidence);
     }
@@ -63,6 +63,33 @@ export async function captureEvidence(
   } finally {
     await browser.close();
   }
+}
+
+async function capturePageWithRetry(
+  browser: Browser,
+  config: AuditConfig,
+  paths: AuditPaths,
+  url: string,
+  index: number,
+  onProgress?: (event: ProgressEvent) => void
+): Promise<PageEvidence> {
+  const maxAttempts = Math.max(1, config.retries.capture + 1);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await capturePage(browser, config, paths, url, index);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) break;
+      onProgress?.({
+        stage: "capture_retry",
+        message: `Retrying capture for ${url} after ${classifyCaptureFailure(error)}`,
+        current: attempt,
+        total: maxAttempts - 1
+      });
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? `Failed to capture ${url}`));
 }
 
 async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPaths, url: string, index: number): Promise<PageEvidence> {
@@ -147,6 +174,15 @@ async function capturePage(browser: Browser, config: AuditConfig, paths: AuditPa
     performance,
     accessibility
   };
+}
+
+function classifyCaptureFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/timeout|timed out/i.test(message)) return "capture_timeout";
+  if (/ERR_NAME_NOT_RESOLVED|ENOTFOUND|EAI_AGAIN|DNS/i.test(message)) return "capture_dns";
+  if (/ERR_SSL|certificate|TLS/i.test(message)) return "capture_tls";
+  if (/net::ERR|ECONN|socket|network|fetch/i.test(message)) return "capture_network";
+  return "capture_error";
 }
 
 async function newPage(browser: Browser, viewport: ViewportConfig, config: AuditConfig): Promise<Page> {

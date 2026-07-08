@@ -20,19 +20,31 @@ export type MonitorConfig = {
     targetAudience?: string;
     industry?: string;
     brandContext?: string;
+    thresholds?: MonitorThresholds;
   }>;
+};
+
+export type MonitorThresholds = {
+  minimumScore?: number;
+  maxFindings?: number;
+  maxHighSeverityFindings?: number;
+  maxScoreDrop?: number;
 };
 
 export type MonitorRunResult = {
   generatedAt: string;
+  status: "pass" | "fail";
   runs: Array<{
     name: string;
     url: string;
+    status: "pass" | "fail";
     auditRoot: string;
     score: number;
     findings: number;
+    highSeverityFindings: number;
     comparisonPath?: string;
     scoreDelta?: number;
+    thresholdFailures: string[];
   }>;
 };
 
@@ -70,18 +82,28 @@ export async function runMonitorConfig(configPath: string, workspaceRoot = proce
       comparisonPath = compare.outputPath;
       scoreDelta = compare.result.scoreDelta;
     }
+    const highSeverityFindings = result.report.findings.filter((finding) => finding.severity === "critical" || finding.severity === "high").length;
+    const thresholdFailures = evaluateThresholds(monitor.thresholds, {
+      score: result.report.scorecard.overallScore,
+      findings: result.report.findings.length,
+      highSeverityFindings,
+      scoreDelta
+    });
     runs.push({
       name: monitor.name,
       url: monitor.url,
+      status: thresholdFailures.length === 0 ? "pass" : "fail",
       auditRoot: result.auditRoot,
       score: result.report.scorecard.overallScore,
       findings: result.report.findings.length,
+      highSeverityFindings,
       comparisonPath,
-      scoreDelta
+      scoreDelta,
+      thresholdFailures
     });
   }
 
-  const output: MonitorRunResult = { generatedAt, runs };
+  const output: MonitorRunResult = { generatedAt, status: runs.some((run) => run.status === "fail") ? "fail" : "pass", runs };
   const outputPath = path.join(configuredAuditRoot(undefined, workspaceRoot), "monitor-runs", `${generatedAt.replace(/[:.]/g, "-")}.json`);
   await writeJson(outputPath, output);
   return output;
@@ -94,10 +116,42 @@ export function sampleMonitorConfig(): MonitorConfig {
         name: "Example",
         url: "https://example.com",
         mode: "quick_scan",
-        maxPages: 1
+        maxPages: 1,
+        thresholds: {
+          minimumScore: 60,
+          maxFindings: 12,
+          maxHighSeverityFindings: 3,
+          maxScoreDrop: 8
+        }
       }
     ]
   };
+}
+
+function evaluateThresholds(
+  thresholds: MonitorThresholds | undefined,
+  metrics: { score: number; findings: number; highSeverityFindings: number; scoreDelta?: number }
+): string[] {
+  if (!thresholds) return [];
+  const failures: string[] = [];
+  if (typeof thresholds.minimumScore === "number" && metrics.score < thresholds.minimumScore) {
+    failures.push(`score ${metrics.score} is below minimum ${thresholds.minimumScore}`);
+  }
+  if (typeof thresholds.maxFindings === "number" && metrics.findings > thresholds.maxFindings) {
+    failures.push(`findings ${metrics.findings} exceed max ${thresholds.maxFindings}`);
+  }
+  if (typeof thresholds.maxHighSeverityFindings === "number" && metrics.highSeverityFindings > thresholds.maxHighSeverityFindings) {
+    failures.push(`high-severity findings ${metrics.highSeverityFindings} exceed max ${thresholds.maxHighSeverityFindings}`);
+  }
+  if (
+    typeof thresholds.maxScoreDrop === "number" &&
+    typeof metrics.scoreDelta === "number" &&
+    metrics.scoreDelta < 0 &&
+    Math.abs(metrics.scoreDelta) > thresholds.maxScoreDrop
+  ) {
+    failures.push(`score dropped ${Math.abs(metrics.scoreDelta)} points, exceeding max drop ${thresholds.maxScoreDrop}`);
+  }
+  return failures;
 }
 
 async function latestAuditForUrl(workspaceRoot: string, url: string) {

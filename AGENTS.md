@@ -51,6 +51,14 @@ Required outputs for the MVP:
 - Route template inventory
 - Visual system inventory
 - Experience timing summary
+- Performance audit artifact with browser navigation/resource timing and Lighthouse-compatible status fields
+- Accessibility detail artifact for axe basics, forms, images, and contrast candidates
+- Privacy/tracking signal artifact for third-party origins, external links, form presence, and limitations
+- Resource audit artifact for resource counts, largest resources, and render-blocking candidates
+- Interaction-state inventory
+- Related workflow metadata under `related-workflows.json`
+- Enterprise readiness summary
+- Stakeholder recommendations and before/after comparison notes
 - Source candidate map when a target repo is explicitly supplied
 - Patch plan and changed-file proposal
 - Redesign briefing
@@ -94,9 +102,13 @@ The implemented MVP is deterministic and local-first:
 - Local audit index under `audit-reports/audit-index.json`
 - SQLite-backed local audit index under `audit-reports/audit-index.sqlite` with JSON fallback
 - Regression compare command with score deltas, finding deltas, and screenshot pixel diffs where screenshots are compatible
-- Environment-configured LLM provider adapters for future reviewer use
+- Environment-configured LLM provider adapters and provider-backed `agent-review generate`
+- Provider-backed business-grade `run --business-grade --review-mode auto` lane that attempts generate, validate, import, and business-grade lint when credentials are configured
+- Explicit business-grade review modes: `auto`, `manual`, and `hybrid`
 - Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
-- Local monitor runs from YAML/JSON configuration
+- Local monitor runs from YAML/JSON configuration with optional score/finding regression thresholds for CI launch gates
+- Configured bounded retries for capture and provider review generation
+- Classified audit-state failures with step ledger, retry settings, and resumability metadata in `audit-state.json`
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
 - Primary `run` command for audit, validation, and agent handoff
 - Quiet agent execution by default for `scripts/agent-run.sh` and `npm run agent`, which emit machine-readable JSON closeout for agents to summarize once at the end
@@ -106,6 +118,11 @@ The implemented MVP is deterministic and local-first:
 - Multimodal agent visual-review pack generation via `review-pack build`
 - Visual-review import via `agent-review import`, with validation against captured screenshot IDs and unsupported-claim checks
 - `business-grade lint` for the business-grade gate separate from technical `report lint`
+- `enterprise verify --report <audit-dir>` for enterprise-local bundle completeness, screenshot coverage, business-grade state, and related-workflow seam checks
+- `enterprise verify --baseline <audit-dir> --max-score-drop <n>` for score-drift checks against a compatible baseline
+- `enterprise retention-plan --report <audit-dir>` for non-destructive local retention planning
+- `enterprise fixtures` for the enterprise fixture corpus and eval expectations
+- Related workflow seam via `--related-workflow seo:/path/to/seo-audit`, which writes linked metadata only and never imports SEO findings into design findings or scoring
 - Grouped root-cause issues under `grouped-issues.json`
 - Top-level static audit dashboard under `index.html`; this is the canonical no-server report entrypoint for agents and handoff.
 - Standalone static hosted report under `report/hosted/index.html` with copied screenshot assets
@@ -116,13 +133,16 @@ The implemented MVP is deterministic and local-first:
 - Issue evidence sheets with numbered markers and side legends for agent visual review
 - Strict report lint, quality gate files, generated workflow manifest, handoff JSON, evidence index, implementation plan, and agent handoff instructions
 - Design-native parity mechanics: `benchmark`, `standards update`, non-destructive `suppressions`, `--repo` source mapping, patch-plan proposals, changed-file proposals, evidence JSONL, route templates, visual-system inventory, and experience-timing artifacts
+- Enterprise-local evidence artifacts: `performance-audit.json`, `accessibility-detail.json`, `privacy-tracking.json`, `resource-audit.json`, `interaction-states.json`, `related-workflows.json`, and `enterprise-readiness.json`
+- Client-grade local deliverables: `executive-summary.md`, `stakeholder-recommendations.md`, and `before-after-comparison.md`
+- Branded local export metadata via `export --client-name --prepared-by --brand-logo`
+- Export redaction for local paths and secret/cookie-looking values by default
 - Latest-audit pointers under `audit-reports/latest-audit.json` and `audit-reports/<site>/latest-audit.json`
 - axe-core accessibility basics where injection succeeds
-- Browser navigation-timing performance basics; Lighthouse-grade audits are intentionally external to this dependency-light workflow
+- Browser navigation/resource-timing performance basics with Lighthouse-compatible status fields; actual Lighthouse runs remain external unless a completed Lighthouse result is supplied
 
 The following are planned seams, not completed product claims unless code and tests prove otherwise:
 
-- External LLM-backed review agents
 - Provider-specific model quality claims
 - Business-grade report claims without imported multimodal agent visual review
 - Continuous scheduled monitoring
@@ -132,7 +152,7 @@ The following are planned seams, not completed product claims unless code and te
 - Live Jira, Linear, GitHub Issues, Notion, Slack, or Google Docs writes
 - Built-in cloud upload. Agents with explicit connector access may upload generated export packages, but core should stay local-first.
 - Full WCAG certification
-- Deep SEO, analytics, privacy, bundle, server, or tracking analysis
+- Deep SEO, analytics, legal privacy compliance, bundle internals, server diagnostics, or tracker classification completeness
 
 ## Non-Goals For MVP
 
@@ -197,8 +217,12 @@ Primary built CLI command:
 
 ```bash
 node apps/cli/dist/index.js run <public-url> --business-grade --format json  # quiet agent closeout path
+node apps/cli/dist/index.js run <public-url> --business-grade --review-mode auto --format json
+node apps/cli/dist/index.js run <public-url> --business-grade --review-mode manual --format json
+node apps/cli/dist/index.js run <public-url> --business-grade --review-mode hybrid --format json
 node apps/cli/dist/index.js run <public-url> --business-grade
 node apps/cli/dist/index.js run <public-url> --business-grade --repo <target-website-source-repo>
+node apps/cli/dist/index.js run <public-url> --business-grade --related-workflow seo:/path/to/seo-audit
 node apps/cli/dist/index.js run <public-url> --business-grade --audit-root /path/to/design-review-workflow/audit-reports
 node apps/cli/dist/index.js run <public-url>  # low-level automated-only smoke/CI path
 ```
@@ -232,6 +256,7 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `validation.json`
 - `quality-gate.json`
 - `business-grade-gate.json`
+- `provider-review.json` when business-grade review mode runs
 - `grouped-issues.json`
 - `screenshot-manifest.json`
 - `agent-review-pack/review-pack-manifest.json`
@@ -251,11 +276,20 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `route-templates.json`
 - `visual-system.json`
 - `experience-timing.json`
+- `performance-audit.json`
+- `accessibility-detail.json`
+- `privacy-tracking.json`
+- `resource-audit.json`
+- `interaction-states.json`
+- `related-workflows.json`
+- `enterprise-readiness.json`
 - `design-benchmark.json`
 - `design-benchmark.md`
 - `standards-registry.json`
 - `suppression-report.json`
 - `actionability.json`
+- `stakeholder-recommendations.md`
+- `before-after-comparison.md`
 - `findings.json`
 - `score.json`
 - `report-dashboard.json`
@@ -291,6 +325,10 @@ node apps/cli/dist/index.js agent-review generate --report <audit-dir> --provide
 node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>
 node apps/cli/dist/index.js business-grade lint --report <audit-dir>
+node apps/cli/dist/index.js enterprise verify --report <audit-dir>
+node apps/cli/dist/index.js enterprise verify --report <audit-dir> --baseline <baseline-audit-dir> --max-score-drop 5
+node apps/cli/dist/index.js enterprise retention-plan --report <audit-dir>
+node apps/cli/dist/index.js enterprise fixtures
 node apps/cli/dist/index.js benchmark --report <audit-dir>
 node apps/cli/dist/index.js plan build --report <audit-dir>
 node apps/cli/dist/index.js standards update --report <audit-dir>
@@ -341,9 +379,15 @@ projects/       Legacy audit output root. Read-compatible; do not use for new de
 - `source-candidates.json`, `patch-plan.md`, and `changed-files.json` are proposal artifacts, not proof that edits were made.
 - Suppressions are non-destructive. They must be recorded in `suppression-report.json` and must not remove entries from `findings.json`.
 - Every normal audit must write `validation.json` and `quality-gate.json`.
+- Every normal audit must write enterprise-local evidence artifacts: `performance-audit.json`, `accessibility-detail.json`, `privacy-tracking.json`, `resource-audit.json`, `interaction-states.json`, `related-workflows.json`, and `enterprise-readiness.json`.
+- Related SEO workflow artifacts must remain linked metadata only. They must not be imported into `findings.json`, alter design scoring, or imply this workflow ran SEO checks.
+- Export packages must redact local paths and secret/cookie-looking values by default unless an explicit CLI override is supplied.
+- Retention behavior must be non-destructive unless a future explicit cleanup command is added. The implemented retention command plans cleanup candidates only.
 - `report lint --strict` must fail unsupported report bundles.
 - `business-grade lint` must fail unless a strict validated `AgentVisualReview` has been imported.
-- `run --business-grade` must generate the review pack and leave the audit in `agent_review_pending` until import.
+- `run --business-grade --review-mode manual` must generate the review pack and leave the audit in `agent_review_pending` until import.
+- `run --business-grade --review-mode auto` must attempt provider-backed visual review when credentials exist, then validate, import, and business-grade lint. If no provider is configured or provider generation fails, it must leave an honest pending state and write provider failure classification.
+- `run --business-grade --review-mode hybrid` must attempt provider-backed visual review and record that stakeholder/manual signoff is still recommended.
 - Automated scans must be labeled `automated_scan`, not `business_grade`.
 - Automated scans must not provide subjective style/taste verdicts; they must show that visual review is required.
 - Scores must remain capped when `businessGradeStatus !== business_grade`.
@@ -362,6 +406,7 @@ Before closing implementation work, run the strongest feasible local checks:
 - `npm test`
 - `npm run build`
 - `npm run doctor`
+- `npm run enterprise:verify`
 - At least one smoke audit against a small local or public page when browser dependencies are installed
 - A compare smoke when two compatible audit snapshots exist
 

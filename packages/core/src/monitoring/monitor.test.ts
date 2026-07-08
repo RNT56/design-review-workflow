@@ -15,5 +15,11 @@ describe("monitor config", () => {
 
   it("provides a sample config", () => {
     expect(sampleMonitorConfig().monitors).toHaveLength(1);
+    expect(sampleMonitorConfig().monitors[0].thresholds).toMatchObject({
+      minimumScore: 60,
+      maxFindings: 12,
+      maxHighSeverityFindings: 3,
+      maxScoreDrop: 8
+    });
   });
 });

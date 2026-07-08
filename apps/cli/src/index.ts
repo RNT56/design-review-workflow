@@ -9,6 +9,7 @@ import {
   createAuditConfig,
   createModelRouterFromEnv,
   defaultDesignStandardsRegistry,
+  enterpriseFixtureManifest,
   AUDIT_ROOT_ENV,
   buildReviewPack,
   evaluateBusinessGradeGate,
@@ -20,17 +21,21 @@ import {
   lintAuditReport,
   markAgentReviewPending,
   parseAgentVisualReview,
+  planAuditRetention,
   readReportFromAuditDir,
   readProjectIndex,
   runAudit,
   runMonitorConfig,
   sampleMonitorConfig,
   validateReport,
+  verifyEnterpriseAudit,
   type AuditInput,
   type AuditExportFormat,
   type AuditExportProfile,
+  type RelatedWorkflowSpec,
   type ProjectIndexEntry,
   type ReportLintResult,
+  type ReviewMode,
   type RunAuditResult
 } from "../../../packages/core/src/index.js";
 
@@ -51,6 +56,7 @@ program
   .option("--industry <text>", "Industry")
   .option("--brand-context <text>", "Brand context")
   .option("--competitor <url...>", "Competitor URL(s)")
+  .option("--related-workflow <kind:path>", "Related local workflow artifact, e.g. seo:/path/to/seo-audit", collectRepeatedOption, [])
   .option("--repo <path>", "Target website source repository for read-only source candidates")
   .option("--audit-root <dir>", `Audit output root (default: ./audit-reports or ${AUDIT_ROOT_ENV})`)
   .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
@@ -63,6 +69,7 @@ program
   .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
   .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
   .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+  .option("--capture-retries <number>", "Retry count for transient page capture failures", parseNonNegativeIntValue)
   .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
   .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
   .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
@@ -79,6 +86,7 @@ program
   .argument("<url>", "Website URL")
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
   .option("--repo <path>", "Target website source repository for read-only source candidates")
+  .option("--related-workflow <kind:path>", "Related local workflow artifact, e.g. seo:/path/to/seo-audit", collectRepeatedOption, [])
   .option("--audit-root <dir>", "Audit output root")
   .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
   .option("--output <dir>", "Explicit audit output directory override")
@@ -86,6 +94,7 @@ program
   .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
   .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
   .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+  .option("--capture-retries <number>", "Retry count for transient page capture failures", parseNonNegativeIntValue)
   .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
   .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
   .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
@@ -98,6 +107,7 @@ program
   .argument("<url>", "Website URL")
   .option("--max-pages <number>", "Maximum pages to review", parseIntValue)
   .option("--competitor <url...>", "Competitor URL(s)")
+  .option("--related-workflow <kind:path>", "Related local workflow artifact, e.g. seo:/path/to/seo-audit", collectRepeatedOption, [])
   .option("--repo <path>", "Target website source repository for read-only source candidates")
   .option("--audit-root <dir>", "Audit output root")
   .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
@@ -106,6 +116,7 @@ program
   .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
   .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
   .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+  .option("--capture-retries <number>", "Retry count for transient page capture failures", parseNonNegativeIntValue)
   .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
   .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
   .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
@@ -344,6 +355,10 @@ program
   .option("--format <format>", "zip or directory", "zip")
   .option("--output <path>", "Output zip or directory path")
   .option("--include-private-paths", "Do not redact local absolute paths in text artifacts")
+  .option("--include-sensitive-values", "Do not redact secret-looking or cookie-looking values in text artifacts")
+  .option("--client-name <name>", "Optional local export branding/client name")
+  .option("--prepared-by <name>", "Optional local export prepared-by label")
+  .option("--brand-logo <path>", "Optional local export brand/logo path metadata")
   .option("--overwrite", "Replace an existing export output")
   .action(async (options) => {
     const result = await exportAudit({
@@ -352,7 +367,11 @@ program
       format: String(options.format) as AuditExportFormat,
       outputPath: stringOption(options.output),
       includePrivatePaths: options.includePrivatePaths === true,
-      overwrite: options.overwrite === true
+      includeSensitiveValues: options.includeSensitiveValues === true,
+      overwrite: options.overwrite === true,
+      clientName: stringOption(options.clientName),
+      preparedBy: stringOption(options.preparedBy),
+      brandLogoPath: stringOption(options.brandLogo)
     });
     console.log(`Export profile: ${result.profile}`);
     console.log(`Export format: ${result.format}`);
@@ -362,6 +381,7 @@ program
     console.log(`Manifest: ${result.manifestPath}`);
     console.log(`Checksums: ${result.checksumsPath}`);
     console.log(`Local paths redacted: ${result.localPathsRedacted ? "yes" : "no"}`);
+    console.log(`Sensitive values redacted: ${result.sensitiveValuesRedacted ? "yes" : "no"}`);
   });
 
 program
@@ -392,6 +412,75 @@ program
     }
     if (lint.status === "fail") {
       process.exitCode = 1;
+    }
+  });
+
+const enterprise = program.command("enterprise").description("Enterprise-local verification utilities");
+enterprise
+  .command("verify")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .option("--allow-pending", "Allow agent_review_pending business-grade state as a warning")
+  .option("--baseline <auditDir>", "Optional baseline audit directory for score-drift checks")
+  .option("--max-score-drop <number>", "Maximum allowed score drop when baseline is supplied", parseNonNegativeIntValue)
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (options) => {
+    const auditDir = String(options.report);
+    const result = await verifyEnterpriseAudit({
+      auditDir,
+      allowPending: options.allowPending === true,
+      baselineAuditDir: stringOption(options.baseline),
+      maxScoreDrop: typeof options.maxScoreDrop === "number" ? Number(options.maxScoreDrop) : undefined
+    });
+    await writeJsonFile(path.join(auditDir, "report", "enterprise-verify.json"), result);
+    if (options.format === "json") {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(`Enterprise verify: ${result.status}`);
+      console.log(`Pages: ${result.summary.pages}`);
+      console.log(`Findings: ${result.summary.findings}`);
+      console.log(`Screenshots: ${result.summary.screenshots}`);
+      console.log(`Business-grade status: ${result.summary.businessGradeStatus}`);
+      for (const check of result.checks) {
+        console.log(`- ${check.status}: ${check.name} - ${check.message}`);
+      }
+      console.log(`Result JSON: ${path.join(auditDir, "report", "enterprise-verify.json")}`);
+    }
+    if (result.status === "fail") {
+      process.exitCode = 1;
+    }
+  });
+enterprise
+  .command("retention-plan")
+  .requiredOption("--report <auditDir>", "Audit directory")
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (options) => {
+    const auditDir = String(options.report);
+    const result = await planAuditRetention(auditDir);
+    await writeJsonFile(path.join(auditDir, "report", "retention-plan.json"), result);
+    if (options.format === "json") {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(`Retention plan: ${path.join(auditDir, "report", "retention-plan.json")}`);
+      console.log(`Files: ${result.totals.files}`);
+      console.log(`Bytes: ${result.totals.bytes}`);
+      console.log(`Cleanup candidates: ${result.totals.cleanupCandidates}`);
+      for (const group of result.groups) {
+        console.log(`- ${group.name}: ${group.policy}, ${group.files} files, ${group.bytes} bytes`);
+      }
+    }
+  });
+enterprise
+  .command("fixtures")
+  .option("--format <format>", "summary or json", "summary")
+  .action((options) => {
+    const manifest = enterpriseFixtureManifest();
+    if (options.format === "json") {
+      console.log(JSON.stringify(manifest, null, 2));
+    } else {
+      console.log(`Enterprise fixture corpus: ${manifest.fixtures.length} archetypes`);
+      for (const fixture of manifest.fixtures) {
+        console.log(`- ${fixture.id}: ${fixture.archetype}`);
+      }
     }
   });
 
@@ -598,10 +687,15 @@ monitor
   .action(async (configPath) => {
     const result = await runMonitorConfig(configPath, process.cwd());
     console.log(`Monitor run: ${result.generatedAt}`);
+    console.log(`Status: ${result.status}`);
     for (const run of result.runs) {
       const delta = run.scoreDelta === undefined ? "" : ` delta ${run.scoreDelta >= 0 ? "+" : ""}${run.scoreDelta}`;
-      console.log(`- ${run.name}: ${run.score}/100, ${run.findings} findings${delta}`);
+      console.log(`- ${run.status}: ${run.name}: ${run.score}/100, ${run.findings} findings, ${run.highSeverityFindings} high-severity${delta}`);
+      for (const failure of run.thresholdFailures) console.log(`  gate: ${failure}`);
       console.log(`  ${run.auditRoot}`);
+    }
+    if (result.status === "fail") {
+      process.exitCode = 1;
     }
   });
 monitor
@@ -626,12 +720,14 @@ type AgentCloseout = {
   auditId: string;
   url: string;
   mode: string;
+  reviewMode: ReviewMode;
   auditRoot: string;
   reportRoot: string;
   score: number;
   findings: number;
   businessGradeStatus: string;
   businessGradeGate?: unknown;
+  providerReview?: ProviderReviewCloseout;
   qualityGate: unknown;
   files: {
     auditIndex: string;
@@ -652,10 +748,20 @@ type AgentCloseout = {
     repoAnalysis: string;
     patchPlan: string;
     changedFiles: string;
+    performanceAudit: string;
+    accessibilityDetail: string;
+    privacyTracking: string;
+    resourceAudit: string;
+    interactionStates: string;
+    relatedWorkflows: string;
+    enterpriseReadiness: string;
+    stakeholderRecommendations: string;
+    beforeAfterComparison: string;
     designBenchmark: string;
     standardsRegistry: string;
     suppressionReport: string;
     businessGradeGate: string;
+    providerReview: string;
     groupedIssues: string;
     screenshotManifest: string;
     reviewPack: string;
@@ -671,6 +777,22 @@ type AgentCloseout = {
   };
 };
 
+type ProviderReviewCloseout = {
+  mode: ReviewMode;
+  status: "not_requested" | "skipped_manual" | "completed" | "pending_no_provider" | "failed";
+  attempted: boolean;
+  retryCount: number;
+  manualSignoffRecommended: boolean;
+  provider?: string;
+  model?: string;
+  generatedReviewPath?: string;
+  rawProviderOutputPath?: string;
+  canonicalReviewPath?: string;
+  businessGradeGateStatus?: string;
+  errorCategory?: string;
+  message?: string;
+};
+
 function configureAgentRunCommand(command: Command): void {
   command
     .argument("<url>", "Website URL")
@@ -681,6 +803,7 @@ function configureAgentRunCommand(command: Command): void {
     .option("--industry <text>", "Industry")
     .option("--brand-context <text>", "Brand context")
     .option("--competitor <url...>", "Competitor URL(s)")
+    .option("--related-workflow <kind:path>", "Related local workflow artifact, e.g. seo:/path/to/seo-audit", collectRepeatedOption, [])
     .option("--repo <path>", "Target website source repository for read-only source candidates")
     .option("--audit-root <dir>", "Audit output root")
     .option("--audit-name <name>", "Human-readable audit/site name used for the site folder slug")
@@ -690,6 +813,8 @@ function configureAgentRunCommand(command: Command): void {
     .option("--no-capture-reduced-motion", "Do not request prefers-reduced-motion during capture")
     .option("--capture-scroll-passes <number>", "Viewport scroll passes before screenshots", parseIntValue)
     .option("--capture-settle-timeout <ms>", "Maximum milliseconds to wait for visual readiness", parseIntValue)
+    .option("--capture-retries <number>", "Retry count for transient page capture failures", parseNonNegativeIntValue)
+    .option("--provider-retries <number>", "Retry count for transient provider visual-review failures", parseNonNegativeIntValue)
     .option("--no-interaction-state-capture", "Disable safe modal, menu, tab, accordion, and popover state screenshots")
     .option("--max-interaction-states <number>", "Maximum safe interaction states to capture per page", parseIntValue)
     .option("--max-interaction-states-per-viewport <number>", "Maximum safe interaction states to capture per viewport", parseIntValue)
@@ -698,34 +823,21 @@ function configureAgentRunCommand(command: Command): void {
     .option("--no-markdown", "Disable full Markdown report output")
     .option("--no-strict", "Do not fail the command on lint warnings")
     .option("--business-grade", "Build the visual review pack and require agent visual review import before business-grade pass")
+    .option("--review-mode <mode>", "Business-grade review mode: auto, manual, or hybrid", "auto")
     .option("--format <format>", "summary or json", "summary")
     .action(async (url, options) => {
       const format = options.format === "json" ? "json" : "summary";
-      const result = await runFromOptions(url, { ...options, quiet: format === "json" });
+      const reviewMode = normalizeReviewMode(String(options.reviewMode ?? "auto"));
+      const result = await runFromOptions(url, { ...options, reviewMode, quiet: format === "json" });
       let businessGate: unknown | undefined;
+      let providerReview: ProviderReviewCloseout | undefined;
       if (options.businessGrade) {
-        const pending = await markAgentReviewPending(result.auditRoot);
-        result.report = pending.report;
-        result.outputs = pending.outputs;
-        const packRoot = path.join(result.auditRoot, "report", "agent-review-pack");
-        const packManifest = path.join(packRoot, "review-pack-manifest.json");
-        if (!(await exists(packManifest))) {
-          await buildReviewPack(result.auditRoot);
-        }
-        businessGate = pending.gate;
-        if (format !== "json") {
-          console.log("");
-          console.log("Business-grade review pack ready.");
-          console.log(`Review pack: ${packRoot}`);
-          console.log(`Review pack manifest: ${packManifest}`);
-          console.log(`Review gallery: ${path.join(packRoot, "gallery", "index.html")}`);
-          console.log(`First viewports: ${path.join(result.auditRoot, "report", "contact-sheets", "first-viewports.png")}`);
-          console.log(`Contact sheets: ${path.join(result.auditRoot, "report", "contact-sheets")}`);
-          console.log(`Import required: node apps/cli/dist/index.js agent-review import --report ${result.auditRoot} --file agent-runs/<agent>/visual-review.json`);
-        }
+        const prepared = await runBusinessGradeLane(result, reviewMode, format !== "json");
+        businessGate = prepared.businessGate;
+        providerReview = prepared.providerReview;
       }
       const lint = await lintAuditReport(result.auditRoot, options.strict !== false);
-      const closeout = closeoutFromRunResult(result, lint, businessGate);
+      const closeout = closeoutFromRunResult(result, lint, businessGate, providerReview);
       if (format === "json") {
         console.log(JSON.stringify(closeout, null, 2));
       } else {
@@ -740,7 +852,151 @@ function configureAgentRunCommand(command: Command): void {
     });
 }
 
-function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult, businessGate?: unknown): AgentCloseout {
+async function runBusinessGradeLane(
+  result: RunAuditResult,
+  reviewMode: ReviewMode,
+  verbose: boolean
+): Promise<{ businessGate: unknown; providerReview: ProviderReviewCloseout }> {
+  const pending = await markAgentReviewPending(result.auditRoot);
+  result.report = pending.report;
+  result.outputs = pending.outputs;
+  const packRoot = path.join(result.auditRoot, "report", "agent-review-pack");
+  const packManifest = path.join(packRoot, "review-pack-manifest.json");
+  if (!(await exists(packManifest))) {
+    await buildReviewPack(result.auditRoot);
+  }
+
+  if (reviewMode === "manual") {
+    const providerReview: ProviderReviewCloseout = {
+      mode: reviewMode,
+      status: "skipped_manual",
+      attempted: false,
+      retryCount: 0,
+      manualSignoffRecommended: true,
+      message: "Manual review mode selected. Provider-backed visual review was not attempted."
+    };
+    await writeProviderReviewArtifact(result.auditRoot, providerReview);
+    printBusinessGradePack(result.auditRoot, verbose, providerReview);
+    return { businessGate: pending.gate, providerReview };
+  }
+
+  const generation = await generateAgentVisualReviewWithRetry(result.auditRoot, result.report.config.retries.provider);
+  if (generation.result) {
+    result.report = generation.result.report;
+    result.outputs = generation.result.outputs;
+    const providerReview: ProviderReviewCloseout = {
+      mode: reviewMode,
+      status: "completed",
+      attempted: true,
+      retryCount: generation.retryCount,
+      manualSignoffRecommended: reviewMode === "hybrid",
+      provider: generation.result.provider,
+      model: generation.result.model,
+      generatedReviewPath: generation.result.generatedReviewPath,
+      rawProviderOutputPath: generation.result.rawProviderOutputPath,
+      canonicalReviewPath: generation.result.canonicalReviewPath,
+      businessGradeGateStatus: generation.result.gate.status,
+      message:
+        reviewMode === "hybrid"
+          ? "Provider-backed visual review completed. Hybrid mode records that stakeholder signoff is still recommended."
+          : "Provider-backed visual review completed, validated, imported, and linted."
+    };
+    await writeProviderReviewArtifact(result.auditRoot, providerReview);
+    printBusinessGradePack(result.auditRoot, verbose, providerReview);
+    return { businessGate: generation.result.gate, providerReview };
+  }
+
+  const errorCategory = classifyProviderError(generation.error);
+  const providerReview: ProviderReviewCloseout = {
+    mode: reviewMode,
+    status: errorCategory === "no_provider" ? "pending_no_provider" : "failed",
+    attempted: errorCategory !== "no_provider",
+    retryCount: generation.retryCount,
+    manualSignoffRecommended: true,
+    errorCategory,
+    message: generation.error instanceof Error ? generation.error.message : String(generation.error ?? "Unknown provider error")
+  };
+  await writeProviderReviewArtifact(result.auditRoot, providerReview);
+  printBusinessGradePack(result.auditRoot, verbose, providerReview);
+  return { businessGate: pending.gate, providerReview };
+}
+
+async function generateAgentVisualReviewWithRetry(
+  auditRoot: string,
+  retries: number
+): Promise<{ result?: Awaited<ReturnType<typeof generateAgentVisualReview>>; error?: unknown; retryCount: number }> {
+  let retryCount = 0;
+  let lastError: unknown;
+  const maxAttempts = Math.max(1, retries + 1);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      return {
+        result: await generateAgentVisualReview(auditRoot, { provider: "auto" }),
+        retryCount
+      };
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts - 1 || !isRetryableProviderError(error)) break;
+      retryCount += 1;
+      await sleep(750);
+    }
+  }
+  return { error: lastError, retryCount };
+}
+
+function classifyProviderError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/no (model provider|llm provider)|no model provider configured/i.test(message)) return "no_provider";
+  if (/401|403|unauthorized|forbidden|invalid api key|authentication|auth/i.test(message)) return "provider_auth";
+  if (/unsupported agent-review provider|model env|api[_ -]?key.*model/i.test(message)) return "provider_config";
+  if (/timeout|timed out|aborted/i.test(message)) return "provider_timeout";
+  if (/fetch failed|network|ECONN|ENOTFOUND|EAI_AGAIN|socket|TLS/i.test(message)) return "provider_network";
+  if (/schema|zod|parse|json|AgentVisualReview/i.test(message)) return "provider_schema";
+  if (/business-grade|validation|screenshot/i.test(message)) return "provider_validation";
+  if (/429|500|502|503|504|rate limit|temporarily/i.test(message)) return "provider_network";
+  return "unknown";
+}
+
+function isRetryableProviderError(error: unknown): boolean {
+  const category = classifyProviderError(error);
+  return category === "provider_timeout" || category === "provider_network";
+}
+
+async function writeProviderReviewArtifact(auditRoot: string, providerReview: ProviderReviewCloseout): Promise<void> {
+  await writeJsonFile(path.join(auditRoot, "report", "provider-review.json"), {
+    schemaVersion: "design-review-workflow.provider-review.v1",
+    generatedAt: new Date().toISOString(),
+    ...providerReview
+  });
+}
+
+function printBusinessGradePack(auditRoot: string, verbose: boolean, providerReview: ProviderReviewCloseout): void {
+  if (!verbose) return;
+  const packRoot = path.join(auditRoot, "report", "agent-review-pack");
+  console.log("");
+  console.log("Business-grade review lane complete.");
+  console.log(`Review mode: ${providerReview.mode}`);
+  console.log(`Provider review: ${providerReview.status}`);
+  console.log(`Review pack: ${packRoot}`);
+  console.log(`Review pack manifest: ${path.join(packRoot, "review-pack-manifest.json")}`);
+  console.log(`Review gallery: ${path.join(packRoot, "gallery", "index.html")}`);
+  console.log(`First viewports: ${path.join(auditRoot, "report", "contact-sheets", "first-viewports.png")}`);
+  console.log(`Contact sheets: ${path.join(auditRoot, "report", "contact-sheets")}`);
+  if (providerReview.status !== "completed") {
+    console.log(`Import required: node apps/cli/dist/index.js agent-review import --report ${auditRoot} --file agent-runs/<agent>/visual-review.json`);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function closeoutFromRunResult(
+  result: RunAuditResult,
+  lint: ReportLintResult,
+  businessGate?: unknown,
+  providerReview?: ProviderReviewCloseout
+): AgentCloseout {
   const reportRoot = path.join(result.auditRoot, "report");
   return {
     schemaVersion: "design-review-workflow.cli-closeout.v1",
@@ -748,12 +1004,14 @@ function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult, b
     auditId: result.report.auditId,
     url: result.report.config.url,
     mode: result.report.config.mode,
+    reviewMode: result.report.config.reviewMode,
     auditRoot: result.auditRoot,
     reportRoot,
     score: result.report.scorecard.overallScore,
     findings: result.report.findings.length,
     businessGradeStatus: result.report.businessGradeStatus,
     businessGradeGate: businessGate,
+    providerReview,
     qualityGate: {
       status: lint.status,
       strict: lint.strict,
@@ -768,7 +1026,9 @@ function closeoutFromRunResult(result: RunAuditResult, lint: ReportLintResult, b
 async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCloseout> {
   const qualityGatePath = entry.qualityGateJson ?? path.join(entry.auditRoot, "report", "quality-gate.json");
   const qualityGate = await readOptionalJson(qualityGatePath);
-  const report = (await readOptionalJson(entry.reportJson)) as { businessGradeStatus?: string; scorecard?: { overallScore?: number }; findings?: unknown[] } | undefined;
+  const report = (await readOptionalJson(entry.reportJson)) as
+    | { businessGradeStatus?: string; scorecard?: { overallScore?: number }; findings?: unknown[]; config?: { reviewMode?: string } }
+    | undefined;
   const businessGradeStatus = report?.businessGradeStatus ?? "unknown";
   const technicalPass = qualityGate && (qualityGate as { status?: string }).status === "pass";
   const status = technicalPass ? (businessGradeStatus === "agent_review_pending" ? "agent_review_pending" : "ready") : "failed";
@@ -778,6 +1038,7 @@ async function closeoutFromIndexEntry(entry: ProjectIndexEntry): Promise<AgentCl
     auditId: entry.auditId,
     url: entry.url,
     mode: entry.mode,
+    reviewMode: report?.config?.reviewMode ? normalizeReviewMode(report.config.reviewMode) : "manual",
     auditRoot: entry.auditRoot,
     reportRoot: path.join(entry.auditRoot, "report"),
     score: report?.scorecard?.overallScore ?? entry.overallScore,
@@ -809,10 +1070,20 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     repoAnalysis: path.join(reportRoot, "repo-analysis.json"),
     patchPlan: path.join(reportRoot, "patch-plan.md"),
     changedFiles: path.join(reportRoot, "changed-files.json"),
+    performanceAudit: path.join(reportRoot, "performance-audit.json"),
+    accessibilityDetail: path.join(reportRoot, "accessibility-detail.json"),
+    privacyTracking: path.join(reportRoot, "privacy-tracking.json"),
+    resourceAudit: path.join(reportRoot, "resource-audit.json"),
+    interactionStates: path.join(reportRoot, "interaction-states.json"),
+    relatedWorkflows: path.join(reportRoot, "related-workflows.json"),
+    enterpriseReadiness: path.join(reportRoot, "enterprise-readiness.json"),
+    stakeholderRecommendations: path.join(reportRoot, "stakeholder-recommendations.md"),
+    beforeAfterComparison: path.join(reportRoot, "before-after-comparison.md"),
     designBenchmark: path.join(reportRoot, "design-benchmark.json"),
     standardsRegistry: path.join(reportRoot, "standards-registry.json"),
     suppressionReport: path.join(reportRoot, "suppression-report.json"),
     businessGradeGate: path.join(reportRoot, "business-grade-gate.json"),
+    providerReview: path.join(reportRoot, "provider-review.json"),
     groupedIssues: path.join(reportRoot, "grouped-issues.json"),
     screenshotManifest: path.join(reportRoot, "screenshot-manifest.json"),
     reviewPack: path.join(reportRoot, "agent-review-pack"),
@@ -838,6 +1109,13 @@ function printCloseout(closeout: AgentCloseout): void {
   console.log(`Validation: ${closeout.files.validation}`);
   console.log(`Quality gate: ${(closeout.qualityGate as { status?: string }).status ?? "unknown"}`);
   console.log(`Business-grade status: ${closeout.businessGradeStatus}`);
+  console.log(`Review mode: ${closeout.reviewMode}`);
+  if (closeout.providerReview) {
+    console.log(`Provider review: ${closeout.providerReview.status}`);
+    if (closeout.providerReview.errorCategory) {
+      console.log(`Provider issue: ${closeout.providerReview.errorCategory} - ${closeout.providerReview.message ?? ""}`);
+    }
+  }
   if (closeout.status === "agent_review_pending") {
     console.log(`Business-grade gate: agent review pending`);
     console.log(`Review pack: ${closeout.files.reviewPack}`);
@@ -866,7 +1144,7 @@ function repositoryWorkflowContract() {
     runbook: "AGENT-RUNBOOK.md",
     commands: {
       oneCommandRun: "bash scripts/agent-run.sh <url>",
-      primaryRun: "node apps/cli/dist/index.js run <url> --business-grade --format json [--repo <target-source-repo>] [--audit-root ./audit-reports]",
+      primaryRun: "node apps/cli/dist/index.js run <url> --business-grade --review-mode auto --format json [--repo <target-source-repo>] [--related-workflow seo:/path/to/seo-audit] [--audit-root ./audit-reports]",
       npmRun: "npm run agent -- <url> --repo <target-source-repo> --audit-root ./audit-reports",
       lint: "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       plan: "node apps/cli/dist/index.js plan build --report <audit-dir>",
@@ -874,6 +1152,7 @@ function repositoryWorkflowContract() {
       agentReviewValidate: "node apps/cli/dist/index.js agent-review validate --report <audit-dir> --file <visual-review.json>",
       agentReviewImport: "node apps/cli/dist/index.js agent-review import --report <audit-dir> --file <visual-review.json>",
       businessGradeLint: "node apps/cli/dist/index.js business-grade lint --report <audit-dir>",
+      enterpriseVerify: "node apps/cli/dist/index.js enterprise verify --report <audit-dir>",
       exportReview: "node apps/cli/dist/index.js export --report <audit-dir> --profile review",
       exportFull: "node apps/cli/dist/index.js export --report <audit-dir> --profile full",
       exportRepoImport: "node apps/cli/dist/index.js export --report <audit-dir> --profile repo-import",
@@ -905,6 +1184,15 @@ function repositoryWorkflowContract() {
       "report/route-templates.json",
       "report/visual-system.json",
       "report/experience-timing.json",
+      "report/performance-audit.json",
+      "report/accessibility-detail.json",
+      "report/privacy-tracking.json",
+      "report/resource-audit.json",
+      "report/interaction-states.json",
+      "report/related-workflows.json",
+      "report/enterprise-readiness.json",
+      "report/stakeholder-recommendations.md",
+      "report/before-after-comparison.md",
       "report/hosted/index.html",
       "report/agent-review-pack/",
       "report/agent-review-pack/review-pack-manifest.json",
@@ -950,6 +1238,8 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
     industry: stringOption(options.industry) ?? fileInput.industry,
     brandContext: stringOption(options.brandContext) ?? fileInput.brandContext,
     competitors: Array.isArray(options.competitor) ? options.competitor.map(String) : fileInput.competitors,
+    relatedWorkflows: mergeRelatedWorkflows(fileInput.relatedWorkflows, Array.isArray(options.relatedWorkflow) ? options.relatedWorkflow.map(String) : []),
+    reviewMode: normalizeReviewMode(String(options.reviewMode ?? fileInput.reviewMode ?? "auto")),
     auditRoot: stringOption(options.auditRoot) ?? fileInput.auditRoot,
     auditName: stringOption(options.auditName) ?? fileInput.auditName,
     auditSlug: fileInput.auditSlug,
@@ -992,6 +1282,17 @@ async function runFromOptions(url: string, options: Record<string, unknown>) {
         typeof options.maxInteractionStatesPerViewport === "number"
           ? Number(options.maxInteractionStatesPerViewport)
           : fileInput.interactions?.maxStateCapturesPerViewport
+    },
+    retries: {
+      ...(fileInput.retries ?? {}),
+      capture:
+        typeof options.captureRetries === "number"
+          ? Number(options.captureRetries)
+          : fileInput.retries?.capture,
+      provider:
+        typeof options.providerRetries === "number"
+          ? Number(options.providerRetries)
+          : fileInput.retries?.provider
     }
   };
 
@@ -1044,6 +1345,9 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
   const audit = value.audit && typeof value.audit === "object" ? (value.audit as Record<string, unknown>) : value;
   const capture = audit.capture && typeof audit.capture === "object" ? (audit.capture as Record<string, unknown>) : {};
   const interactions = audit.interactions && typeof audit.interactions === "object" ? (audit.interactions as Record<string, unknown>) : {};
+  const retries = audit.retries && typeof audit.retries === "object" ? (audit.retries as Record<string, unknown>) : {};
+  const privacy = audit.privacy && typeof audit.privacy === "object" ? (audit.privacy as Record<string, unknown>) : {};
+  const retention = audit.retention && typeof audit.retention === "object" ? (audit.retention as Record<string, unknown>) : {};
   return {
     mode: normalizeMode(String(audit.mode ?? "quick_scan")),
     url: typeof audit.url === "string" ? audit.url : undefined,
@@ -1054,6 +1358,8 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
     industry: typeof audit.industry === "string" ? audit.industry : undefined,
     brandContext: typeof audit.brandContext === "string" ? audit.brandContext : typeof audit.brand_context === "string" ? audit.brand_context : undefined,
     competitors: Array.isArray(audit.competitors) ? audit.competitors.map(String) : undefined,
+    relatedWorkflows: parseRelatedWorkflowConfig(audit.relatedWorkflows ?? audit.related_workflows),
+    reviewMode: typeof audit.reviewMode === "string" ? normalizeReviewMode(audit.reviewMode) : typeof audit.review_mode === "string" ? normalizeReviewMode(audit.review_mode) : undefined,
     auditRoot: typeof audit.auditRoot === "string" ? audit.auditRoot : typeof audit.audit_root === "string" ? audit.audit_root : undefined,
     auditName: typeof audit.auditName === "string" ? audit.auditName : typeof audit.audit_name === "string" ? audit.audit_name : undefined,
     auditSlug: typeof audit.auditSlug === "string" ? audit.auditSlug : typeof audit.audit_slug === "string" ? audit.audit_slug : undefined,
@@ -1079,6 +1385,30 @@ async function readConfigFile(filePath: string): Promise<Partial<AuditInput>> {
       allowFormErrorChecks: booleanOption(interactions.allowFormErrorChecks) ?? booleanOption(interactions.allow_form_error_checks),
       allowPurchase: booleanOption(interactions.allowPurchase) ?? booleanOption(interactions.allow_purchase),
       allowLogin: booleanOption(interactions.allowLogin) ?? booleanOption(interactions.allow_login)
+    },
+    retries: {
+      capture: numberOption(retries.capture),
+      provider: numberOption(retries.provider),
+      export: numberOption(retries.export)
+    },
+    privacy: {
+      redactLocalPathsInExports: booleanOption(privacy.redactLocalPathsInExports) ?? booleanOption(privacy.redact_local_paths_in_exports),
+      redactSecretsInExports: booleanOption(privacy.redactSecretsInExports) ?? booleanOption(privacy.redact_secrets_in_exports),
+      redactCookiesInReports: booleanOption(privacy.redactCookiesInReports) ?? booleanOption(privacy.redact_cookies_in_reports)
+    },
+    retention: {
+      screenshots: retention.screenshots === "plan_cleanup" ? "plan_cleanup" : retention.screenshots === "keep" ? "keep" : undefined,
+      providerPayloads:
+        retention.providerPayloads === "plan_cleanup"
+          ? "plan_cleanup"
+          : retention.provider_payloads === "plan_cleanup"
+            ? "plan_cleanup"
+            : retention.providerPayloads === "keep" || retention.provider_payloads === "keep"
+              ? "keep"
+              : undefined,
+      exports: retention.exports === "plan_cleanup" ? "plan_cleanup" : retention.exports === "keep" ? "keep" : undefined,
+      maxAgeDays: numberOption(retention.maxAgeDays) ?? numberOption(retention.max_age_days),
+      dryRunOnly: booleanOption(retention.dryRunOnly) ?? booleanOption(retention.dry_run_only)
     }
   };
 }
@@ -1088,10 +1418,75 @@ function normalizeMode(value: string): "quick_scan" | "full_audit" {
   return "quick_scan";
 }
 
+function normalizeReviewMode(value: string): ReviewMode {
+  if (value === "auto" || value === "manual" || value === "hybrid") return value;
+  throw new Error(`Invalid review mode: ${value}. Expected auto, manual, or hybrid.`);
+}
+
+function collectRepeatedOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+function mergeRelatedWorkflows(existing: RelatedWorkflowSpec[] | undefined, specs: string[]): RelatedWorkflowSpec[] {
+  return [...(existing ?? []), ...specs.map(parseRelatedWorkflowSpec)];
+}
+
+function parseRelatedWorkflowConfig(value: unknown): RelatedWorkflowSpec[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) {
+    throw new Error("relatedWorkflows config must be an array.");
+  }
+  return value.map((item) => {
+    if (typeof item === "string") return parseRelatedWorkflowSpec(item);
+    if (!item || typeof item !== "object") {
+      throw new Error("Related workflow entries must be strings or objects.");
+    }
+    const record = item as Record<string, unknown>;
+    if (record.kind !== "seo") {
+      throw new Error(`Unsupported related workflow kind: ${String(record.kind)}. Only seo is supported.`);
+    }
+    if (typeof record.path !== "string" || !record.path.trim()) {
+      throw new Error("Related workflow object requires a non-empty path.");
+    }
+    return {
+      kind: "seo",
+      path: record.path,
+      label: typeof record.label === "string" && record.label.trim() ? record.label : undefined
+    };
+  });
+}
+
+function parseRelatedWorkflowSpec(value: string): RelatedWorkflowSpec {
+  const separator = value.indexOf(":");
+  if (separator <= 0 || separator === value.length - 1) {
+    throw new Error(`Invalid related workflow spec: ${value}. Expected kind:/path/to/audit.`);
+  }
+  const kind = value.slice(0, separator);
+  const workflowPath = value.slice(separator + 1);
+  if (kind !== "seo") {
+    throw new Error(`Unsupported related workflow kind: ${kind}. Only seo is supported.`);
+  }
+  if (/^https?:\/\//i.test(workflowPath)) {
+    throw new Error("Related workflow paths must be local filesystem paths for this local-first workflow.");
+  }
+  return {
+    kind: "seo",
+    path: workflowPath
+  };
+}
+
 function parseIntValue(value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     throw new Error(`Invalid positive integer: ${value}`);
+  }
+  return parsed;
+}
+
+function parseNonNegativeIntValue(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`Invalid non-negative integer: ${value}`);
   }
   return parsed;
 }

@@ -50,6 +50,7 @@ async function writeAuditRootIndex(report: AuditReport, paths: AuditPaths): Prom
   }
   const optionalArtifacts = await availableArtifacts([
     ["report/agent-visual-review.json", path.join(paths.report, "agent-visual-review.json")],
+    ["report/provider-review.json", path.join(paths.report, "provider-review.json")],
     ["export-manifest.json", path.join(paths.auditRoot, "export-manifest.json")],
     ["checksums.sha256", path.join(paths.auditRoot, "checksums.sha256")]
   ]);
@@ -108,6 +109,7 @@ async function writeHostedReport(report: AuditReport, paths: AuditPaths): Promis
   }
   const optionalArtifacts = await availableArtifacts([
     ["../agent-visual-review.json", path.join(paths.report, "agent-visual-review.json")],
+    ["../provider-review.json", path.join(paths.report, "provider-review.json")],
     ["../../export-manifest.json", path.join(paths.auditRoot, "export-manifest.json")],
     ["../../checksums.sha256", path.join(paths.auditRoot, "checksums.sha256")]
   ]);
@@ -625,12 +627,22 @@ function renderArtifactLinks(options: DashboardRenderOptions): string {
     { href: `${options.reportBase}evidence-brief.json`, text: "Evidence brief" },
     { href: `${options.reportBase}grouped-issues.json`, text: "Grouped issues JSON" },
     { href: `${options.reportBase}business-grade-gate.json`, text: "Business-grade gate" },
+    { href: `${options.reportBase}provider-review.json`, text: "Provider review status", optional: true },
+    { href: `${options.reportBase}enterprise-readiness.json`, text: "Enterprise readiness" },
     { href: `${options.reportBase}validation.json`, text: "Validation JSON" },
     { href: `${options.reportBase}quality-gate.json`, text: "Quality gate" },
     { href: `${options.reportBase}screenshot-manifest.json`, text: "Screenshot manifest" },
+    { href: `${options.reportBase}performance-audit.json`, text: "Performance audit" },
+    { href: `${options.reportBase}accessibility-detail.json`, text: "Accessibility detail" },
+    { href: `${options.reportBase}privacy-tracking.json`, text: "Privacy/tracking signals" },
+    { href: `${options.reportBase}resource-audit.json`, text: "Resource audit" },
+    { href: `${options.reportBase}interaction-states.json`, text: "Interaction states" },
+    { href: `${options.reportBase}related-workflows.json`, text: "Related workflows" },
     { href: `${options.reportBase}implementation-plan.json`, text: "Implementation plan" },
     { href: `${options.reportBase}source-candidates.json`, text: "Source candidates" },
     { href: `${options.reportBase}patch-plan.md`, text: "Patch plan" },
+    { href: `${options.reportBase}stakeholder-recommendations.md`, text: "Stakeholder recommendations" },
+    { href: `${options.reportBase}before-after-comparison.md`, text: "Before/after comparison" },
     { href: `${options.reportBase}agent-review-pack/review-pack-manifest.json`, text: "Review pack manifest" },
     { href: `${options.reportBase}agent-review-pack/gallery/index.html`, text: "Review gallery" },
     { href: `${options.contactSheetBase}first-viewports.png`, text: "First viewports sheet" },

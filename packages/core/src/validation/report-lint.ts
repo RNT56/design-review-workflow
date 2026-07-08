@@ -93,10 +93,19 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
     "report/route-templates.json",
     "report/visual-system.json",
     "report/experience-timing.json",
+    "report/performance-audit.json",
+    "report/accessibility-detail.json",
+    "report/privacy-tracking.json",
+    "report/resource-audit.json",
+    "report/interaction-states.json",
+    "report/related-workflows.json",
+    "report/enterprise-readiness.json",
     "report/standards-registry.json",
     "report/suppression-report.json",
     "report/design-benchmark.json",
     "report/design-benchmark.md",
+    "report/stakeholder-recommendations.md",
+    "report/before-after-comparison.md",
     "report/patch-plan.md",
     "report/changed-files.json",
     "report/manual-actions.md",
@@ -150,6 +159,13 @@ async function checkBundleFiles(report: AuditReport, auditDir: string, errors: s
   await checkJsonShape(auditDir, "report/route-templates.json", "templates", errors);
   await checkJsonShape(auditDir, "report/visual-system.json", "schemaVersion", errors);
   await checkJsonShape(auditDir, "report/experience-timing.json", "pages", errors);
+  await checkJsonShape(auditDir, "report/performance-audit.json", "pages", errors);
+  await checkJsonShape(auditDir, "report/accessibility-detail.json", "pages", errors);
+  await checkJsonShape(auditDir, "report/privacy-tracking.json", "riskSignals", errors);
+  await checkJsonShape(auditDir, "report/resource-audit.json", "pages", errors);
+  await checkJsonShape(auditDir, "report/interaction-states.json", "states", errors);
+  await checkJsonShape(auditDir, "report/related-workflows.json", "workflows", errors);
+  await checkJsonShape(auditDir, "report/enterprise-readiness.json", "gates", errors);
   await checkJsonShape(auditDir, "report/standards-registry.json", "rules", errors);
   await checkJsonShape(auditDir, "report/suppression-report.json", "suppressionsApplied", errors);
   await checkJsonShape(auditDir, "report/design-benchmark.json", "score", errors);

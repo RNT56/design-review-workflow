@@ -19,6 +19,7 @@
     "doctor": "node apps/cli/dist/index.js doctor",
     "workflow": "node apps/cli/dist/index.js workflow",
     "ci": "npm run typecheck && npm test && npm run build && npm run doctor",
+    "enterprise:verify": "npm run ci",
     "validate": "node apps/cli/dist/index.js validate",
     "web": "NODE_ENV=production node apps/web/dist/server/server.js"
   },

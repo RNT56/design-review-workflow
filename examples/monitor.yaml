@@ -3,3 +3,8 @@ monitors:
     url: https://example.com
     mode: quick_scan
     maxPages: 1
+    thresholds:
+      minimumScore: 60
+      maxFindings: 12
+      maxHighSeverityFindings: 3
+      maxScoreDrop: 8

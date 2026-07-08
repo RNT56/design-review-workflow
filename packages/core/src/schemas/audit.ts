@@ -71,6 +71,19 @@ export type FindingSource = z.infer<typeof FindingSourceSchema>;
 export const BusinessGradeStatusSchema = z.enum(["automated_scan", "agent_review_pending", "business_grade"]);
 export type BusinessGradeStatus = z.infer<typeof BusinessGradeStatusSchema>;
 
+export const ReviewModeSchema = z.enum(["auto", "manual", "hybrid"]);
+export type ReviewMode = z.infer<typeof ReviewModeSchema>;
+
+export const RelatedWorkflowKindSchema = z.enum(["seo"]);
+export type RelatedWorkflowKind = z.infer<typeof RelatedWorkflowKindSchema>;
+
+export const RelatedWorkflowSpecSchema = z.object({
+  kind: RelatedWorkflowKindSchema,
+  path: z.string().min(1),
+  label: z.string().optional()
+});
+export type RelatedWorkflowSpec = z.infer<typeof RelatedWorkflowSpecSchema>;
+
 export const DesignReadinessSchema = z.enum([
   "no_major_redesign_needed",
   "minor_refinement_needed",
@@ -113,6 +126,35 @@ export const InteractionSettingsSchema = z.object({
 });
 export type InteractionSettings = z.infer<typeof InteractionSettingsSchema>;
 
+export const RetrySettingsSchema = z
+  .object({
+    capture: z.number().int().min(0).max(3).default(1),
+    provider: z.number().int().min(0).max(3).default(1),
+    export: z.number().int().min(0).max(3).default(0)
+  })
+  .default({});
+export type RetrySettings = z.infer<typeof RetrySettingsSchema>;
+
+export const PrivacySettingsSchema = z
+  .object({
+    redactLocalPathsInExports: z.boolean().default(true),
+    redactSecretsInExports: z.boolean().default(true),
+    redactCookiesInReports: z.boolean().default(true)
+  })
+  .default({});
+export type PrivacySettings = z.infer<typeof PrivacySettingsSchema>;
+
+export const RetentionSettingsSchema = z
+  .object({
+    screenshots: z.enum(["keep", "plan_cleanup"]).default("keep"),
+    providerPayloads: z.enum(["keep", "plan_cleanup"]).default("keep"),
+    exports: z.enum(["keep", "plan_cleanup"]).default("keep"),
+    maxAgeDays: z.number().int().positive().optional(),
+    dryRunOnly: z.boolean().default(true)
+  })
+  .default({});
+export type RetentionSettings = z.infer<typeof RetentionSettingsSchema>;
+
 export const AuditConfigSchema = z.object({
   auditId: z.string().min(1),
   mode: AuditModeSchema,
@@ -124,6 +166,8 @@ export const AuditConfigSchema = z.object({
   industry: z.string().optional(),
   brandContext: z.string().optional(),
   competitors: z.array(z.string().url()).default([]),
+  relatedWorkflows: z.array(RelatedWorkflowSpecSchema).default([]),
+  reviewMode: ReviewModeSchema.default("auto"),
   auditRoot: z.string().optional(),
   auditName: z.string().optional(),
   auditSlug: z.string().optional(),
@@ -138,6 +182,9 @@ export const AuditConfigSchema = z.object({
     excludePatterns: z.array(z.string()).default([])
   }),
   interactions: InteractionSettingsSchema,
+  retries: RetrySettingsSchema,
+  privacy: PrivacySettingsSchema,
+  retention: RetentionSettingsSchema,
   outputs: z.object({
     markdown: z.boolean().default(true),
     html: z.boolean().default(true),
@@ -283,6 +330,30 @@ export const PerformanceSummarySchema = z.object({
   firstPaintMs: z.number().optional(),
   firstContentfulPaintMs: z.number().optional(),
   transferSizeKb: z.number().optional(),
+  resourceSummary: z
+    .object({
+      totalResources: z.number().int().min(0).default(0),
+      scripts: z.number().int().min(0).default(0),
+      stylesheets: z.number().int().min(0).default(0),
+      images: z.number().int().min(0).default(0),
+      fonts: z.number().int().min(0).default(0),
+      media: z.number().int().min(0).default(0),
+      thirdPartyResources: z.number().int().min(0).default(0),
+      thirdPartyOrigins: z.array(z.string()).default([]),
+      largestResources: z
+        .array(
+          z.object({
+            url: z.string(),
+            origin: z.string().optional(),
+            initiatorType: z.string().optional(),
+            transferSizeKb: z.number().optional(),
+            durationMs: z.number().optional(),
+            thirdParty: z.boolean().default(false)
+          })
+        )
+        .default([])
+    })
+    .optional(),
   lighthouse: z
     .object({
       status: z.enum(["completed", "failed", "skipped"]),
