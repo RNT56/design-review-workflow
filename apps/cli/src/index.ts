@@ -3,13 +3,16 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { Command } from "commander";
 import * as yaml from "js-yaml";
+import { loadEnvFile } from "node:process";
 import {
   compareAuditDirs,
+  applySuppressionLedger,
   analyzeDesignSourceRepo,
   createAuditConfig,
   createModelRouterFromEnv,
   defaultDesignStandardsRegistry,
   enterpriseFixtureManifest,
+  runEnterpriseFixtureEvals,
   AUDIT_ROOT_ENV,
   buildReviewPack,
   evaluateBusinessGradeGate,
@@ -18,12 +21,14 @@ import {
   generateAgentVisualReview,
   importAgentVisualReview,
   applyAgentVisualReview,
+  finalizeAuditValidation,
   lintAuditReport,
   markAgentReviewPending,
   parseAgentVisualReview,
   planAuditRetention,
   readReportFromAuditDir,
   readProjectIndex,
+  repairAuditReport,
   runAudit,
   runMonitorConfig,
   sampleMonitorConfig,
@@ -40,6 +45,14 @@ import {
 } from "../../../packages/core/src/index.js";
 
 const program = new Command();
+
+for (const envFile of [path.resolve(".env.local"), path.resolve(".env")]) {
+  try {
+    loadEnvFile(envFile);
+  } catch {
+    // Optional local configuration files are loaded when present.
+  }
+}
 
 program
   .name("wdr")
@@ -194,13 +207,35 @@ reportCommand
     }
   });
 
+reportCommand
+  .command("repair")
+  .argument("<auditDir>", "Audit directory")
+  .option("--strict", "Fail on warnings after repair")
+  .option("--rebuild-review-pack", "Regenerate review-pack images and manifests")
+  .option("--format <format>", "summary or json", "summary")
+  .action(async (auditDir, options) => {
+    const result = await repairAuditReport(auditDir, Boolean(options.strict), {
+      rebuildReviewPack: options.rebuildReviewPack === true
+    });
+    if (options.format === "json") {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.log(`Report repair: ${result.status}`);
+      console.log(`Audit: ${path.resolve(auditDir)}`);
+      console.log(`Integrity files: ${result.summary.integrityFiles}`);
+      for (const warning of result.warnings) console.log(`warning: ${warning}`);
+      for (const error of result.errors) console.log(`error: ${error}`);
+    }
+    if (result.status === "fail") process.exitCode = 1;
+  });
+
 const plan = program.command("plan").description("Agent remediation handoff utilities");
 plan
   .command("build")
   .requiredOption("--report <auditDir>", "Audit directory")
   .action(async (options) => {
     const auditDir = String(options.report);
-    const lint = await lintAuditReport(auditDir, false);
+    const lint = await repairAuditReport(auditDir, false);
     console.log(`Workflow manifest: ${path.join(auditDir, "report", "workflow-manifest.json")}`);
     console.log(`Handoff JSON: ${path.join(auditDir, "report", "handoff.json")}`);
     console.log(`Agent execution plan: ${path.join(auditDir, "report", "agent-execution-plan.md")}`);
@@ -225,7 +260,7 @@ reviewPack
   .action(async (options) => {
     const auditDir = String(options.report);
     const result = await buildReviewPack(auditDir);
-    const lint = await lintAuditReport(auditDir, false);
+    const lint = await finalizeAuditValidation(auditDir, false);
     console.log(`Review pack: ${result.packRoot}`);
     console.log(`Screenshot manifest: ${result.screenshotManifest}`);
     console.log(`Template: ${result.template}`);
@@ -284,7 +319,7 @@ agentReview
   .command("generate")
   .description("Generate, validate, and import an AgentVisualReview with a configured multimodal provider")
   .requiredOption("--report <auditDir>", "Audit directory")
-  .option("--provider <provider>", "Provider selector; currently only auto", "auto")
+  .option("--provider <provider>", "Provider selector: auto, openai, openrouter, anthropic, or gemini", "auto")
   .option("--max-images <number>", "Maximum review-pack images to send", parseIntValue)
   .option("--format <format>", "summary or json", "summary")
   .action(async (options) => {
@@ -298,6 +333,7 @@ agentReview
         auditRoot: result.auditRoot,
         provider: result.provider,
         model: result.model,
+        stagedPageBatches: result.stagedPageBatches,
         generatedReviewPath: result.generatedReviewPath,
         rawProviderOutputPath: result.rawProviderOutputPath,
         canonicalReviewPath: result.canonicalReviewPath,
@@ -308,6 +344,7 @@ agentReview
       console.log(`Generated visual review: ${result.generatedReviewPath}`);
       console.log(`Raw provider output: ${result.rawProviderOutputPath}`);
       console.log(`Provider: ${result.provider} / ${result.model}`);
+      console.log(`Staged page batches: ${result.stagedPageBatches}`);
       console.log(`Imported visual review: ${result.canonicalReviewPath}`);
       console.log(`Business-grade gate: ${result.gate.status}`);
       console.log(`Hosted static report: ${path.join(String(options.report), "report", "hosted", "index.html")}`);
@@ -378,6 +415,7 @@ program
     console.log(`Output: ${result.outputPath}`);
     console.log(`Files: ${result.files}`);
     console.log(`Bytes: ${result.bytes}`);
+    if (result.uncompressedBytes !== result.bytes) console.log(`Uncompressed bytes: ${result.uncompressedBytes}`);
     console.log(`Manifest: ${result.manifestPath}`);
     console.log(`Checksums: ${result.checksumsPath}`);
     console.log(`Local paths redacted: ${result.localPathsRedacted ? "yes" : "no"}`);
@@ -391,7 +429,7 @@ program
   .option("--format <format>", "summary or json", "summary")
   .action(async (options) => {
     const auditDir = String(options.report);
-    const lint = await lintAuditReport(auditDir, false);
+    const lint = await repairAuditReport(auditDir, false);
     const benchmarkPath = path.join(auditDir, "report", "design-benchmark.json");
     const benchmark = JSON.parse(await readFile(benchmarkPath, "utf8")) as {
       score?: { overall?: number; evidenceCompleteness?: number; actionability?: number; reportCompleteness?: number };
@@ -472,8 +510,22 @@ enterprise
 enterprise
   .command("fixtures")
   .option("--format <format>", "summary or json", "summary")
-  .action((options) => {
+  .option("--run", "Execute the local fixture corpus through the full audit pipeline", false)
+  .option("--output <dir>", "Retain fixture audit artifacts under this root")
+  .action(async (options) => {
     const manifest = enterpriseFixtureManifest();
+    if (options.run) {
+      const result = await runEnterpriseFixtureEvals(stringOption(options.output));
+      if (options.format === "json") console.log(JSON.stringify(result, null, 2));
+      else {
+        console.log(`Enterprise fixture eval: ${result.status}`);
+        console.log(`Checks: ${result.summary.checks}; failures: ${result.summary.failures}`);
+        if (result.auditRoot) console.log(`Audit root: ${result.auditRoot}`);
+        for (const check of result.checks.filter((item) => item.status === "fail")) console.log(`- fail: ${check.name} - ${check.message}`);
+      }
+      if (result.status === "fail") process.exitCode = 1;
+      return;
+    }
     if (options.format === "json") {
       console.log(JSON.stringify(manifest, null, 2));
     } else {
@@ -495,7 +547,7 @@ standards
     await writeJsonFile(outputPath, defaultDesignStandardsRegistry(report));
     console.log(`Standards registry: ${outputPath}`);
     if (options.report) {
-      await lintAuditReport(String(options.report), false);
+      await finalizeAuditValidation(String(options.report), false);
       console.log(`Refreshed audit bundle: ${String(options.report)}`);
     }
   });
@@ -506,10 +558,10 @@ suppressions
   .argument("[path]", "Suppression file path", "design-review-suppressions.json")
   .action(async (filePath) => {
     await writeJsonFile(String(filePath), {
-      schemaVersion: "design-review-workflow.suppressions.v1",
+      schemaVersion: "design-review-workflow.suppressions.v2",
       suppressions: [
         {
-          findingId: "finding_...",
+          fingerprint: "ff_000000000000000000000000",
           reason: "Why this finding is accepted or intentionally deferred.",
           owner: "name-or-team",
           expiresAt: "2026-12-31"
@@ -524,28 +576,12 @@ suppressions
   .requiredOption("--file <path>", "Suppression JSON file")
   .action(async (options) => {
     const auditDir = String(options.report);
-    const report = await readReportFromAuditDir(auditDir);
-    const raw = JSON.parse(await readFile(String(options.file), "utf8")) as { suppressions?: Array<Record<string, unknown>> };
-    const knownFindingIds = new Set(report.findings.map((finding) => finding.findingId));
-    const suppressionsList = Array.isArray(raw.suppressions) ? raw.suppressions : [];
-    const applied = suppressionsList.filter((item) => typeof item.findingId === "string" && knownFindingIds.has(item.findingId));
-    const ignored = suppressionsList.filter((item) => typeof item.findingId !== "string" || !knownFindingIds.has(item.findingId));
-    const outputPath = path.join(auditDir, "report", "suppression-report.json");
-    await writeJsonFile(outputPath, {
-      schemaVersion: "design-review-workflow.suppression-report.v1",
-      auditId: report.auditId,
-      generatedAt: new Date().toISOString(),
-      sourceFile: path.resolve(String(options.file)),
-      suppressionsApplied: applied.length,
-      suppressedFindingIds: applied.map((item) => item.findingId),
-      suppressions: applied,
-      ignored,
-      note: "Suppressions are non-destructive. Findings remain in findings.json and are marked only in this ledger."
-    });
-    const lint = await lintAuditReport(auditDir, false);
+    const { report, outputPath } = await applySuppressionLedger(auditDir, String(options.file));
+    const lint = await finalizeAuditValidation(auditDir, false);
     console.log(`Suppression report: ${outputPath}`);
-    console.log(`Applied: ${applied.length}`);
-    console.log(`Ignored: ${ignored.length}`);
+    console.log(`Applied: ${report.suppressionsApplied}`);
+    console.log(`Expired: ${report.suppressionsExpired}`);
+    console.log(`Unmatched: ${report.suppressionsUnmatched}`);
     console.log(`Quality gate: ${lint.status}`);
   });
 
@@ -624,8 +660,13 @@ program
   .command("compare")
   .argument("<beforeAuditDir>", "Previous audit directory")
   .argument("<afterAuditDir>", "New audit directory")
-  .action(async (beforeAuditDir, afterAuditDir) => {
-    const { result, outputPath } = await compareAuditDirs(beforeAuditDir, afterAuditDir);
+  .option("--allow-incompatible", "Produce exploratory deltas even when audit contracts differ", false)
+  .action(async (beforeAuditDir, afterAuditDir, options) => {
+    const { result, outputPath } = await compareAuditDirs(beforeAuditDir, afterAuditDir, {
+      allowIncompatible: Boolean(options.allowIncompatible)
+    });
+    console.log(`Compatibility: ${result.compatibility.status}`);
+    if (result.compatibility.reasons.length > 0) console.log(`Compatibility reasons: ${result.compatibility.reasons.join("; ")}`);
     console.log(`Score delta: ${result.scoreDelta >= 0 ? "+" : ""}${result.scoreDelta}`);
     console.log(`Resolved findings: ${result.resolvedFindings.length}`);
     console.log(`New findings: ${result.newFindings.length}`);
@@ -768,6 +809,7 @@ type AgentCloseout = {
     beforeAfterComparison: string;
     designBenchmark: string;
     standardsRegistry: string;
+    criteriaEvaluation: string;
     suppressionReport: string;
     businessGradeGate: string;
     providerReview: string;
@@ -794,6 +836,7 @@ type ProviderReviewCloseout = {
   manualSignoffRecommended: boolean;
   provider?: string;
   model?: string;
+  stagedPageBatches?: number;
   generatedReviewPath?: string;
   rawProviderOutputPath?: string;
   canonicalReviewPath?: string;
@@ -845,7 +888,7 @@ function configureAgentRunCommand(command: Command): void {
         businessGate = prepared.businessGate;
         providerReview = prepared.providerReview;
       }
-      const lint = await lintAuditReport(result.auditRoot, options.strict !== false);
+      const lint = await finalizeAuditValidation(result.auditRoot, options.strict !== false);
       const closeout = closeoutFromRunResult(result, lint, businessGate, providerReview);
       if (format === "json") {
         console.log(JSON.stringify(closeout, null, 2));
@@ -901,6 +944,7 @@ async function runBusinessGradeLane(
       manualSignoffRecommended: reviewMode === "hybrid",
       provider: generation.result.provider,
       model: generation.result.model,
+      stagedPageBatches: generation.result.stagedPageBatches,
       generatedReviewPath: generation.result.generatedReviewPath,
       rawProviderOutputPath: generation.result.rawProviderOutputPath,
       canonicalReviewPath: generation.result.canonicalReviewPath,
@@ -1113,6 +1157,7 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     handoff: path.join(reportRoot, "handoff.json"),
     validation: path.join(reportRoot, "validation.json"),
     qualityGate: path.join(reportRoot, "quality-gate.json"),
+    bundleIntegrity: path.join(reportRoot, "bundle-integrity.json"),
     reportHtml: path.join(reportRoot, "report.html"),
     reportMarkdown: path.join(reportRoot, "report.md"),
     reportJson: path.join(reportRoot, "report.json"),
@@ -1140,6 +1185,7 @@ function closeoutFiles(auditRoot: string, pdfPath?: string) {
     beforeAfterComparison: path.join(reportRoot, "before-after-comparison.md"),
     designBenchmark: path.join(reportRoot, "design-benchmark.json"),
     standardsRegistry: path.join(reportRoot, "standards-registry.json"),
+    criteriaEvaluation: path.join(reportRoot, "criteria-evaluation.json"),
     suppressionReport: path.join(reportRoot, "suppression-report.json"),
     businessGradeGate: path.join(reportRoot, "business-grade-gate.json"),
     providerReview: path.join(reportRoot, "provider-review.json"),

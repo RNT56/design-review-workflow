@@ -170,7 +170,8 @@ Create and maintain fixture sites for:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run enterprise:verify` | Full local gate for enterprise readiness. |
+| `npm run enterprise:verify` | Typecheck, unit/integration tests, build, doctor, then a full ten-route local fixture audit. |
+| `node apps/cli/dist/index.js enterprise fixtures --run` | Execute the local SaaS-through-accessibility fixture corpus and strict bundle assertions. |
 | `node apps/cli/dist/index.js enterprise verify --report <audit-dir>` | Verify report completeness, artifact shape, screenshot coverage, and business-grade status. |
 | `node apps/cli/dist/index.js compare <baseline> <candidate>` | Regression comparison for compatible snapshots. |
 | `node apps/cli/dist/index.js business-grade lint --report <audit-dir>` | Enforce imported visual review quality. |
@@ -182,8 +183,8 @@ Create and maintain fixture sites for:
 | Completeness | Required files, checksums, report bundle shape, export profiles. |
 | Visual review quality | Schema validity, evidence references, visual specificity, unsupported claims, actionability. |
 | Capture coverage | First viewport, full page, mobile/desktop, interaction states, review pack sheet mappings. |
-| Scoring drift | Compare score deltas against expected thresholds. |
-| False positives | Track suppressed recurring issues and require suppression reasons. |
+| Scoring drift | Require compatible scoring rubric, target, scope, viewport and capture contracts before score deltas. |
+| False positives | Track stable finding fingerprints; require suppression reasons, owners and expiry state. |
 | Provider quality | Validate model output against schema, screenshot references, TODO text, overclaims, and missing recommendations. |
 
 ## Phase 5 - Client-Grade Deliverables

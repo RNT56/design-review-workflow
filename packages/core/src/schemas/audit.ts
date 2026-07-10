@@ -149,6 +149,7 @@ export const RetentionSettingsSchema = z
     screenshots: z.enum(["keep", "plan_cleanup"]).default("keep"),
     providerPayloads: z.enum(["keep", "plan_cleanup"]).default("keep"),
     exports: z.enum(["keep", "plan_cleanup"]).default("keep"),
+    derivedAssets: z.enum(["keep", "plan_cleanup"]).default("keep").optional(),
     maxAgeDays: z.number().int().positive().optional(),
     dryRunOnly: z.boolean().default(true)
   })
@@ -211,7 +212,8 @@ export const TextNodeSchema = z.object({
   tag: z.string().optional(),
   selector: z.string().optional(),
   href: z.string().optional(),
-  visible: z.boolean().default(true)
+  visible: z.boolean().default(true),
+  inFirstViewport: z.boolean().optional()
 });
 export type TextNode = z.infer<typeof TextNodeSchema>;
 
@@ -330,6 +332,12 @@ export const PerformanceSummarySchema = z.object({
   firstPaintMs: z.number().optional(),
   firstContentfulPaintMs: z.number().optional(),
   transferSizeKb: z.number().optional(),
+  observedWebVitals: z.object({
+    largestContentfulPaintMs: z.number().optional(),
+    cumulativeLayoutShift: z.number().optional(),
+    longTaskCount: z.number().int().min(0).default(0),
+    totalLongTaskMs: z.number().min(0).default(0)
+  }).optional(),
   resourceSummary: z
     .object({
       totalResources: z.number().int().min(0).default(0),
@@ -347,8 +355,11 @@ export const PerformanceSummarySchema = z.object({
             origin: z.string().optional(),
             initiatorType: z.string().optional(),
             transferSizeKb: z.number().optional(),
+            decodedBodySizeKb: z.number().optional(),
             durationMs: z.number().optional(),
-            thirdParty: z.boolean().default(false)
+            thirdParty: z.boolean().default(false),
+            renderBlockingStatus: z.string().optional(),
+            protocol: z.string().optional()
           })
         )
         .default([])
@@ -388,7 +399,11 @@ export const CssSignalsSchema = z.object({
         background: z.string(),
         ratio: z.number(),
         selector: z.string().optional(),
-        textSample: z.string().optional()
+        textSample: z.string().optional(),
+        fontSize: z.number().optional(),
+        fontWeight: z.number().optional(),
+        threshold: z.number().optional(),
+        backgroundSource: z.enum(["solid", "unknown"]).optional()
       })
     )
     .default([])
@@ -460,6 +475,7 @@ export const PageEvidenceSchema = z.object({
   primaryUserGoal: z.string().optional(),
   screenshots: z.record(z.string(), ScreenshotRefSchema),
   interactionStates: z.array(InteractionStateEvidenceSchema).default([]),
+  captureActions: z.array(z.object({ viewport: ViewportNameSchema, action: z.string(), detail: z.string().optional() })).default([]).optional(),
   text: z.object({
     headings: z.array(TextNodeSchema),
     buttons: z.array(TextNodeSchema),
@@ -478,12 +494,16 @@ export const PageEvidenceSchema = z.object({
   cssSignals: CssSignalsSchema.optional(),
   reviewSignals: PageReviewSignalsSchema.optional(),
   performance: PerformanceSummarySchema.optional(),
-  accessibility: AccessibilitySummarySchema.optional()
+  performanceByViewport: z.record(ViewportNameSchema, PerformanceSummarySchema).optional(),
+  accessibility: AccessibilitySummarySchema.optional(),
+  accessibilityByViewport: z.record(ViewportNameSchema, AccessibilitySummarySchema).optional()
 });
 export type PageEvidence = z.infer<typeof PageEvidenceSchema>;
 
 export const FindingSchema = z.object({
   findingId: z.string(),
+  fingerprint: z.string().regex(/^ff_[0-9a-f]{24}$/).optional(),
+  criterionIds: z.array(z.string()).default([]).optional(),
   source: FindingSourceSchema.default("deterministic"),
   title: z.string(),
   category: FindingCategorySchema,
@@ -625,7 +645,9 @@ export type GroupedIssue = z.infer<typeof GroupedIssueSchema>;
 export const ScoreItemSchema = z.object({
   score: z.number().min(0).max(100),
   confidence: ConfidenceSchema,
-  rationale: z.string()
+  rationale: z.string(),
+  coverage: z.enum(["high", "medium", "low", "insufficient"]).optional(),
+  findingGroups: z.number().int().min(0).optional()
 });
 export type ScoreItem = z.infer<typeof ScoreItemSchema>;
 
@@ -646,7 +668,22 @@ export const ScorecardSchema = z.object({
   weights: z.record(z.string(), z.number()),
   websiteTypeAdjustment: z.string(),
   topStrengths: z.array(z.string()),
-  topRisks: z.array(z.string())
+  topRisks: z.array(z.string()),
+  rubricVersion: z.string().optional(),
+  provisional: z.boolean().optional(),
+  coverage: z
+    .object({
+      assessedDimensions: z.number().int().min(0),
+      totalDimensions: z.number().int().positive(),
+      ratio: z.number().min(0).max(1),
+      pages: z.number().int().min(0),
+      pagesWithDesktop: z.number().int().min(0),
+      pagesWithMobile: z.number().int().min(0),
+      accessibilityPages: z.number().int().min(0),
+      performancePages: z.number().int().min(0),
+      note: z.string()
+    })
+    .optional()
 });
 export type Scorecard = z.infer<typeof ScorecardSchema>;
 
@@ -725,11 +762,21 @@ export const AuditReportSchema = z.object({
 export type AuditReport = z.infer<typeof AuditReportSchema>;
 
 export const AuditCompareResultSchema = z.object({
+  schemaVersion: z.literal("design-review-workflow.compare.v2").default("design-review-workflow.compare.v2"),
   generatedAt: z.string(),
   beforeAuditId: z.string(),
   afterAuditId: z.string(),
   beforeUrl: z.string().url(),
   afterUrl: z.string().url(),
+  compatibility: z.object({
+    status: z.enum(["compatible", "incompatible"]),
+    scoreComparable: z.boolean(),
+    findingComparable: z.boolean(),
+    screenshotComparable: z.boolean(),
+    reasons: z.array(z.string()),
+    beforeRubricVersion: z.string(),
+    afterRubricVersion: z.string()
+  }),
   scoreDelta: z.number(),
   subscoreDeltas: z.record(z.string(), z.number()),
   resolvedFindings: z.array(FindingSchema),

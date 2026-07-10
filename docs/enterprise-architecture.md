@@ -68,6 +68,7 @@ Provider attempts must preserve:
 - Retry count and terminal status.
 - Error class: `no_provider`, `provider_auth`, `provider_config`, `provider_timeout`, `provider_network`, `provider_schema`, `provider_validation`, or `unknown`.
 - Raw output path when a response was received.
+- Request/input and selected-image SHA-256 provenance, staged page-batch count, bounded timeout, and output limit.
 - Validation output path when validation ran.
 
 ## Enterprise Artifact Inventory
@@ -77,6 +78,8 @@ Provider attempts must preserve:
 | `workflow-manifest.json` | Report bundle writer | Agents, local UI, exports. |
 | `handoff.json` | Report bundle writer | Downstream implementation agents. |
 | `quality-gate.json` | QA/scoring | Report, CI gates. |
+| `bundle-integrity.json` | Explicit finalizer/repair path | Pure lint, enterprise verify, downstream trust checks. |
+| `criteria-evaluation.json` | Criteria evaluator | Audit coverage, finding provenance, standards maintenance. |
 | `business-grade-gate.json` | Business-grade linter/import | Report, CLI closeout, enterprise verify. |
 | `screenshot-manifest.json` | Review pack builder | Agent visual review, report UI, screenshot coverage eval. |
 | `agent-review-pack/review-pack-manifest.json` | Review pack builder | Multimodal agent review order. |
@@ -145,18 +148,19 @@ Default posture:
 - Keep raw local audit artifacts for inspection.
 - Redact local absolute paths in repo-import exports.
 - Do not submit forms with real data.
-- Do not capture login-protected or purchase-completion flows unless explicit sandbox credentials and non-production data are configured.
+- Do not capture login-protected, account-mutating, payment, or purchase-completion flows; those remain outside this workflow.
 - Store provider payloads locally under the audit folder when provider review runs.
 
-Future retention controls:
+Retention planning controls:
 
 ```yaml
 retention:
   screenshots: keep
   providerPayloads: keep
   exports: keep
-  redactLocalPathsInExports: true
-  redactCookiesInReports: true
+  derivedAssets: plan_cleanup
+  maxAgeDays: 30
+  dryRunOnly: true
 ```
 
 ## Verification Architecture
@@ -166,11 +170,12 @@ Enterprise verification runs in layers:
 1. Type and unit checks: `npm run typecheck`, `npm test`.
 2. Build checks: `npm run build`.
 3. Environment checks: `npm run doctor`.
-4. Bundle checks: `report lint --strict`.
-5. Business-grade checks: `business-grade lint --report <audit-dir>` when business-grade is claimed.
-6. Enterprise artifact checks: `enterprise verify --report <audit-dir>`.
-7. Export checks: `export --profile review|full|repo-import` plus checksums.
-8. Compare checks when baseline exists: `compare <baseline> <candidate>`.
+4. Executable ten-archetype local corpus: `enterprise fixtures --run`.
+5. Pure bundle and integrity checks: `report lint --strict`.
+6. Business-grade checks: `business-grade lint --report <audit-dir>` when business-grade is claimed.
+7. Enterprise artifact checks: `enterprise verify --report <audit-dir>`.
+8. Export checks: `export --profile review|full|repo-import` plus checksums.
+9. Compatible-baseline checks: `compare <baseline> <candidate>`.
 
 ## Implementation Quality Rules
 

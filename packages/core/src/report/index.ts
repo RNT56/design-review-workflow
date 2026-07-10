@@ -10,6 +10,7 @@ import { writeAgentBundle } from "./agent-bundle.js";
 import { writeBusinessGradeArtifacts } from "./business-grade-artifacts.js";
 import { groupFindings } from "../review/grouping.js";
 import { writeEvidenceBrief } from "./evidence-brief.js";
+import { writeBundleIntegrityManifest } from "../validation/integrity.js";
 
 export type ReportOutputs = {
   json?: string;
@@ -67,6 +68,7 @@ export async function writeReports(config: AuditConfig, report: AuditReport, pat
   await writeBusinessGradeArtifacts(report, paths, { buildReviewPack: options.reviewPack === true });
   outputs.staticIndex = path.join(paths.auditRoot, "index.html");
   await writeAgentBundle(report, paths, outputs);
+  await writeBundleIntegrityManifest(paths.auditRoot);
 
   return outputs;
 }

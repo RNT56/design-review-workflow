@@ -23,8 +23,11 @@ export async function capturePerformanceSummary(page: Page, url: string, _auditR
           origin,
           initiatorType: entry.initiatorType || undefined,
           transferSizeKb: entry.transferSize ? Math.round(entry.transferSize / 1024) : undefined,
+          decodedBodySizeKb: entry.decodedBodySize ? Math.round(entry.decodedBodySize / 1024) : undefined,
           durationMs: Math.round(entry.duration),
-          thirdParty
+          thirdParty,
+          renderBlockingStatus: (entry as PerformanceResourceTiming & { renderBlockingStatus?: string }).renderBlockingStatus,
+          protocol: entry.nextHopProtocol || undefined
         };
       });
       const thirdPartyOrigins = [
@@ -37,6 +40,15 @@ export async function capturePerformanceSummary(page: Page, url: string, _auditR
         firstPaintMs: byName.has("first-paint") ? Math.round(byName.get("first-paint") ?? 0) : undefined,
         firstContentfulPaintMs: byName.has("first-contentful-paint") ? Math.round(byName.get("first-contentful-paint") ?? 0) : undefined,
         transferSizeKb: navigation?.transferSize ? Math.round(navigation.transferSize / 1024) : undefined,
+        observedWebVitals: (() => {
+          const observed = (window as unknown as { __wdrObservedMetrics?: { largestContentfulPaintMs?: number; cumulativeLayoutShift: number; longTaskCount: number; totalLongTaskMs: number } }).__wdrObservedMetrics;
+          return observed ? {
+            largestContentfulPaintMs: observed.largestContentfulPaintMs,
+            cumulativeLayoutShift: Number(observed.cumulativeLayoutShift.toFixed(4)),
+            longTaskCount: observed.longTaskCount,
+            totalLongTaskMs: Math.round(observed.totalLongTaskMs)
+          } : undefined;
+        })(),
         resourceSummary: {
           totalResources: resourcesWithMeta.length,
           scripts: resourcesWithMeta.filter((entry) => entry.initiatorType === "script").length,

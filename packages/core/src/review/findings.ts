@@ -10,11 +10,12 @@ import {
 } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
 import { writeJson } from "../utils/fs.js";
-import { stableId } from "../utils/id.js";
+import { findingFingerprint, stableId } from "../utils/id.js";
 import { inferWebsiteType } from "./classification.js";
 import { createScorecard, priorityScore } from "./scoring.js";
 import { createScreenshotAnnotations } from "../report/annotations.js";
 import { groupFindings } from "./grouping.js";
+import { criteriaFor } from "../criteria/library.js";
 
 type FindingDraft = Omit<Finding, "findingId" | "source" | "priorityScore" | "relatedFindings">;
 
@@ -26,8 +27,15 @@ export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[],
   const rawFindings = pages.flatMap((page) => generatePageFindings(page, website.websiteType));
   await writeAgentRuns(rawFindings, paths);
 
-  const findings = validateAndDedupe(rawFindings, pages)
-    .map((finding, index) => ({ ...finding, findingId: stableId("finding", `${finding.title}:${finding.evidence.url}:${finding.category}`, index + 1) }))
+  const findings = validateAndDedupe(rawFindings, pages, config.scoring.strictness)
+    .map((finding) => {
+      const fingerprint = findingFingerprint(finding);
+      const page = pages.find((item) => item.pageId === finding.evidence.pageId);
+      const criterionIds = page
+        ? criteriaFor(page.pageType, website.websiteType).filter((criterion) => criterion.category === finding.category).map((criterion) => criterion.id)
+        : [];
+      return { ...finding, fingerprint, criterionIds, findingId: stableId("finding", fingerprint) };
+    })
     .sort((a, b) => b.priorityScore - a.priorityScore);
 
   await writeJson(path.join(paths.synthesis, "findings.raw.json"), rawFindings);
@@ -61,7 +69,8 @@ export async function reviewEvidence(config: AuditConfig, pages: PageEvidence[],
     assumptions: [
       ...website.assumptions,
       "Brand fit is inferred from public website evidence unless explicit brand context is provided.",
-      "Performance findings use browser navigation timing in the MVP, not a full Lighthouse report."
+      "Performance findings use browser navigation timing in the MVP, not a full Lighthouse report.",
+      `Finding inclusion uses the configured ${config.scoring.strictness} strictness profile; report prose uses the ${config.scoring.tone} tone contract.`
     ],
     limitations: [
       "No login-protected areas were audited.",
@@ -230,7 +239,7 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
       confidence: "high",
       section: "form",
       screenshotRefs: [primaryScreenshot],
-      observation: `${formsWithMissingLabels.length} form(s) include inputs without labels, ARIA labels, or placeholders in captured evidence.`,
+      observation: `${formsWithMissingLabels.length} form(s) include inputs without associated labels or accessible names in captured evidence. Placeholder text is not treated as a label.`,
       whyItMatters: "Unlabeled form fields increase completion friction and create accessibility barriers for assistive technology.",
       recommendation: "Add explicit labels or accessible names to every input, select, and textarea.",
       owner: ["developer", "designer"],
@@ -258,7 +267,7 @@ function generatePageFindings(page: PageEvidence, websiteType: WebsiteType): Fin
     }));
   }
 
-  const lowContrast = page.cssSignals?.contrastPairs.filter((pair) => pair.ratio < 4.5).slice(0, 5) ?? [];
+  const lowContrast = page.cssSignals?.contrastPairs.filter((pair) => pair.ratio < (pair.threshold ?? 4.5)).slice(0, 5) ?? [];
   if (lowContrast.length > 0) {
     drafts.push(draft(page, {
       title: "Text contrast falls below common readability thresholds",
@@ -468,9 +477,11 @@ function draft(
 }
 
 function finalizeDraft(draftItem: FindingDraft, pageImportance: "high" | "medium" | "low", index: number): Finding {
+  const fingerprint = findingFingerprint(draftItem);
   return {
     ...draftItem,
-    findingId: stableId("raw_finding", `${draftItem.title}:${draftItem.evidence.url}`, index + 1),
+    fingerprint,
+    findingId: stableId("raw_finding", fingerprint),
     source: "deterministic",
     priorityScore: priorityScore({
       severity: draftItem.severity,
@@ -483,11 +494,13 @@ function finalizeDraft(draftItem: FindingDraft, pageImportance: "high" | "medium
   };
 }
 
-function validateAndDedupe(findings: Finding[], pages: PageEvidence[]): Finding[] {
+function validateAndDedupe(findings: Finding[], pages: PageEvidence[], strictness: AuditConfig["scoring"]["strictness"]): Finding[] {
   const pageById = new Map(pages.map((page) => [page.pageId, page]));
   const seen = new Map<string, Finding>();
 
   for (const finding of findings) {
+    if (strictness === "light" && finding.severity !== "critical" && finding.severity !== "high") continue;
+    if (strictness === "standard" && finding.severity === "low") continue;
     const page = pageById.get(finding.evidence.pageId);
     if (!page) {
       continue;

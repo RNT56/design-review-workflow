@@ -5,11 +5,12 @@ import { buildPageReviewSignals } from "./review-signals.js";
 describe("buildPageReviewSignals", () => {
   it("extracts objective copy, proof, mobile, density, and visual-system signals", () => {
     const desktop = extractedPage({
-      headings: [{ text: "Operational audits for SaaS launch teams", tag: "h1", visible: true }],
-      buttons: [{ text: "Learn more", tag: "button", visible: true }, { text: "Book demo", tag: "a", visible: true }],
+      headings: [{ text: "Operational audits for SaaS launch teams", tag: "h1", visible: true, inFirstViewport: true }],
+      buttons: [{ text: "Learn more", tag: "button", visible: true, inFirstViewport: true }, { text: "Book demo", tag: "a", visible: true, inFirstViewport: true }],
       links: [{ text: "Customer case studies", tag: "a", visible: true }],
       visibleTextSample:
         "Operational audits for SaaS launch teams. Book demo. Trusted by customer teams with certified delivery and cancel anytime terms.",
+      firstViewportText: "Operational audits for SaaS launch teams. Book demo. Trusted customer proof.",
       sections: [
         {
           id: "hero",
@@ -37,6 +38,7 @@ describe("buildPageReviewSignals", () => {
     const mobile = extractedPage({
       buttons: [{ text: "Menu", tag: "button", visible: true }],
       links: [{ text: "Customer case studies", tag: "a", visible: true }],
+      firstViewportText: "Operational audits for SaaS launch teams.",
       sections: [
         {
           id: "hero_m",

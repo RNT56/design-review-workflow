@@ -2,19 +2,24 @@ import { LlmProvider, LlmRequest, LlmResponse, ModelRouter } from "./router.js";
 
 export type ProviderEnv = Record<string, string | undefined>;
 
-export function createModelRouterFromEnv(env: ProviderEnv = process.env): ModelRouter {
+export type ProviderRouterOptions = { allowedProviders?: string[] };
+
+export function createModelRouterFromEnv(env: ProviderEnv = process.env, options: ProviderRouterOptions = {}): ModelRouter {
   const providers: LlmProvider[] = [];
-  if (env.OPENAI_API_KEY && env.OPENAI_MODEL) {
-    providers.push(new OpenAiResponsesProvider(env.OPENAI_API_KEY, env.OPENAI_MODEL));
+  const allowed = options.allowedProviders?.length ? new Set(options.allowedProviders) : undefined;
+  const timeoutMs = providerTimeout(env);
+  const maxOutputTokens = providerMaxOutputTokens(env);
+  if ((!allowed || allowed.has("openai")) && env.OPENAI_API_KEY && env.OPENAI_MODEL) {
+    providers.push(new OpenAiResponsesProvider(env.OPENAI_API_KEY, env.OPENAI_MODEL, timeoutMs, maxOutputTokens));
   }
-  if (env.OPENROUTER_API_KEY && env.OPENROUTER_MODEL) {
-    providers.push(new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL));
+  if ((!allowed || allowed.has("openrouter")) && env.OPENROUTER_API_KEY && env.OPENROUTER_MODEL) {
+    providers.push(new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL, timeoutMs, maxOutputTokens));
   }
-  if (env.ANTHROPIC_API_KEY && env.ANTHROPIC_MODEL) {
-    providers.push(new AnthropicProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_MODEL));
+  if ((!allowed || allowed.has("anthropic")) && env.ANTHROPIC_API_KEY && env.ANTHROPIC_MODEL) {
+    providers.push(new AnthropicProvider(env.ANTHROPIC_API_KEY, env.ANTHROPIC_MODEL, timeoutMs, maxOutputTokens));
   }
-  if (env.GEMINI_API_KEY && env.GEMINI_MODEL) {
-    providers.push(new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL));
+  if ((!allowed || allowed.has("gemini")) && env.GEMINI_API_KEY && env.GEMINI_MODEL) {
+    providers.push(new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL, timeoutMs, maxOutputTokens));
   }
   return new ModelRouter(providers);
 }
@@ -25,7 +30,7 @@ export class OpenAiResponsesProvider implements LlmProvider {
   supportsStructuredOutput = true;
   supportsToolUse = true;
 
-  constructor(private readonly apiKey: string, private readonly model: string) {}
+  constructor(private readonly apiKey: string, private readonly model: string, private readonly timeoutMs = 120_000, private readonly maxOutputTokens = 16_384) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
     const content = [
@@ -42,8 +47,11 @@ export class OpenAiResponsesProvider implements LlmProvider {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json"
       },
+      signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         model: this.model,
+        max_output_tokens: this.maxOutputTokens,
+        ...(input.jsonSchema ? { text: { format: { type: "json_schema", name: input.schemaName ?? "structured_output", strict: false, schema: input.jsonSchema } } } : {}),
         input: [
           { role: "system", content: input.system },
           { role: "user", content }
@@ -66,7 +74,7 @@ export class OpenRouterProvider implements LlmProvider {
   supportsStructuredOutput = false;
   supportsToolUse = false;
 
-  constructor(private readonly apiKey: string, private readonly model: string) {}
+  constructor(private readonly apiKey: string, private readonly model: string, private readonly timeoutMs = 120_000, private readonly maxOutputTokens = 16_384) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
     const content = [
@@ -82,8 +90,10 @@ export class OpenRouterProvider implements LlmProvider {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json"
       },
+      signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         model: this.model,
+        max_tokens: this.maxOutputTokens,
         messages: [
           { role: "system", content: input.system },
           { role: "user", content }
@@ -106,7 +116,7 @@ export class AnthropicProvider implements LlmProvider {
   supportsStructuredOutput = false;
   supportsToolUse = true;
 
-  constructor(private readonly apiKey: string, private readonly model: string) {}
+  constructor(private readonly apiKey: string, private readonly model: string, private readonly timeoutMs = 120_000, private readonly maxOutputTokens = 16_384) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
     const content = [
@@ -127,9 +137,10 @@ export class AnthropicProvider implements LlmProvider {
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json"
       },
+      signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         model: this.model,
-        max_tokens: 4096,
+        max_tokens: this.maxOutputTokens,
         system: input.system,
         messages: [{ role: "user", content }]
       })
@@ -150,7 +161,7 @@ export class GeminiProvider implements LlmProvider {
   supportsStructuredOutput = true;
   supportsToolUse = false;
 
-  constructor(private readonly apiKey: string, private readonly model: string) {}
+  constructor(private readonly apiKey: string, private readonly model: string, private readonly timeoutMs = 120_000, private readonly maxOutputTokens = 16_384) {}
 
   async generate(input: LlmRequest): Promise<LlmResponse> {
     const parts = [
@@ -167,9 +178,11 @@ export class GeminiProvider implements LlmProvider {
       headers: {
         "Content-Type": "application/json"
       },
+      signal: AbortSignal.timeout(this.timeoutMs),
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: input.system }] },
-        contents: [{ role: "user", parts }]
+        contents: [{ role: "user", parts }],
+        generationConfig: { maxOutputTokens: this.maxOutputTokens, responseMimeType: "application/json" }
       })
     });
     const raw = await parseProviderResponse(response);
@@ -209,4 +222,14 @@ function extractOpenAiOutput(raw: Record<string, any>): unknown {
     ?.map((content: { text?: string }) => content.text)
     ?.filter(Boolean);
   return parts?.length ? parts.join("\n") : raw;
+}
+
+function providerTimeout(env: ProviderEnv): number {
+  const configured = Number(env.DESIGN_REVIEW_PROVIDER_TIMEOUT_MS ?? 120_000);
+  return Number.isFinite(configured) ? Math.max(5_000, Math.min(600_000, configured)) : 120_000;
+}
+
+function providerMaxOutputTokens(env: ProviderEnv): number {
+  const configured = Number(env.DESIGN_REVIEW_PROVIDER_MAX_OUTPUT_TOKENS ?? 16_384);
+  return Number.isFinite(configured) ? Math.max(2_048, Math.min(65_536, Math.round(configured))) : 16_384;
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { PNG } from "pngjs";
@@ -29,7 +29,28 @@ describe("generateAgentVisualReview", () => {
     expect(result.report.businessGradeStatus).toBe("business_grade");
     expect(result.generatedReviewPath).toContain("agent-runs/openai-test-vision/visual-review.json");
     expect(result.rawProviderOutputPath).toContain("visual-review.raw.json");
-  });
+  }, 15_000);
+
+  it("runs staged page analysis before final synthesis when requested", async () => {
+    const { auditRoot, report } = await writeAuditFixture("wdr-agent-generate-staged-");
+    const review = visualReview(report.auditId);
+    const outputs = [
+      JSON.stringify({ pageReviews: review.pageReviews, visualFindings: review.visualFindings, strengths: review.strengths, risks: review.risks, limitations: review.limitations }),
+      JSON.stringify(review)
+    ];
+    const provider = vi.fn(async () => new Response(JSON.stringify({ output_text: outputs.shift() }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", provider);
+    const result = await generateAgentVisualReview(auditRoot, {
+      env: { OPENAI_API_KEY: "test-key", OPENAI_MODEL: "test-vision" },
+      maxImages: 2,
+      forceStaged: true,
+      pageBatchSize: 1
+    });
+    const raw = JSON.parse(await readFile(result.rawProviderOutputPath, "utf8")) as { stagedPageAnalysis?: unknown[] };
+    expect(provider).toHaveBeenCalledTimes(2);
+    expect(raw.stagedPageAnalysis).toHaveLength(1);
+    expect(result.gate.status).toBe("pass");
+  }, 15_000);
 
   it("fails when no provider credentials are configured", async () => {
     const { auditRoot } = await writeAuditFixture("wdr-agent-generate-no-provider-");
@@ -38,7 +59,7 @@ describe("generateAgentVisualReview", () => {
   });
 
   it("rejects unsupported provider selectors before doing provider work", async () => {
-    await expect(generateAgentVisualReview("/tmp/nonexistent-audit", { provider: "openai" })).rejects.toThrow(/Unsupported agent-review provider/);
+    await expect(generateAgentVisualReview("/tmp/nonexistent-audit", { provider: "unsupported" })).rejects.toThrow(/Unsupported agent-review provider/);
   });
 
   it("fails invalid provider JSON before import", async () => {

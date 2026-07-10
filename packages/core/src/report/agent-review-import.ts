@@ -9,6 +9,7 @@ import { readReportFromAuditDir, updateProjectIndex } from "../storage/index.js"
 import { createNestedAuditPaths } from "../storage/project.js";
 import { ensureDir, writeJson } from "../utils/fs.js";
 import { writeReports, type ReportOutputs } from "./index.js";
+import { finalizeAuditValidation } from "../validation/report-lint.js";
 
 export type AgentReviewImportResult = {
   auditId: string;
@@ -32,6 +33,7 @@ export async function markAgentReviewPending(auditDir: string): Promise<AgentRev
   const outputs = await writeReports(updatedReport.config, updatedReport, paths, { reviewPack: true });
   const gate = evaluateBusinessGradeGate(updatedReport);
   await writeJson(path.join(paths.report, "business-grade-gate.json"), gate);
+  await finalizeAuditValidation(auditDir, false);
   await updateProjectIndex(workspaceRootFromAuditDir(auditDir, updatedReport), updatedReport, auditDir, outputs).catch(() => undefined);
   return {
     auditId: updatedReport.auditId,
@@ -61,6 +63,7 @@ export async function importAgentVisualReview(auditDir: string, filePath: string
   const outputs = await writeReports(updatedReport.config, updatedReport, paths, { reviewPack: true });
   const gate = evaluateBusinessGradeGate(updatedReport);
   await writeJson(path.join(paths.report, "business-grade-gate.json"), gate);
+  await finalizeAuditValidation(auditDir, false);
   await updateProjectIndex(workspaceRootFromAuditDir(auditDir, updatedReport), updatedReport, auditDir, outputs).catch(() => undefined);
 
   return {

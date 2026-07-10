@@ -43,14 +43,8 @@ export function buildPageReviewSignals(desktop: ExtractedPage, mobile?: Extracte
   const mobileActions = mobile ? actionLabels(mobile) : [];
   const allCtaLabels = unique([...desktop.buttons.map((button) => button.text), ...desktop.forms.map((form) => form.submitText ?? "")].filter(Boolean));
   const visibleText = desktop.visibleTextSample.toLowerCase();
-  const firstViewportText = desktop.sections
-    .filter((section) => (section.box?.y ?? 0) < 900)
-    .map((section) => section.textSample)
-    .join(" ");
-  const mobileFirstViewportText = mobile?.sections
-    .filter((section) => (section.box?.y ?? 0) < 900)
-    .map((section) => section.textSample)
-    .join(" ");
+  const firstViewportText = desktop.firstViewportText ?? "";
+  const mobileFirstViewportText = mobile?.firstViewportText ?? "";
   const proofMatches = matchedTerms(visibleText, proofTerms);
   const riskMatches = matchedTerms(visibleText, riskReversalTerms);
   const firstViewportLower = firstViewportText.toLowerCase();
@@ -82,12 +76,12 @@ export function buildPageReviewSignals(desktop: ExtractedPage, mobile?: Extracte
       riskReversalTerms: riskMatches
     },
     firstViewport: {
-      hasH1: Boolean(headlineText),
-      hasAction: desktopActions.length > 0,
+      hasH1: desktop.headings.some((heading) => heading.tag === "h1" && heading.inFirstViewport),
+      hasAction: [...desktop.buttons, ...desktop.links].some((node) => node.inFirstViewport && actionWords.test(node.text)),
       hasProofSignal: proofTerms.some((term) => firstViewportLower.includes(term)),
-      desktopWordCount: wordCount(firstViewportText || desktop.visibleTextSample.slice(0, 900)),
+      desktopWordCount: wordCount(firstViewportText),
       desktopComponentCount: desktop.components.filter((component) => (component.box?.y ?? 0) < 900).length,
-      mobileWordCount: mobileFirstViewportText ? wordCount(mobileFirstViewportText) : undefined,
+      mobileWordCount: mobile ? wordCount(mobileFirstViewportText) : undefined,
       mobileComponentCount: mobile?.components.filter((component) => (component.box?.y ?? 0) < 900).length
     },
     mobileDesktop: {
@@ -110,7 +104,7 @@ export function buildPageReviewSignals(desktop: ExtractedPage, mobile?: Extracte
       colorCount: css.colors.length,
       backgroundColorCount: css.backgroundColors.length,
       borderRadiusCount: css.borderRadii.length,
-      lowContrastPairs: css.contrastPairs.filter((pair) => pair.ratio < 4.5).length,
+      lowContrastPairs: css.contrastPairs.filter((pair) => pair.ratio < (pair.threshold ?? 4.5)).length,
       fragmentationSignals
     }
   };

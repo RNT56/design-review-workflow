@@ -32,11 +32,13 @@ It is built for repeatable design critique instead of loose screenshot notes: th
 | UX and navigation       | page classification, navigation clarity, route inventory, link/button/form evidence and repeated section patterns   |
 | Conversion and trust    | proof, reassurance, portfolio narrative, service persuasion, contact paths, risk reduction and action readiness     |
 | Mobile experience       | mobile screenshots, small-viewport composition, density, cropping, CTA placement and mobile navigation evidence     |
-| Accessibility basics    | axe-core basics where injection succeeds, missing alt counts, contrast samples and evidence-linked warnings         |
-| Performance perception  | browser navigation timing, visible loading context and limitations for non-Lighthouse dependency-light audits       |
+| Accessibility basics    | desktop/mobile axe basics, accessible-name checks, missing alt-attribute counts, contrast candidates and warnings    |
+| Performance perception  | desktop/mobile navigation/resource timing, observer-based LCP/CLS candidates, long tasks and explicit Lighthouse status |
 | Agent implementation    | source candidates, patch-plan proposals and changed-file proposals when `--repo <path>` is supplied                 |
 
 This is a design-review workflow, not an SEO, analytics, privacy, legal accessibility, backend performance or bundle-internals audit.
+
+Scores use the status-independent `design-review-workflow.scoring.v2` rubric: identical findings and evidence produce identical numbers across automated, pending and business-grade states. Review status controls evidence coverage, confidence and subjective claims—not score inflation.
 
 ## How It Works
 
@@ -173,10 +175,12 @@ Every completed CLI run generates the review pack: optimized PNG sheets, a stati
 Optional provider-backed generation can be used when a multimodal provider is configured in `.env`:
 
 ```bash
+cp .env.example .env
+# Fill one provider key/model pair; never commit .env.
 node apps/cli/dist/index.js agent-review generate --report ./audit-reports/example/<run-id> --provider auto
 ```
 
-This command saves raw model output under `agent-runs/`, writes a normal `AgentVisualReview`, and must pass the same validate/import/business-grade gates.
+This command loads optional `.env`/`.env.local` configuration, uses bounded provider timeouts and output limits, balances first-viewport/issue/page-flow/state images, stages larger sites into page batches, records request/image provenance hashes, writes a normal `AgentVisualReview`, and must pass the same validate/import/business-grade gates.
 
 ## Audit Storage
 
@@ -188,6 +192,7 @@ audit-reports/
     2026-07-07T101743Z-scan_c7869f76/
       audit-config.json
       audit-state.json
+      capture-failures.json
       index.html
       screenshots/
       extracted/
@@ -229,7 +234,7 @@ node apps/cli/dist/index.js export --report ./audit-reports/example/<run-id> --p
 | `repo-import` | Source-repo handoff package for implementation agents, with local absolute paths redacted by default |
 | `full` | Complete internal artifact package excluding nested prior exports |
 
-Every export includes `export-manifest.json`, `checksums.sha256` and `LICENSE-NOTICE.md`. Local absolute paths are redacted by default; pass `--include-private-paths` only for trusted internal handoff.
+Every export includes `export-manifest.json`, `checksums.sha256` and `LICENSE-NOTICE.md`. ZIP exports use compression and avoid duplicating raw screenshots already embedded in the standalone hosted report. Local absolute paths are redacted by default; pass `--include-private-paths` only for trusted internal handoff.
 
 Cloud upload is intentionally not part of the core workflow. If a user explicitly asks for Google Drive, Dropbox, S3 or similar storage, an authorized external agent connector can upload the generated package.
 
@@ -241,11 +246,13 @@ High-signal report files:
 | ---- | ------- |
 | `index.html` | Primary static audit dashboard; open this first, no server required |
 | `report/report.html` and `report/report.md` | Human-readable report |
-| `report/hosted/index.html` | Secondary standalone report with copied screenshot assets |
+| `report/hosted/index.html` | Secondary standalone report with copy-on-write cloned assets where supported |
 | `report/report.json` | Full structured report |
 | `report/findings.json` | Prioritized evidence-backed findings |
 | `report/grouped-issues.json` | Root-cause issue groups with affected pages and recommendations |
 | `report/score.json` | Scorecard and confidence summary |
+| `report/bundle-integrity.json` | SHA-256 manifest for canonical evidence and raw captures |
+| `report/criteria-evaluation.json` | Applicable review criteria, evidence coverage and mapped findings by page |
 | `report/evidence-brief.json` | Concise structured context for multimodal review, including copy, CTA, proof, mobile and visual-system signals |
 | `report/screenshot-manifest.json` | Screenshot inventory with PNG dimensions and sheet references |
 | `report/contact-sheets/` | First-viewport, page-flow and issue evidence sheets |
@@ -257,10 +264,11 @@ High-signal report files:
 | `report/agent-execution-plan.md` | Handoff plan for repo-capable agents |
 | `report/agent-instructions/*.md` | Agent-specific execution notes |
 
-Use `report lint` and `business-grade lint` before sharing or acting on a report:
+`report lint` is read-only: it never repairs or rewrites an audit. Use the explicit repair command only when an older or damaged bundle should be regenerated, then lint and run the business-grade gate before sharing:
 
 ```bash
 node apps/cli/dist/index.js report lint ./audit-reports/example/<run-id> --strict
+node apps/cli/dist/index.js report repair ./audit-reports/example/<run-id> --strict
 node apps/cli/dist/index.js business-grade lint --report ./audit-reports/example/<run-id>
 ```
 
@@ -272,7 +280,7 @@ Start the local cockpit:
 npm run web
 ```
 
-Then open the printed localhost URL. The UI lists local audits, opens reports, links handoff files, shows screenshot drawers collapsed by default, and exposes page evidence, issue evidence, raw screenshots and imported agent review sections.
+Then open the printed localhost URL. The server binds to loopback only, rejects private/reserved audit targets and unsafe redirect/navigation requests, rate-limits starts, caps concurrent jobs and supports cancellation. The UI lists local audits, opens reports, links handoff files, shows screenshot drawers collapsed by default, and exposes page evidence, issue evidence, raw screenshots and imported agent review sections.
 
 The local cockpit is convenience tooling. Completed audits are meant to be read and shared from the generated `audit-reports/<site>/<run>/index.html` first.
 
@@ -281,11 +289,13 @@ The local cockpit is convenience tooling. Completed audits are meant to be read 
 ```bash
 node apps/cli/dist/index.js latest [site-or-url]
 node apps/cli/dist/index.js history
-node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir>
+node apps/cli/dist/index.js compare <before-audit-dir> <after-audit-dir> # rejects incompatible contracts by default
 node apps/cli/dist/index.js monitor init monitor.yaml
 node apps/cli/dist/index.js monitor run monitor.yaml
 node apps/cli/dist/index.js workflow --format json
 node apps/cli/dist/index.js doctor
+node apps/cli/dist/index.js enterprise fixtures --run
+node apps/cli/dist/index.js enterprise retention-plan --report <audit-dir>
 ```
 
 ## Safety Boundaries
@@ -321,6 +331,7 @@ npm run typecheck
 npm test
 npm run build
 npm run doctor
+npm run enterprise:verify
 npm audit --omit=dev
 ```
 

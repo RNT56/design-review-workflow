@@ -38,6 +38,7 @@ export function enterpriseFixtureManifest() {
     generatedAt: new Date().toISOString(),
     fixtures: enterpriseFixtureCorpus,
     requiredEvalCommands: [
+      "node apps/cli/dist/index.js enterprise fixtures --run",
       "node apps/cli/dist/index.js report lint <audit-dir> --strict",
       "node apps/cli/dist/index.js enterprise verify --report <audit-dir>",
       "node apps/cli/dist/index.js business-grade lint --report <audit-dir>",
@@ -67,7 +68,11 @@ function fixture(id: string, archetype: EnterpriseFixtureArchetype, purpose: str
       "report/resource-audit.json",
       "report/interaction-states.json",
       "report/related-workflows.json",
-      "report/enterprise-readiness.json"
+      "report/enterprise-readiness.json",
+      "report/criteria-evaluation.json",
+      "report/bundle-integrity.json",
+      "report/validation.json",
+      "report/quality-gate.json"
     ],
     riskSignals: riskSignalsFor(archetype)
   };

@@ -5,6 +5,10 @@ export function normalizeUrl(raw: string, base?: string): string | null {
       return null;
     }
     url.hash = "";
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(utm_.+|fbclid|gclid|msclkid|mc_cid|mc_eid|ref|source)$/i.test(key)) url.searchParams.delete(key);
+    }
+    url.searchParams.sort();
     if (url.pathname !== "/" && url.pathname.endsWith("/")) {
       url.pathname = url.pathname.slice(0, -1);
     }

@@ -32,12 +32,15 @@ Captured evidence includes:
 - `pageType`
 - `businessImportance`
 - `screenshots`
+- `interactionStates` and `captureActions`
 - `text`
 - `structure`
 - `cssSignals`
 - `reviewSignals`
 - `performance`
 - `accessibility`
+- `performanceByViewport`
+- `accessibilityByViewport`
 
 `reviewSignals` are deterministic, non-subjective inputs for the visual-review lane: headline specificity, CTA inventory, vague CTA labels, proof and risk-reversal terms, first-viewport H1/action/proof presence, desktop/mobile action deltas, tap-target counts, text density, and visual-system fragmentation counts.
 
@@ -46,6 +49,8 @@ Captured evidence includes:
 Every final finding must include:
 
 - `findingId`
+- `fingerprint`: stable semantic identity across runs
+- `criterionIds`: applicable deterministic review criteria mapped to the finding
 - `source`: `deterministic`, `agent_visual`, or `merged`
 - `title`
 - `category`
@@ -78,7 +83,11 @@ Business-grade reports require an imported visual review from the repo-capable m
 - `confidence`
 - `limitations`
 
-All screenshot references must match IDs or paths in `report/screenshot-manifest.json`. The import step rejects unknown screenshot references, TODO/template text, shallow generic verdicts, unsupported analytics/user-behavior/revenue/heatmap/competitor claims, and missing redesign advice. A strict import needs at least 3 redesign actions unless `designVerdict.readiness` is `no_major_redesign_needed` with detailed rationale.
+All screenshot references must match IDs or paths in `report/screenshot-manifest.json`. Findings must cite evidence from their own page, redesign actions must cite every affected page, and page reviews must cover each captured first-viewport variant. The import step rejects unknown or cross-page screenshot references, duplicate/missing page reviews, TODO/template text, shallow generic verdicts, unsupported analytics/user-behavior/revenue/heatmap/competitor claims, and missing redesign advice. A strict import needs at least 3 redesign actions unless `designVerdict.readiness` is `no_major_redesign_needed` with detailed rationale.
+
+## Scorecard
+
+`design-review-workflow.scoring.v2` adds `rubricVersion`, `provisional`, per-dimension evidence `coverage`, deduplicated `findingGroups`, and aggregate coverage counts. Numeric scores are status-independent; business-grade status changes confidence and permitted visual claims, not an otherwise identical score.
 
 ## ScreenshotManifest
 
@@ -167,10 +176,12 @@ Every completed audit writes machine-readable agent contracts under `report/`:
 - `visual-system.json`: observed color, background, font, size, and radius signals
 - `experience-timing.json`: browser navigation-timing and optional Lighthouse-shaped summary
 - `standards-registry.json`: design-review rule registry and risk boundaries
+- `criteria-evaluation.json`: applicable criteria, required/available evidence and mapped findings per page
 - `suppression-report.json`: non-destructive suppression ledger
 - `design-benchmark.json`: machine-readable handoff readiness benchmark
 - `design-benchmark.md`: human-readable handoff readiness benchmark
 - `validation.json`: report-lint result
+- `bundle-integrity.json`: SHA-256 inventory of canonical evidence and raw capture files
 - `quality-gate.json`: compact pass/warn/fail gate
 - `business-grade-gate.json`: pass/fail gate for business-grade claims
 - `grouped-issues.json`: root-cause issue inventory
@@ -182,7 +193,7 @@ Every completed audit writes machine-readable agent contracts under `report/`:
 - `contact-sheets/issues/*.png`: grouped issue evidence sheets
 - `agent-visual-review.json`: imported multimodal agent review when present
 - `../index.html`: primary audit-root static dashboard; no server required
-- `hosted/index.html`: secondary standalone static report with copied screenshot assets
+- `hosted/index.html`: secondary standalone static report whose local assets use independent copy-on-write clones when supported
 
 ## Export Manifest
 

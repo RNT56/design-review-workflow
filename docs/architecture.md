@@ -25,9 +25,11 @@ CLI / Local Web UI
 
 Interprets config, creates the audit folder, coordinates capture, stores intermediate state, runs review, and writes reports.
 
+The local web entrypoint binds to loopback only. It validates the initial target, redirects, browser navigation requests, and competitor targets against private/reserved network ranges; audit starts are rate-limited and queued with bounded concurrency and cancellation.
+
 ### Evidence Capture
 
-Uses Playwright to render public pages. It stores screenshots, page inventory, extracted text, DOM summaries, CSS signals, deterministic copy/layout review signals, accessibility basics, and performance basics.
+Uses Playwright to render public pages. It stores raw desktop/mobile screenshots, safe interaction states, page inventory, redirect/canonical crawl metadata, partial-capture failures, extracted text, DOM summaries, CSS signals, deterministic copy/layout review signals, responsive axe results, and responsive browser performance evidence.
 
 ### Structured Understanding
 
@@ -41,7 +43,7 @@ High-fidelity design judgment is handled through an explicit multimodal agent la
 
 ### Synthesis And QA
 
-Findings are deduplicated, grouped into root-cause issues, scored, validated against evidence, and downgraded or removed if unsupported or generic. Business-grade scoring remains capped until a validated visual review is imported.
+Findings are deduplicated, grouped into root-cause issues, scored, validated against evidence, and downgraded or removed if unsupported or generic. The v2 numeric score is status-independent; review status changes evidence coverage, confidence, and which subjective claims are permitted.
 
 ### Reports
 
@@ -55,7 +57,7 @@ The report layer writes:
 - `report/executive-summary.md`
 - `report/hosted/index.html`
 
-The top-level audit `index.html` is the canonical no-server dashboard and links into generated JSON, screenshots, contact sheets, review gallery, gates, and handoff files by relative path. `report/hosted/index.html` remains a secondary static report with copied local screenshot assets.
+The top-level audit `index.html` is the canonical no-server dashboard and links into generated JSON, screenshots, contact sheets, review gallery, gates, and handoff files by relative path. `report/hosted/index.html` remains a secondary standalone report; local assets use copy-on-write clones when the filesystem supports them and copy fallback otherwise, so editing hosted assets cannot mutate raw evidence.
 
 ### Local Export Packages
 
@@ -77,6 +79,8 @@ The design-review bundle adds stable operational artifacts:
 - `report/visual-system.json`
 - `report/experience-timing.json`
 - `report/standards-registry.json`
+- `report/criteria-evaluation.json`
+- `report/bundle-integrity.json`
 - `report/suppression-report.json`
 - `report/design-benchmark.json`
 - `report/design-benchmark.md`
@@ -118,11 +122,11 @@ The review-pack order is first viewports, grouped issue evidence, page-flow shee
 
 `business-grade lint` passes only after that import succeeds.
 
-`agent-review generate --report <audit-dir> --provider auto` is an optional provider-backed lane. It uses configured multimodal provider adapters, saves raw provider output under `agent-runs/`, writes the same `AgentVisualReview` schema, and must pass the same validate/import/business-grade gates.
+`agent-review generate --report <audit-dir> --provider auto` is an optional provider-backed lane. It uses configured multimodal provider adapters, bounded timeouts/output limits, balanced review-pack sampling, staged page batches for larger sites, and request/image provenance hashes. It saves raw provider output under `agent-runs/`, writes the same `AgentVisualReview` schema, and must pass the same validate/import/business-grade gates.
 
 ### Validation And Handoff
 
-Every completed audit runs report lint and writes a stable agent bundle:
+Every completed audit uses an explicit finalizer to write integrity and gate state, then runs pure read-only report lint. Existing bundles are changed only through `report repair` or another explicit artifact-writing command. The stable agent bundle includes:
 
 - `index.html`
 - `report/workflow-manifest.json`

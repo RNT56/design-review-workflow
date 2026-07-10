@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { deflateRawSync } from "node:zlib";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import type { AuditReport } from "../schemas/audit.js";
@@ -29,6 +30,7 @@ export type AuditExportSummary = {
   outputPath: string;
   files: number;
   bytes: number;
+  uncompressedBytes: number;
   manifestPath: string;
   checksumsPath: string;
   localPathsRedacted: boolean;
@@ -74,11 +76,13 @@ const REVIEW_FILES = new Set([
   "report/learnings/run-retrospective.json",
   "report/validation.json",
   "report/quality-gate.json",
+  "report/bundle-integrity.json",
   "report/business-grade-gate.json",
   "report/provider-review.json",
   "report/design-benchmark.json",
   "report/design-benchmark.md",
   "report/standards-registry.json",
+  "report/criteria-evaluation.json",
   "report/suppression-report.json",
   "report/actionability.json",
   "report/priority-action-plan.md",
@@ -92,11 +96,7 @@ const REVIEW_FILES = new Set([
 const REVIEW_PREFIXES = [
   "report/hosted/",
   "report/contact-sheets/",
-  "report/agent-review-pack/gallery/",
-  "screenshots/desktop/",
-  "screenshots/mobile/",
-  "screenshots/states/",
-  "screenshots/annotated/"
+  "report/agent-review-pack/gallery/"
 ];
 
 const REPO_IMPORT_FILES = new Set([
@@ -128,6 +128,7 @@ const REPO_IMPORT_FILES = new Set([
   "report/learnings/run-retrospective.json",
   "report/design-benchmark.json",
   "report/standards-registry.json",
+  "report/criteria-evaluation.json",
   "report/suppression-report.json",
   "report/actionability.json",
   "report/stakeholder-recommendations.md",
@@ -137,6 +138,7 @@ const REPO_IMPORT_FILES = new Set([
   "report/score.json",
   "report/validation.json",
   "report/quality-gate.json",
+  "report/bundle-integrity.json",
   "report/business-grade-gate.json",
   "report/provider-review.json",
   "report/screenshot-manifest.json",
@@ -174,6 +176,15 @@ export async function exportAudit(options: AuditExportOptions): Promise<AuditExp
     redactLocalPaths: localPathsRedacted,
     redactSensitiveValues: sensitiveValuesRedacted
   });
+  if (profile === "review") {
+    const rootIndex = entries.find((entry) => entry.path === "index.html");
+    if (rootIndex) {
+      rootIndex.content = Buffer.from(
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=report/hosted/index.html"><title>Design Review</title></head><body><p><a href="report/hosted/index.html">Open the standalone design review</a></p></body></html>',
+        "utf8"
+      );
+    }
+  }
   entries.push({ path: "LICENSE-NOTICE.md", content: Buffer.from(renderLicenseNotice(), "utf8") });
 
   const manifest = buildExportManifest({
@@ -209,6 +220,8 @@ export async function exportAudit(options: AuditExportOptions): Promise<AuditExp
 
   await writeJson(path.join(auditDir, "export-manifest.json"), manifest);
   await writeText(path.join(auditDir, "checksums.sha256"), checksums);
+  const uncompressedBytes = entries.reduce((sum, entry) => sum + entry.content.byteLength, 0);
+  const outputBytes = format === "zip" ? (await stat(outputPath)).size : uncompressedBytes;
 
   return {
     auditDir,
@@ -216,7 +229,8 @@ export async function exportAudit(options: AuditExportOptions): Promise<AuditExp
     format,
     outputPath,
     files: entries.length,
-    bytes: entries.reduce((sum, entry) => sum + entry.content.byteLength, 0),
+    bytes: outputBytes,
+    uncompressedBytes,
     manifestPath: format === "directory" ? path.join(outputPath, "export-manifest.json") : path.join(auditDir, "export-manifest.json"),
     checksumsPath: format === "directory" ? path.join(outputPath, "checksums.sha256") : path.join(auditDir, "checksums.sha256"),
     localPathsRedacted,
@@ -311,6 +325,10 @@ function buildExportManifest(input: {
     outputPath: input.localPathsRedacted ? "[redacted-local-path]" : input.outputPath,
     artifactCount: artifacts.length,
     artifacts,
+    archive: {
+      compression: input.format === "zip" ? "deflate-when-smaller" : "none",
+      duplicateRawScreenshotsInReviewProfile: false
+    },
     validationStatus: {
       businessGradeStatus: input.report.businessGradeStatus,
       qualityGate: readArtifactStatus(input.entries, "report/quality-gate.json"),
@@ -466,30 +484,34 @@ function buildZip(entries: ExportEntry[]): Buffer {
   for (const entry of entries) {
     const filename = Buffer.from(normalizeArchivePath(entry.path), "utf8");
     const crc = crc32(entry.content);
+    const compressed = deflateRawSync(entry.content, { level: 6 });
+    const useDeflate = compressed.byteLength < entry.content.byteLength;
+    const payload = useDeflate ? compressed : entry.content;
+    const method = useDeflate ? 8 : 0;
     const localHeader = Buffer.alloc(30);
     localHeader.writeUInt32LE(0x04034b50, 0);
     localHeader.writeUInt16LE(20, 4);
     localHeader.writeUInt16LE(0x0800, 6);
-    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(method, 8);
     localHeader.writeUInt16LE(0, 10);
     localHeader.writeUInt16LE(0, 12);
     localHeader.writeUInt32LE(crc, 14);
-    localHeader.writeUInt32LE(entry.content.byteLength, 18);
+    localHeader.writeUInt32LE(payload.byteLength, 18);
     localHeader.writeUInt32LE(entry.content.byteLength, 22);
     localHeader.writeUInt16LE(filename.byteLength, 26);
     localHeader.writeUInt16LE(0, 28);
-    localParts.push(localHeader, filename, entry.content);
+    localParts.push(localHeader, filename, payload);
 
     const centralHeader = Buffer.alloc(46);
     centralHeader.writeUInt32LE(0x02014b50, 0);
     centralHeader.writeUInt16LE(20, 4);
     centralHeader.writeUInt16LE(20, 6);
     centralHeader.writeUInt16LE(0x0800, 8);
-    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(method, 10);
     centralHeader.writeUInt16LE(0, 12);
     centralHeader.writeUInt16LE(0, 14);
     centralHeader.writeUInt32LE(crc, 16);
-    centralHeader.writeUInt32LE(entry.content.byteLength, 20);
+    centralHeader.writeUInt32LE(payload.byteLength, 20);
     centralHeader.writeUInt32LE(entry.content.byteLength, 24);
     centralHeader.writeUInt16LE(filename.byteLength, 28);
     centralHeader.writeUInt16LE(0, 30);
@@ -499,7 +521,7 @@ function buildZip(entries: ExportEntry[]): Buffer {
     centralHeader.writeUInt32LE(0, 38);
     centralHeader.writeUInt32LE(offset, 42);
     centralParts.push(centralHeader, filename);
-    offset += localHeader.byteLength + filename.byteLength + entry.content.byteLength;
+    offset += localHeader.byteLength + filename.byteLength + payload.byteLength;
   }
 
   const centralDirectory = Buffer.concat(centralParts);

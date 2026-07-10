@@ -53,11 +53,16 @@ describe("business-grade review gate", () => {
     expect(gate.status).toBe("pass");
   });
 
-  it("caps scores when business-grade status has not passed", () => {
+  it("keeps numeric quality status-independent while changing coverage", () => {
     const page = samplePage();
+    const automated = createScorecard([], [page], "portfolio", "automated_scan");
+    const pending = createScorecard([], [page], "portfolio", "agent_review_pending");
+    const businessGrade = createScorecard([], [page], "portfolio", "business_grade");
 
-    expect(createScorecard([], [page], "portfolio", "automated_scan").overallScore).toBeLessThanOrEqual(74);
-    expect(createScorecard([], [page], "portfolio", "agent_review_pending").overallScore).toBeLessThanOrEqual(82);
+    expect(automated.overallScore).toBe(pending.overallScore);
+    expect(pending.overallScore).toBe(businessGrade.overallScore);
+    expect(automated.provisional).toBe(true);
+    expect((businessGrade.coverage?.assessedDimensions ?? 0)).toBeGreaterThan(automated.coverage?.assessedDimensions ?? 0);
   });
 });
 

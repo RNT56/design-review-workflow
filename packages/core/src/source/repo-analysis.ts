@@ -4,7 +4,7 @@ import { AuditReport, Finding } from "../schemas/audit.js";
 import { readReportFromAuditDir } from "../storage/index.js";
 import { createNestedAuditPaths } from "../storage/project.js";
 import { writeJson, writeText } from "../utils/fs.js";
-import { lintAuditReport } from "../validation/report-lint.js";
+import { finalizeAuditValidation } from "../validation/report-lint.js";
 
 type SourceFileKind = "route" | "component" | "style" | "content" | "config" | "test" | "unknown";
 type CandidateConfidence = "high" | "medium" | "low";
@@ -129,7 +129,7 @@ export async function analyzeDesignSourceRepo(auditDir: string, repoPath: string
   });
   await writeJson(path.join(paths.report, "changed-files.json"), changedFilesModel(report, byFinding));
   await writeText(path.join(paths.report, "patch-plan.md"), renderSourceBackedPatchPlan(report, byFinding));
-  await lintAuditReport(auditDir, false);
+  await finalizeAuditValidation(auditDir, false);
 
   return analysis;
 }

@@ -2,25 +2,45 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
-import { AuditCompareResult, AuditCompareResultSchema, AuditReport, ScreenshotRef } from "../schemas/audit.js";
+import { AuditCompareResult, AuditCompareResultSchema, AuditReport, Finding, ScreenshotRef } from "../schemas/audit.js";
 import { readReportFromAuditDir } from "../storage/index.js";
+import { findingFingerprint } from "../utils/id.js";
 import { writeJson } from "../utils/fs.js";
 
-export async function compareAuditDirs(beforeAuditDir: string, afterAuditDir: string): Promise<{ result: AuditCompareResult; outputPath: string }> {
+export type CompareAuditOptions = {
+  allowIncompatible?: boolean;
+};
+
+export async function compareAuditDirs(
+  beforeAuditDir: string,
+  afterAuditDir: string,
+  options: CompareAuditOptions = {}
+): Promise<{ result: AuditCompareResult; outputPath: string }> {
   const before = await readReportFromAuditDir(beforeAuditDir);
   const after = await readReportFromAuditDir(afterAuditDir);
+  const compatibility = compareCompatibility(before, after);
+  if (compatibility.status === "incompatible" && !options.allowIncompatible) {
+    throw new Error(`Audits are not comparable: ${compatibility.reasons.join("; ")}. Use --allow-incompatible only for exploratory output.`);
+  }
+
+  const beforeByFingerprint = new Map(before.findings.map((finding) => [fingerprint(finding), finding]));
+  const afterByFingerprint = new Map(after.findings.map((finding) => [fingerprint(finding), finding]));
   const result = AuditCompareResultSchema.parse({
+    schemaVersion: "design-review-workflow.compare.v2",
     generatedAt: new Date().toISOString(),
     beforeAuditId: before.auditId,
     afterAuditId: after.auditId,
     beforeUrl: before.config.url,
     afterUrl: after.config.url,
+    compatibility,
     scoreDelta: after.scorecard.overallScore - before.scorecard.overallScore,
     subscoreDeltas: compareSubscores(before, after),
-    resolvedFindings: before.findings.filter((finding) => !after.findings.some((candidate) => candidate.title === finding.title)),
-    newFindings: after.findings.filter((finding) => !before.findings.some((candidate) => candidate.title === finding.title)),
-    persistentFindings: after.findings.filter((finding) => before.findings.some((candidate) => candidate.title === finding.title)),
-    screenshotDiffs: await compareScreenshots(beforeAuditDir, afterAuditDir, before, after)
+    resolvedFindings: before.findings.filter((finding) => !afterByFingerprint.has(fingerprint(finding))),
+    newFindings: after.findings.filter((finding) => !beforeByFingerprint.has(fingerprint(finding))),
+    persistentFindings: after.findings.filter((finding) => beforeByFingerprint.has(fingerprint(finding))),
+    screenshotDiffs: compatibility.screenshotComparable
+      ? await compareScreenshots(beforeAuditDir, afterAuditDir, before, after)
+      : []
   });
 
   const outputDir = path.join(afterAuditDir, "comparison");
@@ -28,6 +48,64 @@ export async function compareAuditDirs(beforeAuditDir: string, afterAuditDir: st
   const outputPath = path.join(outputDir, `compare-${before.auditId}.json`);
   await writeJson(outputPath, result);
   return { result, outputPath };
+}
+
+function compareCompatibility(before: AuditReport, after: AuditReport): AuditCompareResult["compatibility"] {
+  const reasons: string[] = [];
+  const beforeTarget = canonicalTarget(before.config.url);
+  const afterTarget = canonicalTarget(after.config.url);
+  const targetMatches = beforeTarget === afterTarget;
+  if (!targetMatches) reasons.push(`target differs (${beforeTarget} vs ${afterTarget})`);
+
+  const beforeRubricVersion = before.scorecard.rubricVersion ?? "design-review-workflow.scoring.v1-legacy";
+  const afterRubricVersion = after.scorecard.rubricVersion ?? "design-review-workflow.scoring.v1-legacy";
+  const rubricMatches = beforeRubricVersion === afterRubricVersion;
+  if (!rubricMatches) reasons.push(`scoring rubric differs (${beforeRubricVersion} vs ${afterRubricVersion})`);
+
+  const scopeMatches = before.config.mode === after.config.mode && before.config.maxPages === after.config.maxPages;
+  if (!scopeMatches) reasons.push(`audit scope differs (${before.config.mode}/${before.config.maxPages} vs ${after.config.mode}/${after.config.maxPages})`);
+
+  const beforeViewports = viewportSignature(before);
+  const afterViewports = viewportSignature(after);
+  const viewportsMatch = beforeViewports === afterViewports;
+  if (!viewportsMatch) reasons.push("viewport configuration differs");
+
+  const beforeCapture = JSON.stringify(before.config.capture);
+  const afterCapture = JSON.stringify(after.config.capture);
+  const captureMatches = beforeCapture === afterCapture;
+  if (!captureMatches) reasons.push("capture configuration differs");
+
+  const findingComparable = targetMatches && scopeMatches;
+  const scoreComparable = findingComparable && rubricMatches;
+  const screenshotComparable = targetMatches && viewportsMatch && captureMatches;
+  return {
+    status: reasons.length === 0 ? "compatible" : "incompatible",
+    scoreComparable,
+    findingComparable,
+    screenshotComparable,
+    reasons,
+    beforeRubricVersion,
+    afterRubricVersion
+  };
+}
+
+function viewportSignature(report: AuditReport): string {
+  return JSON.stringify(
+    report.config.viewports.map(({ name, width, height, deviceScaleFactor, isMobile }) => ({ name, width, height, deviceScaleFactor, isMobile }))
+  );
+}
+
+function canonicalTarget(rawUrl: string): string {
+  const url = new URL(rawUrl);
+  url.hash = "";
+  url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/$/, "");
+  url.searchParams.sort();
+  return url.toString();
+}
+
+function fingerprint(finding: Finding): string {
+  return finding.fingerprint ?? findingFingerprint(finding);
 }
 
 function compareSubscores(before: AuditReport, after: AuditReport): Record<string, number> {
@@ -46,28 +124,26 @@ async function compareScreenshots(beforeAuditDir: string, afterAuditDir: string,
   await mkdir(outputDir, { recursive: true });
 
   for (const afterPage of after.pages) {
-    const beforePage = before.pages.find((page) => page.normalizedUrl === afterPage.normalizedUrl || page.pageType === afterPage.pageType);
-    if (!beforePage) {
-      continue;
+    const beforePage = before.pages.find((page) => page.normalizedUrl === afterPage.normalizedUrl);
+    if (!beforePage) continue;
+
+    const afterShots = Object.values(afterPage.screenshots).filter((shot) => shot.kind === "above_fold" || shot.kind === "full_page");
+    for (const afterShot of afterShots) {
+      const beforeShot = pickComparableScreenshot(beforePage.screenshots, afterShot);
+      if (!beforeShot) continue;
+      const beforePath = path.join(beforeAuditDir, beforeShot.path);
+      const afterPath = path.join(afterAuditDir, afterShot.path);
+      const diffPath = path.join(outputDir, `${afterPage.pageId}_${afterShot.viewport}_${afterShot.kind}.png`);
+      diffs.push(await comparePng(beforePath, afterPath, diffPath));
     }
-    const beforeShot = pickComparableScreenshot(beforePage.screenshots);
-    const afterShot = pickComparableScreenshot(afterPage.screenshots);
-    if (!beforeShot || !afterShot) {
-      continue;
-    }
-    const beforePath = path.join(beforeAuditDir, beforeShot.path);
-    const afterPath = path.join(afterAuditDir, afterShot.path);
-    const diffPath = path.join(outputDir, `${afterPage.pageId}_${afterShot.viewport}_${afterShot.kind}.png`);
-    diffs.push(await comparePng(beforePath, afterPath, diffPath));
   }
 
   return diffs;
 }
 
-function pickComparableScreenshot(screenshots: Record<string, ScreenshotRef>): ScreenshotRef | undefined {
-  return (
-    Object.values(screenshots).find((screenshot) => screenshot.viewport === "desktop" && screenshot.kind === "above_fold") ??
-    Object.values(screenshots).find((screenshot) => screenshot.kind === "above_fold")
+function pickComparableScreenshot(screenshots: Record<string, ScreenshotRef>, target: ScreenshotRef): ScreenshotRef | undefined {
+  return Object.values(screenshots).find(
+    (screenshot) => screenshot.viewport === target.viewport && screenshot.kind === target.kind
   );
 }
 

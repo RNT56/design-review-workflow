@@ -94,7 +94,7 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
       captureStates: true,
       maxStateCapturesPerPage: 8,
       maxStateCapturesPerViewport: 5,
-      allowCheckoutStart: true,
+      allowCheckoutStart: false,
       allowFormErrorChecks: false,
       allowPurchase: false,
       allowLogin: false,
@@ -116,6 +116,7 @@ export function createAuditConfig(input: AuditInput): AuditConfig {
       screenshots: "keep",
       providerPayloads: "keep",
       exports: "keep",
+      derivedAssets: "keep",
       dryRunOnly: true,
       ...(input.retention ?? {})
     },

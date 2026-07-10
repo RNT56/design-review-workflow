@@ -27,7 +27,8 @@ crawl:
     - "/terms"
 interactions:
   level: 2
-  allow_checkout_start: true
+  # Legacy allow flags are retained for compatibility but never authorize mutating flows.
+  allow_checkout_start: false
   allow_form_error_checks: false
   allow_purchase: false
   allow_login: false

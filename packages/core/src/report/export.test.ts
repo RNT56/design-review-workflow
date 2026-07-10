@@ -23,6 +23,9 @@ describe("exportAudit", () => {
     const paths = await createAuditPaths(config, root);
     await writeFile(path.join(paths.screenshotsDesktop, "page_1_desktop_above_fold.png"), "png");
     await writeReports(config, sampleReport(config), paths);
+    const hostedScreenshot = path.join(paths.report, "hosted", "assets", "screenshots", "desktop", "page_1_desktop_above_fold.png");
+    await writeFile(hostedScreenshot, "hosted-copy-change");
+    expect(await readFile(path.join(paths.screenshotsDesktop, "page_1_desktop_above_fold.png"), "utf8")).toBe("png");
     await writeFile(
       path.join(paths.report, "source-candidates.json"),
       `${JSON.stringify({ file: "/Users/example/private/site/src/App.tsx" }, null, 2)}\n`
@@ -84,6 +87,8 @@ describe("exportAudit", () => {
 
     expect(result.outputPath).toMatch(/exports\/design-review-example-org-\d{4}-\d{2}-\d{2}T\d{6}Z-review\.zip$/);
     expect(zip.subarray(0, 2).toString("utf8")).toBe("PK");
+    expect(zip.byteLength).toBe(result.bytes);
+    expect(result.bytes).toBeLessThan(result.uncompressedBytes);
     expect(await readFile(path.join(paths.auditRoot, "checksums.sha256"), "utf8")).toContain("LICENSE-NOTICE.md");
     expect(await readFile(path.join(paths.auditRoot, "export-manifest.json"), "utf8")).toContain("\"path\": \"index.html\"");
   });

@@ -7,7 +7,7 @@ import {
   GroupedIssue,
   TicketRecommendation
 } from "../schemas/audit.js";
-import { stableId } from "../utils/id.js";
+import { findingFingerprint, stableId } from "../utils/id.js";
 import { priorityScore, createScorecard } from "./scoring.js";
 import { createRedesignBriefing, createTickets } from "./findings.js";
 import { groupFindings } from "./grouping.js";
@@ -183,6 +183,9 @@ function validateAgentVisualReview(report: AuditReport, review: AgentVisualRevie
 
   const pagesById = new Map(report.pages.map((page) => [page.pageId, page]));
   const reviewedPageIds = new Set(review.pageReviews.map((pageReview) => pageReview.pageId));
+  if (reviewedPageIds.size !== review.pageReviews.length) {
+    errors.push("Agent visual review contains duplicate page reviews.");
+  }
   for (const page of report.pages) {
     if (!reviewedPageIds.has(page.pageId)) {
       errors.push(`Missing visual review for captured page: ${page.pageId}`);
@@ -227,6 +230,18 @@ function validateAgentVisualReview(report: AuditReport, review: AgentVisualRevie
     if (!pageReview.screenshotsReviewed.some((ref) => screenshotPage.get(ref) === pageReview.pageId)) {
       errors.push(`Page review for ${pageReview.pageId} must reference at least one screenshot from that page.`);
     }
+    const requiredViewports = new Set(
+      Object.values(page.screenshots)
+        .filter((screenshot) => screenshot.kind === "above_fold")
+        .map((screenshot) => screenshot.viewport)
+    );
+    for (const viewport of requiredViewports) {
+      const coversViewport = pageReview.screenshotsReviewed.some((ref) => {
+        const screenshot = Object.values(page.screenshots).find((candidate) => candidate.id === ref || candidate.path === ref);
+        return screenshot?.kind === "above_fold" && screenshot.viewport === viewport;
+      });
+      if (!coversViewport) errors.push(`Page review for ${pageReview.pageId} is missing ${viewport} first-viewport evidence.`);
+    }
   }
   for (const finding of review.visualFindings) {
     const page = pagesById.get(finding.pageId);
@@ -244,6 +259,9 @@ function validateAgentVisualReview(report: AuditReport, review: AgentVisualRevie
       if (!reviewedScreenshots.has(ref)) {
         errors.push(`Visual finding uses screenshot not listed in screenshotsReviewed: ${ref}`);
       }
+      if (screenshotPage.get(ref) !== finding.pageId) {
+        errors.push(`Visual finding ${finding.reviewId} cites evidence from a different page: ${ref}`);
+      }
     }
     const claimText = `${finding.observation} ${finding.whyItMatters} ${finding.recommendation}`;
     if (unsupportedClaimPattern.test(claimText)) {
@@ -251,6 +269,7 @@ function validateAgentVisualReview(report: AuditReport, review: AgentVisualRevie
     }
   }
   for (const action of review.redesignActions) {
+    const affectedPageIds = new Set(action.affectedPages.map((pageRef) => pageRef.pageId));
     for (const pageRef of action.affectedPages) {
       const page = pagesById.get(pageRef.pageId);
       if (!page) {
@@ -267,6 +286,15 @@ function validateAgentVisualReview(report: AuditReport, review: AgentVisualRevie
       }
       if (!reviewedScreenshots.has(ref)) {
         errors.push(`Redesign action uses screenshot not listed in screenshotsReviewed: ${action.actionId}/${ref}`);
+      }
+      const evidencePageId = screenshotPage.get(ref);
+      if (evidencePageId && !affectedPageIds.has(evidencePageId)) {
+        errors.push(`Redesign action ${action.actionId} cites screenshot outside its affected pages: ${ref}`);
+      }
+    }
+    for (const pageId of affectedPageIds) {
+      if (!action.evidenceRefs.some((ref) => screenshotPage.get(ref) === pageId)) {
+        errors.push(`Redesign action ${action.actionId} has no screenshot evidence for affected page ${pageId}.`);
       }
     }
   }
@@ -305,9 +333,8 @@ function agentFindingToFinding(
   index: number
 ): Finding {
   const page = report.pages.find((item) => item.pageId === finding.pageId);
-  return {
-    findingId: stableId("agent_finding", `${review.reviewer}:${finding.reviewId}:${finding.title}`, index),
-    source: "agent_visual",
+  const draft = {
+    source: "agent_visual" as const,
     title: finding.title,
     category: finding.category,
     severity: finding.severity,
@@ -339,6 +366,12 @@ function agentFindingToFinding(
       definitionOfDone: ["The changed page has been visually reviewed again.", "A new workflow run shows the issue is resolved or intentionally suppressed."]
     },
     relatedFindings: [finding.reviewId, ...finding.sourceFindingIds]
+  };
+  const fingerprint = findingFingerprint(draft);
+  return {
+    ...draft,
+    fingerprint,
+    findingId: stableId("agent_finding", fingerprint)
   };
 }
 

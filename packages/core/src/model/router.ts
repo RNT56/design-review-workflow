@@ -13,7 +13,9 @@ export type LlmRequest = {
   system: string;
   input: unknown;
   schemaName?: string;
+  jsonSchema?: unknown;
   images?: LlmImageInput[];
+  provider?: string;
 };
 
 export type LlmImageInput = {
@@ -50,9 +52,11 @@ export class ModelRouter {
   }
 
   async generate(request: LlmRequest): Promise<LlmResponse> {
-    const provider = this.providers[0];
+    const provider = request.provider && request.provider !== "auto"
+      ? this.providers.find((candidate) => candidate.name === request.provider)
+      : this.providers[0];
     if (!provider) {
-      throw new Error("No LLM providers are configured. The MVP deterministic reviewers should be used instead.");
+      throw new Error(request.provider ? `Requested LLM provider is not configured: ${request.provider}` : "No LLM providers are configured. The deterministic reviewers should be used instead.");
     }
     return provider.generate(request);
   }

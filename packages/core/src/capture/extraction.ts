@@ -19,6 +19,7 @@ export type ExtractedPage = {
   imagesMissingAlt: number;
   imageCount: number;
   visibleTextSample: string;
+  firstViewportText?: string;
   sections: SectionEvidence[];
   components: ComponentEvidence[];
   navigation: TextNode[];
@@ -46,7 +47,11 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
       tag: element.tagName.toLowerCase(),
       selector: selectorFor(element),
       href: element instanceof HTMLAnchorElement ? element.href : undefined,
-      visible: isVisible(element)
+      visible: isVisible(element),
+      inFirstViewport: (() => {
+        const rect = element.getBoundingClientRect();
+        return rect.bottom > 0 && rect.top < window.innerHeight;
+      })()
     });
 
     const headings = [...document.querySelectorAll("h1,h2,h3,h4")].filter(isVisible).map(textNode).filter((node) => node.text);
@@ -66,11 +71,12 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
       const labels = [...form.querySelectorAll("label")].map((label) => label.textContent?.replace(/\s+/g, " ").trim() ?? "").filter(Boolean);
       const missingLabelCount = inputs.filter((input) => {
         const id = input.getAttribute("id");
-        const aria = input.getAttribute("aria-label") || input.getAttribute("aria-labelledby");
-        const placeholder = input.getAttribute("placeholder");
+        const ariaLabel = input.getAttribute("aria-label")?.trim();
+        const labelledBy = input.getAttribute("aria-labelledby")?.trim().split(/\s+/).filter(Boolean) ?? [];
+        const hasReferencedLabel = labelledBy.some((labelId) => document.getElementById(labelId)?.textContent?.trim());
         const hasExplicit = id ? Boolean(form.querySelector(`label[for="${CSS.escape(id)}"]`)) : false;
         const hasWrapped = Boolean(input.closest("label"));
-        return !aria && !placeholder && !hasExplicit && !hasWrapped;
+        return !ariaLabel && !hasReferencedLabel && !hasExplicit && !hasWrapped;
       }).length;
       const submit = form.querySelector("button[type='submit'],input[type='submit'],button:not([type])");
       return {
@@ -84,7 +90,7 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
 
     const images = [...document.querySelectorAll("img")].filter(isVisible);
     const imageCount = images.length;
-    const imagesMissingAlt = images.filter((image) => !image.getAttribute("alt")?.trim()).length;
+    const imagesMissingAlt = images.filter((image) => !image.hasAttribute("alt")).length;
 
     const sectionElements = [
       ...document.querySelectorAll("header,nav,main,section,article,aside,footer,[role='banner'],[role='navigation'],[role='main'],[role='contentinfo']")
@@ -134,6 +140,27 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
     const navigation = [...document.querySelectorAll("nav a, header a, [role='navigation'] a")].filter(isVisible).map(textNode).filter((node) => node.text);
     const footerText = document.querySelector("footer,[role='contentinfo']")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 500);
     const visibleTextSample = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 4000);
+    const firstViewportText = (() => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const chunks: string[] = [];
+      const seen = new Set<string>();
+      let node = walker.nextNode();
+      let length = 0;
+      while (node && length < 4000) {
+        const text = node.textContent?.replace(/\s+/g, " ").trim() ?? "";
+        const parent = node.parentElement;
+        if (text && parent && isVisible(parent)) {
+          const rect = parent.getBoundingClientRect();
+          if (rect.bottom > 0 && rect.top < window.innerHeight && !seen.has(text)) {
+            seen.add(text);
+            chunks.push(text);
+            length += text.length + 1;
+          }
+        }
+        node = walker.nextNode();
+      }
+      return chunks.join(" ").slice(0, 4000);
+    })();
 
     const cssElements = [...document.querySelectorAll("body *")].filter(isVisible).slice(0, 260);
     const cssSamples = cssElements.map((element) => {
@@ -146,7 +173,15 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
         fontSize: parseFloat(style.fontSize) || 0,
         lineHeight: parseFloat(style.lineHeight) || 0,
         borderRadius: parseFloat(style.borderRadius) || 0,
-        textSample: (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 90)
+        fontWeight: Number.parseInt(style.fontWeight, 10) || 400,
+        backgroundSource: style.backgroundImage === "none" ? "solid" : "unknown",
+        textSample: [...element.childNodes]
+          .filter((node) => node.nodeType === Node.TEXT_NODE)
+          .map((node) => node.textContent ?? "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 90)
       };
     });
 
@@ -172,6 +207,7 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
       imagesMissingAlt,
       imageCount,
       visibleTextSample,
+      firstViewportText,
       sections,
       components,
       navigation,
@@ -192,6 +228,7 @@ export async function extractPage(page: Page, viewport: ViewportName): Promise<E
     imagesMissingAlt: raw.imagesMissingAlt,
     imageCount: raw.imageCount,
     visibleTextSample: raw.visibleTextSample,
+    firstViewportText: raw.firstViewportText,
     sections: raw.sections.map((section, index) => ({
       ...section,
       id: stableId("section", section.selector, index + 1),
@@ -217,18 +254,24 @@ function buildCssSignals(
     fontSize: number;
     lineHeight: number;
     borderRadius: number;
+    fontWeight: number;
+    backgroundSource: string;
     textSample: string;
   }>
 ): CssSignals {
   const unique = <T>(items: T[]) => [...new Set(items)].slice(0, 40);
   const contrastPairs = samples
-    .filter((sample) => sample.textSample.length > 2)
+    .filter((sample) => sample.textSample.length > 2 && sample.backgroundSource === "solid")
     .map((sample) => ({
       foreground: sample.color,
       background: sample.backgroundColor,
       ratio: contrastRatio(sample.color, sample.backgroundColor),
       selector: sample.selector,
-      textSample: sample.textSample
+      textSample: sample.textSample,
+      fontSize: sample.fontSize,
+      fontWeight: sample.fontWeight,
+      threshold: sample.fontSize >= 24 || (sample.fontSize >= 18.66 && sample.fontWeight >= 700) ? 3 : 4.5,
+      backgroundSource: "solid" as const
     }))
     .filter((pair) => Number.isFinite(pair.ratio))
     .sort((a, b) => a.ratio - b.ratio)
@@ -259,10 +302,12 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 function parseRgb(value: string): [number, number, number] | null {
-  const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/i);
   if (!match) {
     return null;
   }
+  const alpha = match[4] === undefined ? 1 : Number(match[4]);
+  if (alpha < 1) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 

@@ -19,6 +19,35 @@ describe("compareAuditDirs", () => {
     expect(result.resolvedFindings).toHaveLength(1);
     expect(result.newFindings).toHaveLength(1);
   });
+
+  it("matches findings by semantic fingerprint instead of title or run-specific id", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wdr-compare-"));
+    const beforeDir = path.join(root, "before");
+    const afterDir = path.join(root, "after");
+    const before = report("before", 70, ["Repeated title"]);
+    const after = report("after", 70, ["Repeated title"]);
+    after.findings[0].findingId = "different_run_id";
+    await writeJson(path.join(beforeDir, "report", "report.json"), before);
+    await writeJson(path.join(afterDir, "report", "report.json"), after);
+    const { result } = await compareAuditDirs(beforeDir, afterDir);
+    expect(result.persistentFindings).toHaveLength(1);
+    expect(result.newFindings).toHaveLength(0);
+  });
+
+  it("rejects incompatible audit contracts unless explicitly requested", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wdr-compare-"));
+    const beforeDir = path.join(root, "before");
+    const afterDir = path.join(root, "after");
+    const before = report("before", 70, []);
+    const after = report("after", 70, []);
+    after.config.maxPages = 2;
+    await writeJson(path.join(beforeDir, "report", "report.json"), before);
+    await writeJson(path.join(afterDir, "report", "report.json"), after);
+    await expect(compareAuditDirs(beforeDir, afterDir)).rejects.toThrow(/not comparable/i);
+    const exploratory = await compareAuditDirs(beforeDir, afterDir, { allowIncompatible: true });
+    expect(exploratory.result.compatibility.status).toBe("incompatible");
+    expect(exploratory.result.compatibility.scoreComparable).toBe(false);
+  });
 });
 
 function report(id: string, score: number, findingTitles: string[]): AuditReport {

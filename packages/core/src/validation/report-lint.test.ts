@@ -1,27 +1,47 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { PNG } from "pngjs";
 import { describe, expect, it } from "vitest";
 import type { AuditReport, Scorecard } from "../schemas/audit.js";
 import { writeReports } from "../report/index.js";
 import { createNestedAuditPaths } from "../storage/project.js";
-import { writeText } from "../utils/fs.js";
-import { lintAuditReport } from "./report-lint.js";
+import { writeJson } from "../utils/fs.js";
+import { finalizeAuditValidation, lintAuditReport } from "./report-lint.js";
 
 describe("lintAuditReport", () => {
-  it("validates and refreshes an agent handoff bundle", async () => {
+  it("validates without mutating or repairing the bundle", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "wdr-lint-"));
     const auditRoot = path.join(root, "projects", "example-com", "audits", "audit_1");
     const paths = await createNestedAuditPaths(auditRoot);
     const report = sampleReport();
 
-    await writeText(path.join(auditRoot, "screenshots", "desktop", "page_1_desktop_above_fold.png"), "png");
+    await writeJson(path.join(auditRoot, "audit-config.json"), report.config);
+    await writeTestPng(path.join(auditRoot, "screenshots", "desktop", "page_1_desktop_above_fold.png"));
     await writeReports(report.config, report, paths);
+    const evidenceBrief = path.join(paths.report, "evidence-brief.json");
+    const before = await stat(evidenceBrief);
 
     const result = await lintAuditReport(auditRoot, true);
 
-    expect(result.status).toBe("pass");
+    expect(result.status, result.errors.join("\n")).toBe("pass");
     expect(result.summary.findings).toBe(1);
+    expect((await stat(evidenceBrief)).mtimeMs).toBe(before.mtimeMs);
+    await expect(access(path.join(paths.report, "quality-gate.json"))).rejects.toThrow();
+  });
+
+  it("writes validation artifacts only through explicit finalization", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wdr-finalize-"));
+    const auditRoot = path.join(root, "projects", "example-com", "audits", "audit_1");
+    const paths = await createNestedAuditPaths(auditRoot);
+    const report = sampleReport();
+
+    await writeJson(path.join(auditRoot, "audit-config.json"), report.config);
+    await writeTestPng(path.join(auditRoot, "screenshots", "desktop", "page_1_desktop_above_fold.png"));
+    await writeReports(report.config, report, paths);
+    const result = await finalizeAuditValidation(auditRoot, true);
+
+    expect(result.status, result.errors.join("\n")).toBe("pass");
     expect(JSON.parse(await readFile(path.join(paths.report, "quality-gate.json"), "utf8")).status).toBe("pass");
     expect(JSON.parse(await readFile(path.join(paths.report, "workflow-manifest.json"), "utf8")).qualityGate.status).toBe("pass");
     expect(JSON.parse(await readFile(path.join(paths.report, "handoff.json"), "utf8")).qualityGate.status).toBe("pass");
@@ -31,6 +51,26 @@ describe("lintAuditReport", () => {
     expect(auditIndex).toContain("screenshots/desktop/page_1_desktop_above_fold.png");
     expect(auditIndex).not.toContain(auditRoot);
   });
+
+  it("fails missing artifacts without recreating them", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "wdr-lint-missing-"));
+    const auditRoot = path.join(root, "projects", "example-com", "audits", "audit_1");
+    const paths = await createNestedAuditPaths(auditRoot);
+    const report = sampleReport();
+
+    await writeJson(path.join(auditRoot, "audit-config.json"), report.config);
+    await writeTestPng(path.join(auditRoot, "screenshots", "desktop", "page_1_desktop_above_fold.png"));
+    await writeReports(report.config, report, paths);
+    await finalizeAuditValidation(auditRoot, true);
+    const missing = path.join(paths.report, "performance-audit.json");
+    await unlink(missing);
+
+    const result = await lintAuditReport(auditRoot, true);
+
+    expect(result.status).toBe("fail");
+    expect(result.errors.join(" ")).toContain("performance-audit.json");
+    await expect(access(missing)).rejects.toThrow();
+  });
 });
 
 function sampleReport(): AuditReport {
@@ -39,8 +79,8 @@ function sampleReport(): AuditReport {
     viewport: "desktop" as const,
     kind: "above_fold" as const,
     path: "screenshots/desktop/page_1_desktop_above_fold.png",
-    width: 1440,
-    height: 1000
+    width: 1,
+    height: 1
   };
   const finding = {
     findingId: "finding_1",
@@ -158,6 +198,12 @@ function sampleReport(): AuditReport {
     assumptions: [],
     limitations: []
   };
+}
+
+async function writeTestPng(filePath: string): Promise<void> {
+  const png = new PNG({ width: 1, height: 1 });
+  png.data.set([255, 255, 255, 255]);
+  await writeFile(filePath, PNG.sync.write(png));
 }
 
 function scorecard(): Scorecard {

@@ -56,14 +56,15 @@ export async function captureInteractionStates(
   pageId: string,
   slug: string,
   viewport: ViewportConfig,
-  config: AuditConfig
+  config: AuditConfig,
+  remainingPageLimit = config.interactions.maxStateCapturesPerPage
 ): Promise<CaptureInteractionStateResult> {
   if (config.interactions.level < 1 || !config.interactions.captureStates) {
     return { screenshots: [], states: [] };
   }
 
   const pageLimit = Math.max(0, config.interactions.maxStateCapturesPerPage);
-  const viewportLimit = Math.max(0, Math.min(config.interactions.maxStateCapturesPerViewport, pageLimit));
+  const viewportLimit = Math.max(0, Math.min(config.interactions.maxStateCapturesPerViewport, pageLimit, remainingPageLimit));
   if (viewportLimit === 0 || pageLimit === 0) {
     return { screenshots: [], states: [] };
   }
@@ -259,9 +260,7 @@ function classifyCandidate(
   if (raw.target && raw.target !== "_self") return null;
   if (raw.href && !raw.href.startsWith("#")) return null;
   if (raw.inForm) return null;
-  if (!config.interactions.allowPurchase && /\b(buy|purchase|pay|payment|order)\b/i.test(searchText)) return null;
-  if (!config.interactions.allowLogin && /\b(log\s*in|login|sign\s*in|signin|account|admin|oauth|authorize)\b/i.test(searchText)) return null;
-  if (!config.interactions.allowCheckoutStart && /\b(checkout|cart)\b/i.test(searchText)) return null;
+  if (/\b(buy|purchase|pay|payment|order|checkout|cart|log\s*in|login|sign\s*in|signin|account|admin|oauth|authorize)\b/i.test(searchText)) return null;
   if (dangerousActionPattern.test(searchText) && !safeStatePattern.test(searchText)) return null;
 
   let category: InteractionStateCategory = "other";

@@ -28,7 +28,7 @@ type AuditSummary = {
 
 type Job = {
   id: string;
-  status: "running" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
   progress: Array<{ stage: string; message: string; current?: number; total?: number; at: string }>;
   auditRoot?: string;
   report?: AuditReport;
@@ -206,7 +206,7 @@ function App() {
           setEvidenceView("pages");
           await refreshHistory();
         }
-        if (next.status !== "running") {
+        if (["completed", "failed", "cancelled"].includes(next.status)) {
           window.clearInterval(interval);
         }
       }
@@ -215,6 +215,12 @@ function App() {
   }, [jobId]);
 
   const historyStats = useMemo(() => summarizeHistory(history), [history]);
+  const jobActive = job?.status === "queued" || job?.status === "running";
+  const cancelJob = async () => {
+    if (!jobId) return;
+    const response = await fetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+    if (response.ok) setJob((await response.json()) as Job);
+  };
   const sortedFindings = useMemo(() => selected?.findings.slice().sort((a, b) => b.priorityScore - a.priorityScore) ?? [], [selected]);
   const sortedIssues = useMemo(() => selected?.groupedIssues.slice().sort((a, b) => b.priorityScore - a.priorityScore) ?? [], [selected]);
 
@@ -240,6 +246,7 @@ function App() {
       return;
     }
     setJobId(body.jobId);
+    setJob({ id: body.jobId, status: "queued", progress: [{ stage: "queued", message: "Audit queued", at: new Date().toISOString() }] });
   }
 
   async function openHistory(item: AuditSummary) {
@@ -316,9 +323,10 @@ function App() {
             </label>
           </div>
 
-          <button type="submit" className="primary-button" disabled={job?.status === "running"}>
-            {job?.status === "running" ? "Audit running" : "Start audit"}
+          <button type="submit" className="primary-button" disabled={jobActive}>
+            {jobActive ? (job?.status === "queued" ? "Audit queued" : "Audit running") : "Start audit"}
           </button>
+          {jobActive ? <button type="button" onClick={() => void cancelJob()}>Cancel audit</button> : null}
 
           {job ? (
             <div className={`job job--${job.status}`}>

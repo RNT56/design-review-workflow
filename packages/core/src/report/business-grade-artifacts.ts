@@ -1,4 +1,5 @@
-import { access, copyFile, cp } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import * as path from "node:path";
 import { AuditReport, GroupedIssue } from "../schemas/audit.js";
 import { AuditPaths } from "../storage/project.js";
@@ -83,7 +84,7 @@ async function writeHostedReport(report: AuditReport, paths: AuditPaths): Promis
       const targetRelative = path.join("assets", screenshot.path).replace(/\\/g, "/");
       const target = path.join(hostedRoot, targetRelative);
       await ensureDir(path.dirname(target));
-      await copyFile(source, target).catch(() => undefined);
+      await cloneOrCopy(source, target);
       screenshotAssetMap.set(screenshot.id, targetRelative);
       screenshotAssetMap.set(screenshot.path, targetRelative);
     }
@@ -93,14 +94,14 @@ async function writeHostedReport(report: AuditReport, paths: AuditPaths): Promis
     const targetRelative = path.join("assets", annotation.annotatedScreenshot.path).replace(/\\/g, "/");
     const target = path.join(hostedRoot, targetRelative);
     await ensureDir(path.dirname(target));
-    await copyFile(source, target).catch(() => undefined);
+    await cloneOrCopy(source, target);
     screenshotAssetMap.set(annotation.annotatedScreenshot.id, targetRelative);
     screenshotAssetMap.set(annotation.annotatedScreenshot.path, targetRelative);
   }
 
   const contactSheetsRoot = path.join(paths.report, "contact-sheets");
   const hostedContactSheetsRoot = path.join(assetRoot, "contact-sheets");
-  await cp(contactSheetsRoot, hostedContactSheetsRoot, { recursive: true, force: true }).catch(() => undefined);
+  await mirrorWithClones(contactSheetsRoot, hostedContactSheetsRoot).catch(() => undefined);
   for (const issue of report.groupedIssues) {
     const source = path.join(contactSheetsRoot, "issues", `${issue.issueId}.png`);
     await access(source)
@@ -127,6 +128,24 @@ async function writeHostedReport(report: AuditReport, paths: AuditPaths): Promis
       optionalArtifacts
     })
   );
+}
+
+async function cloneOrCopy(source: string, target: string): Promise<void> {
+  await ensureDir(path.dirname(target));
+  await rm(target, { force: true }).catch(() => undefined);
+  await copyFile(source, target, constants.COPYFILE_FICLONE);
+}
+
+async function mirrorWithClones(sourceRoot: string, targetRoot: string): Promise<void> {
+  await rm(targetRoot, { recursive: true, force: true }).catch(() => undefined);
+  await mkdir(targetRoot, { recursive: true });
+  const entries = await readdir(sourceRoot, { withFileTypes: true });
+  for (const entry of entries) {
+    const source = path.join(sourceRoot, entry.name);
+    const target = path.join(targetRoot, entry.name);
+    if (entry.isDirectory()) await mirrorWithClones(source, target);
+    else if (entry.isFile()) await cloneOrCopy(source, target);
+  }
 }
 
 async function availableArtifacts(entries: Array<[string, string]>): Promise<Set<string>> {
@@ -373,7 +392,7 @@ function renderStaticDashboard(report: AuditReport, options: DashboardRenderOpti
             <p class="eyebrow">Scorecard</p>
             <h2>Category Scoring</h2>
           </div>
-          <p>Scores are capped until strict visual review is imported. Rings show category health; confidence remains separate from score.</p>
+          <p>Numeric scores are finding-driven and status-independent. Evidence coverage and confidence show what was actually assessed; strict visual review controls business-grade claims.</p>
         </div>
         <div class="score-grid">${scoreCards}</div>
       </section>
@@ -699,9 +718,9 @@ function scoreContext(report: AuditReport): string {
     return `${report.groupedIssues.length} grouped issue(s), ${report.findings.length} finding(s), and imported visual review are reflected in this score.`;
   }
   if (report.businessGradeStatus === "agent_review_pending") {
-    return "Review pack exists, but score remains capped until a strict visual review is imported.";
+    return "Review pack exists and the numeric score remains finding-driven; subjective design quality is pending strict visual review.";
   }
-  return "Automated signal score only. Subjective design quality is intentionally withheld.";
+  return "Finding-driven automated score with provisional coverage. Subjective design quality is intentionally withheld.";
 }
 
 function screenshotStatsFor(report: AuditReport): { total: number; firstViewport: number; fullPage: number; state: number } {

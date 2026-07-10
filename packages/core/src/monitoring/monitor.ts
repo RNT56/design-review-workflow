@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { compareAuditDirs } from "../compare/compare.js";
 import { createAuditConfig, type AuditInput } from "../config/defaults.js";
 import { runAudit } from "../index.js";
+import { activeSuppressedFingerprints, applySuppressionLedger } from "../review/suppressions.js";
 import { configuredAuditRoot } from "../storage/audit-output.js";
 import { readProjectIndex } from "../storage/index.js";
 import { writeJson } from "../utils/fs.js";
@@ -20,6 +21,7 @@ export type MonitorConfig = {
     targetAudience?: string;
     industry?: string;
     brandContext?: string;
+    suppressionFile?: string;
     thresholds?: MonitorThresholds;
   }>;
 };
@@ -41,6 +43,8 @@ export type MonitorRunResult = {
     auditRoot: string;
     score: number;
     findings: number;
+    rawFindings: number;
+    suppressedFindings: number;
     highSeverityFindings: number;
     comparisonPath?: string;
     scoreDelta?: number;
@@ -75,6 +79,15 @@ export async function runMonitorConfig(configPath: string, workspaceRoot = proce
       brandContext: monitor.brandContext
     };
     const result = await runAudit(createAuditConfig(auditInput), { workspaceRoot });
+    let suppressedFingerprints = new Set<string>();
+    if (monitor.suppressionFile) {
+      const suppressionPath = path.resolve(path.dirname(configPath), monitor.suppressionFile);
+      const suppression = await applySuppressionLedger(result.auditRoot, suppressionPath);
+      suppressedFingerprints = activeSuppressedFingerprints(suppression.report);
+    }
+    const effectiveFindings = result.report.findings.filter(
+      (finding) => !suppressedFingerprints.has(finding.fingerprint ?? "")
+    );
     let comparisonPath: string | undefined;
     let scoreDelta: number | undefined;
     if (before) {
@@ -82,10 +95,10 @@ export async function runMonitorConfig(configPath: string, workspaceRoot = proce
       comparisonPath = compare.outputPath;
       scoreDelta = compare.result.scoreDelta;
     }
-    const highSeverityFindings = result.report.findings.filter((finding) => finding.severity === "critical" || finding.severity === "high").length;
+    const highSeverityFindings = effectiveFindings.filter((finding) => finding.severity === "critical" || finding.severity === "high").length;
     const thresholdFailures = evaluateThresholds(monitor.thresholds, {
       score: result.report.scorecard.overallScore,
-      findings: result.report.findings.length,
+      findings: effectiveFindings.length,
       highSeverityFindings,
       scoreDelta
     });
@@ -95,7 +108,9 @@ export async function runMonitorConfig(configPath: string, workspaceRoot = proce
       status: thresholdFailures.length === 0 ? "pass" : "fail",
       auditRoot: result.auditRoot,
       score: result.report.scorecard.overallScore,
-      findings: result.report.findings.length,
+      findings: effectiveFindings.length,
+      rawFindings: result.report.findings.length,
+      suppressedFindings: suppressedFingerprints.size,
       highSeverityFindings,
       comparisonPath,
       scoreDelta,

@@ -48,7 +48,7 @@
 | ENT-017 | WS3 | Include metadata in exports | Export engineer | Review/full/repo-import include related metadata | Export tests and checksum validation | Done |
 | ENT-018 | WS4 | Add enterprise verify command | CLI/core engineer | `enterprise verify --report <dir>` | Passing/failing fixture tests | Done |
 | ENT-019 | WS4 | Add `npm run enterprise:verify` | Build engineer | Package script | Local command runs deterministic gate | Done |
-| ENT-020 | WS4 | Build fixture corpus | QA engineer | Fixture manifest and expected assertions | Corpus manifest test | Done |
+| ENT-020 | WS4 | Build fixture corpus | QA engineer | Ten executable local archetypes plus expected assertions | `enterprise fixtures --run` full-pipeline pass | Done |
 | ENT-021 | WS4 | Add provider quality evals | QA/model engineer | Schema/evidence/claim/actionability checks | Bad-provider fixtures fail | Done |
 | ENT-022 | WS4 | Add score drift eval | QA engineer | Compare thresholds | Enterprise verify baseline option | Done |
 | ENT-023 | WS5 | Generate executive summary | Report engineer | `report/executive-summary.md` | Export and link tests | Done |
@@ -77,6 +77,7 @@
 - [x] Exports include related workflow metadata and enterprise artifacts.
 - [x] `enterprise verify` fails incomplete or overclaiming bundles.
 - [x] `npm run enterprise:verify` exists.
+- [x] `npm run enterprise:verify` executes the ten-archetype full audit corpus after CI checks.
 - [x] Monitor thresholds support deterministic CI launch gates.
 - [x] Client deliverables include executive summary and stakeholder recommendations.
 - [x] Capture/provider retries, classified failures, and audit-state step metadata are implemented.

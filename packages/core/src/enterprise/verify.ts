@@ -45,6 +45,10 @@ const REQUIRED_ENTERPRISE_ARTIFACTS = [
   "report/interaction-states.json",
   "report/related-workflows.json",
   "report/enterprise-readiness.json",
+  "report/criteria-evaluation.json",
+  "report/bundle-integrity.json",
+  "report/validation.json",
+  "report/quality-gate.json",
   "report/stakeholder-recommendations.md",
   "report/before-after-comparison.md"
 ];
@@ -54,11 +58,21 @@ export async function verifyEnterpriseAudit(options: EnterpriseVerifyOptions): P
   const report = await readReportFromAuditDir(auditDir);
   const checks: EnterpriseVerifyCheck[] = [];
 
-  const lint = await lintAuditReport(auditDir, false);
+  const lint = await lintAuditReport(auditDir, true);
   checks.push({
     name: "Strict report bundle shape",
     status: lint.status === "fail" ? "fail" : lint.status,
     message: `report lint returned ${lint.status}`,
+    artifacts: [path.join(auditDir, "report", "validation.json"), path.join(auditDir, "report", "quality-gate.json")]
+  });
+
+  const validationArtifact = await readJson(path.join(auditDir, "report", "validation.json"));
+  const qualityArtifact = await readJson(path.join(auditDir, "report", "quality-gate.json"));
+  const finalizedPass = artifactStatus(validationArtifact) === "pass" && artifactStatus(qualityArtifact) === "pass";
+  checks.push({
+    name: "Finalized validation state",
+    status: finalizedPass ? "pass" : "fail",
+    message: finalizedPass ? "Validation and quality-gate artifacts both record pass." : "Validation or quality-gate artifact is missing or does not record pass.",
     artifacts: [path.join(auditDir, "report", "validation.json"), path.join(auditDir, "report", "quality-gate.json")]
   });
 
@@ -160,4 +174,10 @@ async function exists(filePath: string): Promise<boolean> {
     () => true,
     () => false
   );
+}
+
+function artifactStatus(value: unknown): string | undefined {
+  return value && typeof value === "object" && typeof (value as { status?: unknown }).status === "string"
+    ? (value as { status: string }).status
+    : undefined;
 }

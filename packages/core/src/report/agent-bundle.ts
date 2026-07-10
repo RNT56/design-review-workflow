@@ -325,6 +325,7 @@ node apps/cli/dist/index.js agent-review validate --report ${paths.auditRoot} --
 - \`report/design-benchmark.json\`
 - \`report/design-benchmark.md\`
 - \`report/standards-registry.json\`
+- \`report/criteria-evaluation.json\`
 - \`report/suppression-report.json\`
 - \`report/stakeholder-recommendations.md\`
 - \`report/before-after-comparison.md\`
@@ -433,6 +434,7 @@ function workflowManifest(
       "report/handoff.json",
       "report/findings.json",
       "report/actionability.json",
+      "report/bundle-integrity.json",
       "report/evidence-brief.json",
       "report/evidence-index.json",
       "report/implementation-plan.json",
@@ -457,6 +459,7 @@ function workflowManifest(
       "report/learnings/run-retrospective.json",
       "report/route-templates.json",
       "report/standards-registry.json",
+      "report/criteria-evaluation.json",
       "report/design-benchmark.json",
       "report/suppression-report.json"
     ],
@@ -617,6 +620,7 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     handoff: path.join(paths.report, "handoff.json"),
     validation: path.join(paths.report, "validation.json"),
     qualityGate: path.join(paths.report, "quality-gate.json"),
+    bundleIntegrity: path.join(paths.report, "bundle-integrity.json"),
     findings: path.join(paths.report, "findings.json"),
     score: path.join(paths.report, "score.json"),
     dashboard: path.join(paths.report, "report-dashboard.json"),
@@ -654,6 +658,7 @@ function artifactMap(paths: AuditPaths, outputs: BundleOutputs, designArtifacts?
     learningsTemplate: designArtifacts?.learningsTemplate ?? path.join(paths.report, "learnings", "agent-learning-template.md"),
     runRetrospective: designArtifacts?.runRetrospective ?? path.join(paths.report, "learnings", "run-retrospective.json"),
     standardsRegistry: designArtifacts?.standardsRegistry ?? path.join(paths.report, "standards-registry.json"),
+    criteriaEvaluation: designArtifacts?.criteriaEvaluation ?? path.join(paths.report, "criteria-evaluation.json"),
     suppressionReport: designArtifacts?.suppressionReport ?? path.join(paths.report, "suppression-report.json"),
     designBenchmarkJson: designArtifacts?.benchmarkJson ?? path.join(paths.report, "design-benchmark.json"),
     designBenchmarkMarkdown: designArtifacts?.benchmarkMarkdown ?? path.join(paths.report, "design-benchmark.md"),

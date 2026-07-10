@@ -31,6 +31,8 @@ Required outputs for the MVP:
 - Workflow manifest
 - Agent handoff JSON
 - Validation and quality-gate JSON
+- Canonical evidence integrity manifest
+- Criteria evaluation artifact
 - Design workflow benchmark
 - Standards registry
 - Suppression ledger
@@ -90,6 +92,7 @@ The implemented MVP is deterministic and local-first:
 - Local web UI
 - Deterministic local audit storage under `audit-reports/<site-or-audit-name>/<timestamp>Z-<scan-id>/`
 - Playwright capture for desktop and mobile screenshots
+- Desktop and mobile axe, browser timing, resource timing, LCP/CLS candidate, and long-task evidence
 - Scroll-reveal-aware screenshot capture with reduced-motion contexts, asset readiness waits, viewport-step page settling, and final top-of-page reset before evidence extraction
 - Safe bounded interaction-state capture for visible read-only UI states such as menus, dialogs, popovers, accordions, tabs, filters, drawers, and disclosures
 - DOM, text, form, link, button, section, and CSS-signal extraction
@@ -111,6 +114,7 @@ The implemented MVP is deterministic and local-first:
 - Read-only Figma evidence fetch command gated by `FIGMA_TOKEN`
 - Local monitor runs from YAML/JSON configuration with optional score/finding regression thresholds for CI launch gates
 - Configured bounded retries for capture and provider review generation
+- Bounded provider timeouts/output limits, staged page-batch review for larger sites, balanced image selection, and request/image provenance hashes
 - Classified audit-state failures with step ledger, retry settings, and resumability metadata in `audit-state.json`
 - One-command agent runner via `scripts/agent-run.sh` and `npm run agent`
 - Primary `run` command for audit, validation, and agent handoff
@@ -125,6 +129,7 @@ The implemented MVP is deterministic and local-first:
 - `enterprise verify --baseline <audit-dir> --max-score-drop <n>` for score-drift checks against a compatible baseline
 - `enterprise retention-plan --report <audit-dir>` for non-destructive local retention planning
 - `enterprise fixtures` for the enterprise fixture corpus and eval expectations
+- Executable `enterprise fixtures --run` audits for ten local archetypes, wired into `npm run enterprise:verify`
 - Related workflow seam via `--related-workflow seo:/path/to/seo-audit`, which writes linked metadata only and never imports SEO findings into design findings or scoring
 - Grouped root-cause issues under `grouped-issues.json`
 - Top-level static audit dashboard under `index.html`; this is the canonical no-server report entrypoint for agents and handoff.
@@ -143,6 +148,11 @@ The implemented MVP is deterministic and local-first:
 - Export redaction for local paths and secret/cookie-looking values by default
 - Latest-audit pointers under `audit-reports/latest-audit.json` and `audit-reports/<site>/latest-audit.json`
 - axe-core accessibility basics where injection succeeds
+- Pure non-mutating `report lint`, explicit `report repair`, cross-artifact consistency checks, and SHA-256 canonical evidence verification
+- Status-independent scoring v2 with deduplicated root-cause penalties, saturating prevalence, and explicit evidence coverage
+- Stable semantic finding fingerprints for comparisons and suppression ledgers
+- Loopback-only local UI with SSRF/redirect/navigation protection, bounded job concurrency, rate limits, and cancellation
+- Copy-on-write cloned hosted assets, compressed ZIP exports, and age-aware retention planning for regenerable derived assets
 - Browser navigation/resource-timing performance basics with Lighthouse-compatible status fields; actual Lighthouse runs remain external unless a completed Lighthouse result is supplied
 
 The following are planned seams, not completed product claims unless code and tests prove otherwise:
@@ -239,6 +249,7 @@ audit-reports/
     <timestamp>Z-<scan-id>/
       audit-config.json
       audit-state.json
+      capture-failures.json
       screenshots/
       extracted/
       agent-runs/
@@ -256,6 +267,7 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 
 - `../index.html` as the primary human-readable entrypoint
 - `workflow-manifest.json`
+- `bundle-integrity.json`
 - `handoff.json`
 - `validation.json`
 - `quality-gate.json`
@@ -293,6 +305,7 @@ Every completed audit must produce a self-contained agent bundle under `report/`
 - `design-benchmark.json`
 - `design-benchmark.md`
 - `standards-registry.json`
+- `criteria-evaluation.json`
 - `suppression-report.json`
 - `actionability.json`
 - `stakeholder-recommendations.md`
@@ -390,7 +403,7 @@ projects/       Legacy audit output root. Read-compatible; do not use for new de
 - Related SEO workflow artifacts must remain linked metadata only. They must not be imported into `findings.json`, alter design scoring, or imply this workflow ran SEO checks.
 - Export packages must redact local paths and secret/cookie-looking values by default unless an explicit CLI override is supplied.
 - Retention behavior must be non-destructive unless a future explicit cleanup command is added. The implemented retention command plans cleanup candidates only.
-- `report lint --strict` must fail unsupported report bundles.
+- `report lint --strict` must be read-only and fail unsupported, inconsistent, or integrity-invalid report bundles. Repair is allowed only through the explicit `report repair` or finalization paths.
 - `business-grade lint` must fail unless a strict validated `AgentVisualReview` has been imported.
 - `run --business-grade --review-mode manual` must generate the review pack and leave the audit in `agent_review_pending` until import.
 - `run --business-grade --review-mode auto` must attempt provider-backed visual review when credentials exist, then validate, import, and business-grade lint. If no provider is configured or provider generation fails, it must leave an honest pending state and write provider failure classification.
@@ -398,7 +411,7 @@ projects/       Legacy audit output root. Read-compatible; do not use for new de
 - `run --business-grade --review-mode hybrid` must attempt provider-backed visual review and record that stakeholder/manual signoff is still recommended.
 - Automated scans must be labeled `automated_scan`, not `business_grade`.
 - Automated scans must not provide subjective style/taste verdicts; they must show that visual review is required.
-- Scores must remain capped when `businessGradeStatus !== business_grade`.
+- Numeric scores use the status-independent `design-review-workflow.scoring.v2` rubric. Review status changes evidence coverage, confidence, and permitted subjective claims; it must not inflate or cap an otherwise identical finding set.
 - The QA gate must remove or downgrade unsupported, generic, duplicate, or overclaiming findings.
 - Any future LLM reviewer must produce the same `Finding` or `AgentVisualReview` schema and pass the same deterministic QA/business-grade gates.
 - Use local files and `.env` for credentials. Never commit secrets.

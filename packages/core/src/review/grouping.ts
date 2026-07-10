@@ -12,7 +12,7 @@ export function groupFindings(findings: Finding[], agentReview?: AgentVisualRevi
     const issue: GroupedIssue =
       existing ??
       {
-        issueId: stableId("issue", key, groups.size + 1),
+        issueId: stableId("issue", key),
         title: finding.title,
         category: finding.category,
         severity: finding.severity,

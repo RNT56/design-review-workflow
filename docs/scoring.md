@@ -2,13 +2,11 @@
 
 The scorecard is a decision aid, not the single source of truth. Prioritized findings and implementation recommendations remain the most important output.
 
-Scores are status-aware:
+The `design-review-workflow.scoring.v2` numeric score is status-independent. The same findings and evidence produce the same number in `automated_scan`, `agent_review_pending`, and `business_grade`; status changes coverage, confidence, and which subjective claims are permitted, not the quality baseline.
 
-- `automated_scan`: deterministic evidence only; overall and sub-scores are capped at 86.
-- `agent_review_pending`: business-grade lane was requested but visual review has not been imported; scores are capped at 82.
-- `business_grade`: a validated `AgentVisualReview` has been imported; scores can rise to 98 but still depend on findings, confidence, and coverage.
+Each dimension starts from a neutral evidence baseline of 85. Deduplicated finding groups subtract severity- and confidence-weighted penalties, while repeated instances of the same root cause use a saturating prevalence factor instead of a linear page-count penalty. No finding detected does not mean 100: the score remains provisional when evidence coverage is incomplete.
 
-No finding detected does not mean 100. Coverage confidence and business-grade status determine the ceiling.
+Scorecards expose `rubricVersion`, `provisional`, per-dimension `coverage`, and overall coverage counts. Comparisons reject mismatched scoring rubrics, capture scopes, targets, or viewport contracts unless exploratory incompatible output is explicitly requested.
 
 ## Dimensions
 

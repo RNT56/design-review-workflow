@@ -4,10 +4,15 @@ import { isExcluded, normalizeUrl, sameSite } from "../utils/url.js";
 
 export type CrawlCandidate = {
   url: string;
+  finalUrl?: string;
+  canonicalUrl?: string;
   sourceUrl?: string;
   depth: number;
   anchorText?: string;
   score: number;
+  status: "queued" | "discovered" | "failed";
+  httpStatus?: number;
+  failure?: string;
 };
 
 const priorityPatterns: Array<[RegExp, number]> = [
@@ -28,7 +33,7 @@ export async function discoverPages(page: Page, config: AuditConfig): Promise<Cr
 
   const candidates = new Map<string, CrawlCandidate>();
   const visited = new Set<string>();
-  const queue: CrawlCandidate[] = [{ url: start, depth: 0, score: 100 }];
+  const queue: CrawlCandidate[] = [{ url: start, depth: 0, score: 100, status: "queued" }];
   candidates.set(start, queue[0]);
 
   while (queue.length > 0 && visited.size < Math.max(config.maxPages * 3, config.maxPages)) {
@@ -39,11 +44,28 @@ export async function discoverPages(page: Page, config: AuditConfig): Promise<Cr
     visited.add(current.url);
 
     try {
-      await page.goto(current.url, { waitUntil: "domcontentloaded", timeout: 25_000 });
+      const response = await page.goto(current.url, { waitUntil: "domcontentloaded", timeout: 25_000 });
       await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
-    } catch {
+      current.httpStatus = response?.status();
+      current.finalUrl = normalizeUrl(page.url()) ?? current.url;
+      const canonicalHref = await page.locator('link[rel="canonical"]').first().getAttribute("href", { timeout: 500 }).catch(() => null);
+      const canonical = canonicalHref ? normalizeUrl(canonicalHref, current.finalUrl) : null;
+      if (canonical && (!config.crawl.sameDomainOnly || sameSite(canonical, start, config.crawl.includeSubdomains))) {
+        current.canonicalUrl = canonical;
+      }
+      current.status = "discovered";
+      if (response && !response.ok()) {
+        current.status = "failed";
+        current.failure = `HTTP ${response.status()}`;
+        continue;
+      }
+    } catch (error) {
+      current.status = "failed";
+      current.failure = error instanceof Error ? error.message : String(error);
       continue;
     }
+
+    const resolvedCurrentUrl = current.canonicalUrl ?? current.finalUrl ?? current.url;
 
     const links = await page
       .locator("a[href]")
@@ -58,7 +80,7 @@ export async function discoverPages(page: Page, config: AuditConfig): Promise<Cr
       .catch(() => []);
 
     for (const link of links) {
-      const normalized = normalizeUrl(link.href, current.url);
+      const normalized = normalizeUrl(link.href, resolvedCurrentUrl);
       if (!normalized) {
         continue;
       }
@@ -77,7 +99,8 @@ export async function discoverPages(page: Page, config: AuditConfig): Promise<Cr
         sourceUrl: current.url,
         depth: current.depth + 1,
         anchorText: link.text,
-        score: rankUrl(normalized, link.text, current.depth + 1)
+        score: rankUrl(normalized, link.text, current.depth + 1),
+        status: "queued"
       };
       candidates.set(normalized, candidate);
       if (candidate.depth < config.crawl.maxDepth) {
@@ -93,9 +116,11 @@ export async function discoverPages(page: Page, config: AuditConfig): Promise<Cr
     }
   }
 
-  return [...candidates.values()]
+  const sorted = [...candidates.values()]
     .sort((a, b) => b.score - a.score || a.depth - b.depth || a.url.localeCompare(b.url))
-    .slice(0, config.maxPages);
+  const selected = sorted.filter((candidate) => candidate.status !== "failed").slice(0, config.maxPages);
+  const failures = sorted.filter((candidate) => candidate.status === "failed").slice(0, 50);
+  return [...selected, ...failures];
 }
 
 export function rankUrl(url: string, anchorText = "", depth = 0): number {
@@ -133,6 +158,7 @@ async function fetchSitemapCandidates(startUrl: string, config: AuditConfig): Pr
     url,
     depth: 1,
     sourceUrl: `${origin}/sitemap.xml`,
-    score: rankUrl(url, "sitemap", 1)
+    score: rankUrl(url, "sitemap", 1),
+    status: "queued" as const
   }));
 }

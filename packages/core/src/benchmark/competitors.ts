@@ -10,7 +10,8 @@ export async function runCompetitorBenchmarks(
   config: AuditConfig,
   mainScore: number,
   paths: AuditPaths,
-  onProgress?: (event: ProgressEvent) => void
+  onProgress?: (event: ProgressEvent) => void,
+  validateNavigation?: (url: string) => Promise<void>
 ): Promise<CompetitorBenchmark[]> {
   const competitors = config.competitors.slice(0, 3);
   const results: CompetitorBenchmark[] = [];
@@ -40,7 +41,7 @@ export async function runCompetitorBenchmarks(
     const competitorRoot = path.join(paths.competitors, siteSlug(competitorUrl));
     const competitorPaths = await createNestedAuditPaths(competitorRoot);
     await writeJson(path.join(competitorRoot, "audit-config.json"), competitorConfig);
-    const capture = await captureEvidence(competitorConfig, competitorPaths, onProgress);
+    const capture = await captureEvidence(competitorConfig, competitorPaths, onProgress, undefined, validateNavigation);
     const competitorReport = await reviewEvidence(competitorConfig, capture.pages, competitorPaths);
     await writeJson(path.join(competitorRoot, "report.json"), competitorReport);
 
